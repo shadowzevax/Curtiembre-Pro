@@ -1,0 +1,327 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { OrdenCompra, Proveedor, Insumo } from "@/entities/all";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search, Edit, Trash2, Eye, Paperclip, RotateCcw } from "lucide-react";
+import DataTable from "../components/common/DataTable";
+import PageHeader from "../components/common/PageHeader";
+import DocumentoComercialForm from "../components/common/DocumentoComercialForm";
+import SoporteViewer from "../components/common/SoporteViewer";
+import OrdenDetalle from "../components/compras/OrdenDetalle";
+
+// Formatear fecha a dd/mm/yyyy
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('es-CO');
+};
+
+// Formatear moneda
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0
+  }).format(amount || 0);
+};
+
+const initialFilters = {
+  fechaDesde: "",
+  fechaHasta: "",
+  nit: "",
+  insumo: ""
+};
+
+export default function CompraInsumos() {
+  const [ordenes, setOrdenes] = useState([]);
+  const [filteredOrdenes, setFilteredOrdenes] = useState([]);
+  const [proveedores, setProveedores] = useState([]);
+  const [insumos, setInsumos] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showSoporteViewer, setShowSoporteViewer] = useState(false);
+  const [soportesToShow, setSoportesToShow] = useState([]);
+  
+  const [filters, setFilters] = useState(initialFilters);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const getProveedorNombre = useCallback((proveedorId) => {
+    const proveedor = proveedores.find(p => p.id === proveedorId);
+    return proveedor ? proveedor.nombre : proveedorId;
+  }, [proveedores]);
+
+  const applyFilters = useCallback(() => {
+    let filtered = [...ordenes];
+    if (filters.fechaDesde) {
+        const desde = new Date(filters.fechaDesde + "T00:00:00");
+        filtered = filtered.filter(orden => new Date(orden.fecha_orden) >= desde);
+    }
+    if (filters.fechaHasta) {
+        const hasta = new Date(filters.fechaHasta + "T00:00:00");
+        hasta.setHours(23, 59, 59, 999);
+        filtered = filtered.filter(orden => new Date(orden.fecha_orden) <= hasta);
+    }
+    if (filters.nit) {
+        filtered = filtered.filter(orden => orden.cc_nit_proveedor?.toLowerCase().includes(filters.nit.toLowerCase()));
+    }
+    if (filters.insumo) {
+        const searchLower = filters.insumo.toLowerCase();
+        filtered = filtered.filter(orden =>
+            orden.items.some(item =>
+                (item.insumo_id && insumos.find(i => i.id === item.insumo_id)?.nombre.toLowerCase().includes(searchLower)) ||
+                (item.descripcion?.toLowerCase().includes(searchLower))
+            )
+        );
+    }
+    if (searchTerm) {
+      filtered = filtered.filter(orden =>
+        getProveedorNombre(orden.proveedor_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        orden.numero_documento?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    setFilteredOrdenes(filtered);
+  }, [ordenes, filters, searchTerm, getProveedorNombre, insumos]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  const handleClearFilters = () => {
+    setFilters(initialFilters);
+    setSearchTerm("");
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [ordenesData, proveedoresData, insumosData] = await Promise.all([
+        OrdenCompra.list(), // Traer todas las compras (unificadas)
+        Proveedor.list(),
+        Insumo.list()
+      ]);
+      setOrdenes(ordenesData);
+      setProveedores(proveedoresData);
+      setInsumos(insumosData);
+    } catch (error) {
+      console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenModal = (orden = null) => {
+    setEditingOrder(orden);
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (orderData) => {
+    setLoading(true);
+    try {
+      // Validar duplicidad: prefijo + numero_documento
+      const isDuplicate = ordenes.some(orden => 
+        orden.prefijo_documento === orderData.prefijo_documento && 
+        orden.numero_documento === orderData.numero_documento &&
+        (!editingOrder || orden.id !== editingOrder.id)
+      );
+      
+      if (isDuplicate) {
+        alert("⚠️ REVISE DOCUMENTO YA EXISTE\n\nYa existe un documento con el mismo prefijo y número.");
+        setLoading(false);
+        return;
+      }
+      
+      // Limpiar campos según selección
+      if(orderData.forma_pago === 'contado') {
+          orderData.monto_credito = 0;
+          orderData.saldo_pendiente = 0;
+          orderData.monto_efectivo = orderData.total;
+      }
+      
+      if (editingOrder) {
+        await OrdenCompra.update(editingOrder.id, orderData);
+      } else {
+        await OrdenCompra.create(orderData);
+      }
+      setShowForm(false);
+      setEditingOrder(null);
+      loadData();
+    } catch (error) {
+      console.error("Error saving order:", error);
+      alert("Error al guardar la orden: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (ordenId) => {
+    if (!window.confirm("¿Está seguro de que desea eliminar esta orden de compra?")) return;
+    try {
+      await OrdenCompra.delete(ordenId);
+      loadData();
+      alert("Orden de compra eliminada con éxito.");
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      alert("Error al eliminar la orden de compra.");
+    }
+  };
+
+  const handleShowDetails = (orden) => {
+    setSelectedOrder(orden);
+    setShowDetailModal(true);
+  };
+
+  const handleShowSoportes = (orden) => {
+    setSelectedOrder(orden);
+    setSoportesToShow(orden.soportes || []);
+    setShowSoporteViewer(true);
+  };
+
+  const handleExportCSV = () => {
+    const headers = ["Numero Orden", "Fecha", "Proveedor", "Total", "Estado"];
+    const csvRows = [headers.join(",")];
+
+    filteredOrdenes.forEach(orden => {
+      const row = [
+        `"${orden.prefijo_documento}-${orden.numero_documento}"`,
+        `"${formatDate(orden.fecha_orden)}"`,
+        `"${getProveedorNombre(orden.proveedor_id)}"`,
+        orden.total || 0,
+        `"${orden.estado}"`
+      ];
+      csvRows.push(row.join(","));
+    });
+
+    const csvString = csvRows.join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "compras_insumos.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const getTotalGeneral = () => {
+    return filteredOrdenes.reduce((sum, orden) => sum + (orden.total || 0), 0);
+  };
+
+  const tableHeaders = [
+    "Tipo Doc.", "Prefijo", "Documento #", "Fecha", "Proveedor", "Valor", "Estado", "Soportes", "Acciones"
+  ];
+
+  const renderRow = (orden) => (
+    <tr key={orden.id} className="hover:bg-gray-50">
+      <td className="px-4 py-2 text-sm capitalize">{orden.tipo_documento?.replace(/_/g, ' ')}</td>
+      <td className="px-4 py-2 text-sm">{orden.prefijo_documento}</td>
+      <td className="px-4 py-2 text-sm">{orden.numero_documento}</td>
+      <td className="px-4 py-2 text-sm">{formatDate(orden.fecha_orden)}</td>
+      <td className="px-4 py-2 text-sm">{getProveedorNombre(orden.proveedor_id)}</td>
+      <td className="px-4 py-2 text-sm font-medium">{formatCurrency(orden.total)}</td>
+      <td className="px-4 py-2 text-sm"><Badge>{orden.estado}</Badge></td>
+      <td className="px-4 py-2 text-sm">{orden.soportes && orden.soportes.length > 0 ? <span className="text-emerald-600 font-medium">{orden.soportes.length} archivo(s)</span> : <span className="text-gray-400">Sin soportes</span>}</td>
+      <td className="px-4 py-2 text-sm">
+        <div className="flex space-x-1">
+          <Button variant="ghost" size="icon" onClick={() => handleShowDetails(orden)} title="Ver detalle"><Eye className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => handleShowSoportes(orden)} title="Ver Soportes" disabled={!orden.soportes || orden.soportes.length === 0}><Paperclip className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => handleOpenModal(orden)} title="Editar"><Edit className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => handleDelete(orden.id)} title="Eliminar"><Trash2 className="w-4 h-4 text-red-500" /></Button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  return (
+    <div className="p-6 space-y-6">
+       <style>{`@media print {#tabla-imprimible { position: absolute; left: 0; top: 0; width: 100%; } #page-header, .no-print { display: none; } body * { visibility: hidden; } #tabla-imprimible, #tabla-imprimible * { visibility: visible; }}`}</style>
+      <PageHeader
+        title="Compras"
+        description="Gestiona las órdenes de compra"
+        onExportExcel={handleExportCSV}
+        onPrint={handlePrint}
+        actionButton={
+          <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Compra
+          </Button>
+        }
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Filtros de Búsqueda</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div><Label>Desde</Label><Input type="date" value={filters.fechaDesde} onChange={(e) => setFilters(prev => ({ ...prev, fechaDesde: e.target.value }))}/></div>
+            <div><Label>Hasta</Label><Input type="date" value={filters.fechaHasta} onChange={(e) => setFilters(prev => ({ ...prev, fechaHasta: e.target.value }))}/></div>
+            <div><Label>NIT</Label><Input placeholder="Buscar por NIT..." value={filters.nit} onChange={(e) => setFilters(prev => ({ ...prev, nit: e.target.value }))}/></div>
+            <div><Label>Proveedor / Documento #</Label><Input placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}/></div>
+            <div><Label>Insumo</Label><Input placeholder="Buscar por nombre de insumo..." value={filters.insumo} onChange={(e) => setFilters(prev => ({...prev, insumo: e.target.value}))}/></div>
+            <div className="flex items-end col-span-full space-x-2">
+              <Button onClick={applyFilters} className="w-full bg-blue-600 hover:bg-blue-700"><Search className="w-4 h-4 mr-2" />Consultar</Button>
+              <Button onClick={handleClearFilters} variant="outline" className="w-full"><RotateCcw className="w-4 h-4 mr-2" />Limpiar</Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div id="tabla-imprimible">
+        <Card>
+          <CardHeader><CardTitle>Órdenes de Compra</CardTitle></CardHeader>
+          <CardContent>
+            <DataTable headers={tableHeaders} data={filteredOrdenes} renderRow={renderRow} loading={loading}/>
+            <div className="mt-6 pt-4 border-t"><div className="flex justify-end"><div className="bg-emerald-50 px-4 py-2 rounded-lg"><span className="text-lg font-bold text-emerald-800">Total: {formatCurrency(getTotalGeneral())}</span></div></div></div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showForm && (
+        <DocumentoComercialForm
+          open={showForm}
+          onOpenChange={setShowForm}
+          onSubmit={handleSubmit}
+          documento={editingOrder}
+          terceros={proveedores}
+          itemsCatalogo={insumos}
+          tipoDocumento="compra"
+          tipoItem="insumos"
+          terceroLabel="Proveedor"
+          documentoTitulo="Documento de Compra"
+        />
+      )}
+
+      {selectedOrder && (
+        <OrdenDetalle 
+          orden={selectedOrder}
+          proveedorNombre={selectedOrder ? getProveedorNombre(selectedOrder.proveedor_id) : ""}
+          open={showDetailModal}
+          onOpenChange={setShowDetailModal}
+        />
+      )}
+      {showSoporteViewer && (
+        <SoporteViewer 
+            open={showSoporteViewer}
+            onOpenChange={setShowSoporteViewer}
+            soportes={soportesToShow}
+            orden={selectedOrder}
+        />
+      )}
+    </div>
+  );
+}
