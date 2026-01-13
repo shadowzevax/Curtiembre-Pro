@@ -10,6 +10,7 @@ import { OrdenVenta } from "@/entities/OrdenVenta";
 import { Insumo } from "@/entities/Insumo";
 import { ProcesoProduccion } from "@/entities/ProcesoProduccion";
 import { User } from "@/entities/User";
+import StockAlerts from "../components/dashboard/StockAlerts";
 
 // Mapeo de iconos por nombre
 const iconMap = {
@@ -206,6 +207,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Stock Alerts */}
+      <StockAlerts />
 
       {/* Recent Activity & Financial Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

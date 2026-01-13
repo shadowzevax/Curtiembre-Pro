@@ -52,6 +52,15 @@ import ServiciosProduccion from './pages/ServiciosProduccion';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
+import CajaBancos from './pages/CajaBancos';
+import CuentasBancarias from './pages/CuentasBancarias';
+import BilleterasDigitales from './pages/BilleterasDigitales';
+import IngresosBancarios from './pages/IngresosBancarios';
+import EgresosBancarios from './pages/EgresosBancarios';
+import ConciliacionBancaria from './pages/ConciliacionBancaria';
+import ReporteCuentas from './pages/ReporteCuentas';
+import PlanCuentas from './pages/PlanCuentas';
+import LibroMayor from './pages/LibroMayor';
 import __Layout from './Layout.jsx';
 
 
@@ -110,6 +119,15 @@ export const PAGES = {
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
+    "CajaBancos": CajaBancos,
+    "CuentasBancarias": CuentasBancarias,
+    "BilleterasDigitales": BilleterasDigitales,
+    "IngresosBancarios": IngresosBancarios,
+    "EgresosBancarios": EgresosBancarios,
+    "ConciliacionBancaria": ConciliacionBancaria,
+    "ReporteCuentas": ReporteCuentas,
+    "PlanCuentas": PlanCuentas,
+    "LibroMayor": LibroMayor,
 }
 
 export const pagesConfig = {
