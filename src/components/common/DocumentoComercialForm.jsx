@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, X, Save, Upload } from 'lucide-react';
 import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
-import { ProductoCatalogo, OrdenCompra, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario } from '@/entities/all';
+import { ProductoCatalogo, OrdenCompra, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 
