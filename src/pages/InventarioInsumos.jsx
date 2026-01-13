@@ -36,7 +36,7 @@ export default function InventarioInsumos() {
             // Calcular stock_actual desde movimientos y mezclar con catalogo
             const insumosConStock = data.map(ins => {
                 const movsIns = movimientos.filter(m => m.insumo_id === ins.id);
-                const stockActual = movsIns.reduce((sum, m) => sum + (m.cantidad || 0), 0);
+                const stockActual = movsIns.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
                 
                 // Buscar info en catalogo si existe
                 const catalogoItem = productosCatalogo.find(p => p.codigo === ins.codigo);

@@ -1,115 +1,115 @@
-import Dashboard from './pages/Dashboard';
-import AdminTerceros from './pages/AdminTerceros';
-import CompraInsumos from './pages/CompraInsumos';
-import ProcesoRecepcion from './pages/ProcesoRecepcion';
-import ProcesoLimpieza from './pages/ProcesoLimpieza';
-import ProcesoCurtido from './pages/ProcesoCurtido';
-import ProcesoAcabado from './pages/ProcesoAcabado';
-import ProcesoRecurtido from './pages/ProcesoRecurtido';
-import VentaProductos from './pages/VentaProductos';
-import VentaServicios from './pages/VentaServicios';
-import InventarioInsumos from './pages/InventarioInsumos';
-import InventarioProduccion from './pages/InventarioProduccion';
-import ContabilidadGastos from './pages/ContabilidadGastos';
-import ContabilidadIngresos from './pages/ContabilidadIngresos';
-import ContabilidadTraslados from './pages/ContabilidadTraslados';
-import ContabilidadPagar from './pages/ContabilidadPagar';
-import ContabilidadCobrar from './pages/ContabilidadCobrar';
-import InformeCaja from './pages/InformeCaja';
-import InformeCostos from './pages/InformeCostos';
 import AdminActividades from './pages/AdminActividades';
-import UsuariosSistema from './pages/UsuariosSistema';
 import AdminServicios from './pages/AdminServicios';
-import AdminUnidadesMedida from './pages/AdminUnidadesMedida';
+import AdminTerceros from './pages/AdminTerceros';
 import AdminTiposGasto from './pages/AdminTiposGasto';
-import RHEmpleados from './pages/RHEmpleados';
-import RHNomina from './pages/RHNomina';
-import RHAsistencia from './pages/RHAsistencia';
-import ReportesVentas from './pages/ReportesVentas';
-import ReportesCompras from './pages/ReportesCompras';
-import ReportesInventario from './pages/ReportesInventario';
-import ReportesProduccion from './pages/ReportesProduccion';
-import ReportesFinancieros from './pages/ReportesFinancieros';
-import RolesPermisos from './pages/RolesPermisos';
-import ProduccionOrdenes from './pages/ProduccionOrdenes';
-import ProduccionPlanificacion from './pages/ProduccionPlanificacion';
-import ProduccionConsumoInsumos from './pages/ProduccionConsumoInsumos';
-import ProduccionReporteEtapas from './pages/ProduccionReporteEtapas';
-import InventarioProductos from './pages/InventarioProductos';
-import ReciboCaja from './pages/ReciboCaja';
-import ComprobanteEgreso from './pages/ComprobanteEgreso';
-import ReportesProcesos from './pages/ReportesProcesos';
-import CostosIndirectos from './pages/CostosIndirectos';
-import CostosServicioMaquinaria from './pages/CostosServicioMaquinaria';
-import CostosServicioManoObra from './pages/CostosServicioManoObra';
-import CostosOtrosCostos from './pages/CostosOtrosCostos';
-import RecetasPintura from './pages/RecetasPintura';
-import CatalogoProductos from './pages/CatalogoProductos';
+import AdminUnidadesMedida from './pages/AdminUnidadesMedida';
 import AjusteInventario from './pages/AjusteInventario';
-import LibroDiario from './pages/LibroDiario';
+import CajaConfig from './pages/CajaConfig';
 import CajaMovimientos from './pages/CajaMovimientos';
 import CajaTransferencias from './pages/CajaTransferencias';
-import CajaConfig from './pages/CajaConfig';
-import ServiciosProduccion from './pages/ServiciosProduccion';
+import CatalogoProductos from './pages/CatalogoProductos';
+import CompraInsumos from './pages/CompraInsumos';
+import ComprobanteEgreso from './pages/ComprobanteEgreso';
+import ContabilidadCobrar from './pages/ContabilidadCobrar';
+import ContabilidadGastos from './pages/ContabilidadGastos';
+import ContabilidadIngresos from './pages/ContabilidadIngresos';
+import ContabilidadPagar from './pages/ContabilidadPagar';
+import ContabilidadTraslados from './pages/ContabilidadTraslados';
+import CostosIndirectos from './pages/CostosIndirectos';
+import CostosOtrosCostos from './pages/CostosOtrosCostos';
+import CostosServicioManoObra from './pages/CostosServicioManoObra';
+import CostosServicioMaquinaria from './pages/CostosServicioMaquinaria';
+import Dashboard from './pages/Dashboard';
+import InformeCaja from './pages/InformeCaja';
+import InformeCostos from './pages/InformeCostos';
+import InventarioInsumos from './pages/InventarioInsumos';
+import InventarioProduccion from './pages/InventarioProduccion';
+import InventarioProductos from './pages/InventarioProductos';
+import LibroDiario from './pages/LibroDiario';
 import LibroDiarioNuevo from './pages/LibroDiarioNuevo';
+import ProcesoAcabado from './pages/ProcesoAcabado';
+import ProcesoCurtido from './pages/ProcesoCurtido';
+import ProcesoLimpieza from './pages/ProcesoLimpieza';
+import ProcesoRecepcion from './pages/ProcesoRecepcion';
+import ProcesoRecurtido from './pages/ProcesoRecurtido';
+import ProduccionConsumoInsumos from './pages/ProduccionConsumoInsumos';
+import ProduccionOrdenes from './pages/ProduccionOrdenes';
+import ProduccionPlanificacion from './pages/ProduccionPlanificacion';
+import ProduccionReporteEtapas from './pages/ProduccionReporteEtapas';
+import RHAsistencia from './pages/RHAsistencia';
+import RHEmpleados from './pages/RHEmpleados';
+import RHNomina from './pages/RHNomina';
+import RecetasPintura from './pages/RecetasPintura';
+import ReciboCaja from './pages/ReciboCaja';
+import ReportesCompras from './pages/ReportesCompras';
+import ReportesFinancieros from './pages/ReportesFinancieros';
+import ReportesInventario from './pages/ReportesInventario';
+import ReportesProcesos from './pages/ReportesProcesos';
+import ReportesProduccion from './pages/ReportesProduccion';
+import ReportesVentas from './pages/ReportesVentas';
+import RolesPermisos from './pages/RolesPermisos';
+import ServiciosProduccion from './pages/ServiciosProduccion';
+import UsuariosSistema from './pages/UsuariosSistema';
+import VentaProductos from './pages/VentaProductos';
+import VentaServicios from './pages/VentaServicios';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Dashboard": Dashboard,
-    "AdminTerceros": AdminTerceros,
-    "CompraInsumos": CompraInsumos,
-    "ProcesoRecepcion": ProcesoRecepcion,
-    "ProcesoLimpieza": ProcesoLimpieza,
-    "ProcesoCurtido": ProcesoCurtido,
-    "ProcesoAcabado": ProcesoAcabado,
-    "ProcesoRecurtido": ProcesoRecurtido,
-    "VentaProductos": VentaProductos,
-    "VentaServicios": VentaServicios,
-    "InventarioInsumos": InventarioInsumos,
-    "InventarioProduccion": InventarioProduccion,
-    "ContabilidadGastos": ContabilidadGastos,
-    "ContabilidadIngresos": ContabilidadIngresos,
-    "ContabilidadTraslados": ContabilidadTraslados,
-    "ContabilidadPagar": ContabilidadPagar,
-    "ContabilidadCobrar": ContabilidadCobrar,
-    "InformeCaja": InformeCaja,
-    "InformeCostos": InformeCostos,
     "AdminActividades": AdminActividades,
-    "UsuariosSistema": UsuariosSistema,
     "AdminServicios": AdminServicios,
-    "AdminUnidadesMedida": AdminUnidadesMedida,
+    "AdminTerceros": AdminTerceros,
     "AdminTiposGasto": AdminTiposGasto,
-    "RHEmpleados": RHEmpleados,
-    "RHNomina": RHNomina,
-    "RHAsistencia": RHAsistencia,
-    "ReportesVentas": ReportesVentas,
-    "ReportesCompras": ReportesCompras,
-    "ReportesInventario": ReportesInventario,
-    "ReportesProduccion": ReportesProduccion,
-    "ReportesFinancieros": ReportesFinancieros,
-    "RolesPermisos": RolesPermisos,
-    "ProduccionOrdenes": ProduccionOrdenes,
-    "ProduccionPlanificacion": ProduccionPlanificacion,
-    "ProduccionConsumoInsumos": ProduccionConsumoInsumos,
-    "ProduccionReporteEtapas": ProduccionReporteEtapas,
-    "InventarioProductos": InventarioProductos,
-    "ReciboCaja": ReciboCaja,
-    "ComprobanteEgreso": ComprobanteEgreso,
-    "ReportesProcesos": ReportesProcesos,
-    "CostosIndirectos": CostosIndirectos,
-    "CostosServicioMaquinaria": CostosServicioMaquinaria,
-    "CostosServicioManoObra": CostosServicioManoObra,
-    "CostosOtrosCostos": CostosOtrosCostos,
-    "RecetasPintura": RecetasPintura,
-    "CatalogoProductos": CatalogoProductos,
+    "AdminUnidadesMedida": AdminUnidadesMedida,
     "AjusteInventario": AjusteInventario,
-    "LibroDiario": LibroDiario,
+    "CajaConfig": CajaConfig,
     "CajaMovimientos": CajaMovimientos,
     "CajaTransferencias": CajaTransferencias,
-    "CajaConfig": CajaConfig,
-    "ServiciosProduccion": ServiciosProduccion,
+    "CatalogoProductos": CatalogoProductos,
+    "CompraInsumos": CompraInsumos,
+    "ComprobanteEgreso": ComprobanteEgreso,
+    "ContabilidadCobrar": ContabilidadCobrar,
+    "ContabilidadGastos": ContabilidadGastos,
+    "ContabilidadIngresos": ContabilidadIngresos,
+    "ContabilidadPagar": ContabilidadPagar,
+    "ContabilidadTraslados": ContabilidadTraslados,
+    "CostosIndirectos": CostosIndirectos,
+    "CostosOtrosCostos": CostosOtrosCostos,
+    "CostosServicioManoObra": CostosServicioManoObra,
+    "CostosServicioMaquinaria": CostosServicioMaquinaria,
+    "Dashboard": Dashboard,
+    "InformeCaja": InformeCaja,
+    "InformeCostos": InformeCostos,
+    "InventarioInsumos": InventarioInsumos,
+    "InventarioProduccion": InventarioProduccion,
+    "InventarioProductos": InventarioProductos,
+    "LibroDiario": LibroDiario,
     "LibroDiarioNuevo": LibroDiarioNuevo,
+    "ProcesoAcabado": ProcesoAcabado,
+    "ProcesoCurtido": ProcesoCurtido,
+    "ProcesoLimpieza": ProcesoLimpieza,
+    "ProcesoRecepcion": ProcesoRecepcion,
+    "ProcesoRecurtido": ProcesoRecurtido,
+    "ProduccionConsumoInsumos": ProduccionConsumoInsumos,
+    "ProduccionOrdenes": ProduccionOrdenes,
+    "ProduccionPlanificacion": ProduccionPlanificacion,
+    "ProduccionReporteEtapas": ProduccionReporteEtapas,
+    "RHAsistencia": RHAsistencia,
+    "RHEmpleados": RHEmpleados,
+    "RHNomina": RHNomina,
+    "RecetasPintura": RecetasPintura,
+    "ReciboCaja": ReciboCaja,
+    "ReportesCompras": ReportesCompras,
+    "ReportesFinancieros": ReportesFinancieros,
+    "ReportesInventario": ReportesInventario,
+    "ReportesProcesos": ReportesProcesos,
+    "ReportesProduccion": ReportesProduccion,
+    "ReportesVentas": ReportesVentas,
+    "RolesPermisos": RolesPermisos,
+    "ServiciosProduccion": ServiciosProduccion,
+    "UsuariosSistema": UsuariosSistema,
+    "VentaProductos": VentaProductos,
+    "VentaServicios": VentaServicios,
 }
 
 export const pagesConfig = {

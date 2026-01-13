@@ -27,18 +27,14 @@ export default function InventarioProductos() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await ProductoTerminado.list();
-            const movimientos = await MovimientoInventario.list(); // Assuming MovimientoInventario can be listed directly
+            // Filtrar SOLO productos terminados (categoría 'producto_terminado')
+            const data = await ProductoTerminado.filter({ categoria: 'producto_terminado' });
+            const movimientos = await MovimientoInventario.list();
 
             // Calculate stock_actual from movements
-            // Assuming MovimientoInventario items have a 'producto_terminado_id' or 'item_id' and 'tipo_inventario'
             const productosConStock = data.map(prod => {
-                // Filter movements relevant to this product
-                const movsProd = movimientos.filter(m => 
-                    m.item_id === prod.id && m.tipo_inventario === 'producto_terminado'
-                );
-                // Sum quantities to get current stock
-                const stockActual = movsProd.reduce((sum, m) => sum + (m.cantidad || 0), 0);
+                const movsProd = movimientos.filter(m => m.insumo_id === prod.id);
+                const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
                 return { ...prod, stock_actual: stockActual };
             });
 

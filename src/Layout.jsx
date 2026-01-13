@@ -76,7 +76,20 @@ const menuItems = [
     subItems: [
       { title: "Recibo de Caja", url: createPageUrl("ReciboCaja"), icon: Calculator },
       { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator },
-      { title: "Libro Diario", url: createPageUrl("LibroDiario"), icon: Calculator }
+      { title: "Caja y Bancos", url: createPageUrl("CajaBancos"), icon: Calculator }
+    ]
+  },
+  {
+    title: "Gestión de Bancos",
+    icon: Calculator,
+    roles: ["admin", "contador"],
+    subItems: [
+      { title: "Cuentas Bancarias", url: createPageUrl("CuentasBancarias"), icon: Calculator },
+      { title: "Nequi/Billeteras Digitales", url: createPageUrl("BilleterasDigitales"), icon: Calculator },
+      { title: "Ingresos por Transferencias", url: createPageUrl("IngresosBancarios"), icon: Calculator },
+      { title: "Egresos Bancarios", url: createPageUrl("EgresosBancarios"), icon: Calculator },
+      { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator },
+      { title: "Reporte por Cuenta", url: createPageUrl("ReporteCuentas"), icon: Calculator }
     ]
   },
   {
@@ -106,6 +119,9 @@ const menuItems = [
     icon: Calculator,
     roles: ["admin", "contador"],
     subItems: [
+      { title: "Libro Diario", url: createPageUrl("LibroDiario"), icon: Calculator },
+      { title: "Plan de Cuentas", url: createPageUrl("PlanCuentas"), icon: Calculator },
+      { title: "Libro Mayor/Balances", url: createPageUrl("LibroMayor"), icon: Calculator },
       { title: "Gastos", url: createPageUrl("ContabilidadGastos"), icon: Calculator },
       { title: "Otros Ingresos", url: createPageUrl("ContabilidadIngresos"), icon: Calculator },
       { title: "Traslados Efectivo", url: createPageUrl("ContabilidadTraslados"), icon: Calculator },
@@ -338,6 +354,16 @@ export default function Layout({ children, currentPageName }) {
             'AjusteInventario': 'Ajuste de Inventario',
             'InformeCaja': 'Informe de Caja',
             'InformeCostos': 'Informe de Costos',
+            'CajaBancos': 'Caja y Bancos',
+            'CuentasBancarias': 'Cuentas Bancarias',
+            'BilleterasDigitales': 'Nequi/Billeteras Digitales',
+            'IngresosBancarios': 'Ingresos por Transferencias',
+            'EgresosBancarios': 'Egresos Bancarios',
+            'ConciliacionBancaria': 'Conciliación Bancaria',
+            'ReporteCuentas': 'Reporte por Cuenta',
+            'PlanCuentas': 'Plan de Cuentas',
+            'LibroMayor': 'Libro Mayor/Balances',
+            'LibroDiario': 'Libro Diario',
             'AdminTerceros': 'Administración de Terceros',
             'AdminActividades': 'Gestión de Actividades',
             'AdminServicios': 'Gestión de Servicios',

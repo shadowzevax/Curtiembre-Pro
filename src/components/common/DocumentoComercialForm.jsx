@@ -351,7 +351,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                          
                          // Buscar en la entidad correcta según categoría del catálogo
                          if (cat === 'materia_prima') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'pieles' });
                              if (items.length > 0) {
                                  currentItemData = items[0];
                                  entityType = ProductoTerminado;
@@ -363,7 +363,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                  entityType = Insumo;
                              }
                          } else if (cat === 'productos_terminados') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'producto_terminado' });
                              if (items.length > 0) {
                                  currentItemData = items[0];
                                  entityType = ProductoTerminado;
@@ -457,7 +457,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                          const cat = catalogoItem[0].categoria;
                          
                          if (cat === 'materia_prima') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'pieles' });
                              if (items.length > 0) {
                                  currentItemData = items[0];
                                  entityType = ProductoTerminado;
@@ -469,7 +469,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                  entityType = Insumo;
                              }
                          } else if (cat === 'productos_terminados') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'producto_terminado' });
                              if (items.length > 0) {
                                  currentItemData = items[0];
                                  entityType = ProductoTerminado;

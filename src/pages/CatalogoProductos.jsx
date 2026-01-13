@@ -91,18 +91,20 @@ export default function CatalogoProductos() {
                         };
 
                         if (newProduct.categoria === 'materia_prima') {
-                            // Crear en Inventario de Materias Primas (ProductoTerminado)
+                            // Crear SOLO en Inventario de Materias Primas (ProductoTerminado con categoría específica)
                             await ProductoTerminado.create({...baseInventoryData, categoria: 'pieles'});
+                            console.log('✅ Producto creado en Inventario de Materias Primas');
                         } else if (newProduct.categoria === 'insumos_quimicos') {
-                            // Crear en Inventario de Insumos y Químicos (Insumo)
+                            // Crear SOLO en Inventario de Insumos (Insumo)
                             await Insumo.create({...baseInventoryData, categoria: 'quimicos'});
+                            console.log('✅ Producto creado en Inventario de Insumos y Químicos');
                         } else if (newProduct.categoria === 'productos_terminados') {
-                            // Crear en Inventario de Productos Terminados (ProductoTerminado)
-                            await ProductoTerminado.create({...baseInventoryData, categoria: 'hojas_procesadas'});
+                            // Crear SOLO en Inventario de Productos Terminados (ProductoTerminado con categoría diferente)
+                            await ProductoTerminado.create({...baseInventoryData, categoria: 'producto_terminado'});
+                            console.log('✅ Producto creado SOLO en Inventario de Productos Terminados');
                         }
                     } catch (err) {
                         console.error("Error creando en inventario:", err);
-                        // No bloquear si falla, solo avisar
                         alert("Producto creado en catálogo, pero hubo un error al agregarlo al inventario. Puede agregarlo manualmente.");
                     }
                 }
