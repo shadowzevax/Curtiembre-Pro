@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, Edit, Trash2, Eye, ClipboardList } from 'lucide-react';
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
+import StockAlert from '../components/inventario/StockAlert';
 
 export default function InventarioProductos() {
     const [productos, setProductos] = useState([]);
@@ -120,7 +121,7 @@ export default function InventarioProductos() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
 
-    const headers = ["Código", "Descripción", "Categoría", "Stock Actual", "Stock Mínimo", "U. Medida", "Costo Promedio", "Valor Total Inventario", "Acciones"];
+    const headers = ["Código", "Descripción", "Categoría", "Stock Actual", "Stock Mínimo", "Estado Stock", "U. Medida", "Costo Promedio", "Valor Total", "Acciones"];
     const renderRow = (item) => {
         const valorTotalInventario = (item.stock_actual || 0) * (item.costo_promedio || 0);
         return (
@@ -130,6 +131,7 @@ export default function InventarioProductos() {
             <td>{item.categoria || 'N/A'}</td>
             <td className={item.stock_actual <= item.stock_minimo ? "text-red-500 font-bold" : ""}>{item.stock_actual}</td>
             <td>{item.stock_minimo}</td>
+            <td><StockAlert stockActual={item.stock_actual} stockMinimo={item.stock_minimo} /></td>
             <td>{item.unidad_medida || 'N/A'}</td>
             <td>{formatCurrency(item.costo_promedio)}</td>
             <td className="text-right font-bold text-emerald-700">{formatCurrency(valorTotalInventario)}</td>

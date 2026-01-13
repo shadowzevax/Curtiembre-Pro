@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
+import StockAlert from '../components/inventario/StockAlert';
 
 export default function InventarioProduccion() {
     const [productos, setProductos] = useState([]);
@@ -27,14 +28,14 @@ export default function InventarioProduccion() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const data = await ProductoTerminado.list();
+            // Filtrar SOLO productos de materia prima (categoría 'pieles')
+            const data = await ProductoTerminado.filter({ categoria: 'pieles' });
             const movimientos = await MovimientoInventario.list();
             
             // Calcular stock_actual desde movimientos
             const productosConStock = data.map(prod => {
-                // Assuming insumo_id for ProductoTerminado
                 const movsProd = movimientos.filter(m => m.insumo_id === prod.id); 
-                const stockActual = movsProd.reduce((sum, m) => sum + (m.cantidad || 0), 0);
+                const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
                 return { ...prod, stock_actual: stockActual };
             });
             
@@ -42,7 +43,6 @@ export default function InventarioProduccion() {
             setFilteredProductos(productosConStock);
         } catch (error) { 
             console.error("Error loading data:", error); 
-            alert("Error al cargar los productos.");
         } finally { 
             setLoading(false); 
         }
@@ -123,7 +123,7 @@ export default function InventarioProduccion() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
 
-    const headers = ["Código", "Descripción", "Categoría", "Stock Actual", "Stock Mínimo", "U. Medida", "Costo Promedio", "Valor Total Inventario", "Acciones"];
+    const headers = ["Código", "Descripción", "Categoría", "Stock Actual", "Stock Mínimo", "Estado Stock", "U. Medida", "Costo Promedio", "Valor Total", "Acciones"];
     const renderRow = (prod) => {
         const valorTotalInventario = (prod.stock_actual || 0) * (prod.costo_promedio || 0);
         return (
@@ -133,6 +133,7 @@ export default function InventarioProduccion() {
             <td>{prod.categoria || 'N/A'}</td>
             <td className={prod.stock_actual <= prod.stock_minimo ? "text-red-500 font-bold" : ""}>{prod.stock_actual}</td>
             <td>{prod.stock_minimo}</td>
+            <td><StockAlert stockActual={prod.stock_actual} stockMinimo={prod.stock_minimo} /></td>
             <td>{prod.unidad_medida || 'N/A'}</td>
             <td>{formatCurrency(prod.costo_promedio)}</td>
             <td className="text-right font-bold text-emerald-700">{formatCurrency(valorTotalInventario)}</td>
