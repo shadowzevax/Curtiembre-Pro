@@ -4,12 +4,15 @@ import AdminTerceros from './pages/AdminTerceros';
 import AdminTiposGasto from './pages/AdminTiposGasto';
 import AdminUnidadesMedida from './pages/AdminUnidadesMedida';
 import AjusteInventario from './pages/AjusteInventario';
+import BilleterasDigitales from './pages/BilleterasDigitales';
+import CajaBancos from './pages/CajaBancos';
 import CajaConfig from './pages/CajaConfig';
 import CajaMovimientos from './pages/CajaMovimientos';
 import CajaTransferencias from './pages/CajaTransferencias';
 import CatalogoProductos from './pages/CatalogoProductos';
 import CompraInsumos from './pages/CompraInsumos';
 import ComprobanteEgreso from './pages/ComprobanteEgreso';
+import ConciliacionBancaria from './pages/ConciliacionBancaria';
 import ContabilidadCobrar from './pages/ContabilidadCobrar';
 import ContabilidadGastos from './pages/ContabilidadGastos';
 import ContabilidadIngresos from './pages/ContabilidadIngresos';
@@ -19,14 +22,19 @@ import CostosIndirectos from './pages/CostosIndirectos';
 import CostosOtrosCostos from './pages/CostosOtrosCostos';
 import CostosServicioManoObra from './pages/CostosServicioManoObra';
 import CostosServicioMaquinaria from './pages/CostosServicioMaquinaria';
+import CuentasBancarias from './pages/CuentasBancarias';
 import Dashboard from './pages/Dashboard';
+import EgresosBancarios from './pages/EgresosBancarios';
 import InformeCaja from './pages/InformeCaja';
 import InformeCostos from './pages/InformeCostos';
+import IngresosBancarios from './pages/IngresosBancarios';
 import InventarioInsumos from './pages/InventarioInsumos';
 import InventarioProduccion from './pages/InventarioProduccion';
 import InventarioProductos from './pages/InventarioProductos';
 import LibroDiario from './pages/LibroDiario';
 import LibroDiarioNuevo from './pages/LibroDiarioNuevo';
+import LibroMayor from './pages/LibroMayor';
+import PlanCuentas from './pages/PlanCuentas';
 import ProcesoAcabado from './pages/ProcesoAcabado';
 import ProcesoCurtido from './pages/ProcesoCurtido';
 import ProcesoLimpieza from './pages/ProcesoLimpieza';
@@ -41,6 +49,7 @@ import RHEmpleados from './pages/RHEmpleados';
 import RHNomina from './pages/RHNomina';
 import RecetasPintura from './pages/RecetasPintura';
 import ReciboCaja from './pages/ReciboCaja';
+import ReporteCuentas from './pages/ReporteCuentas';
 import ReportesCompras from './pages/ReportesCompras';
 import ReportesFinancieros from './pages/ReportesFinancieros';
 import ReportesInventario from './pages/ReportesInventario';
@@ -52,15 +61,6 @@ import ServiciosProduccion from './pages/ServiciosProduccion';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
-import CajaBancos from './pages/CajaBancos';
-import CuentasBancarias from './pages/CuentasBancarias';
-import BilleterasDigitales from './pages/BilleterasDigitales';
-import IngresosBancarios from './pages/IngresosBancarios';
-import EgresosBancarios from './pages/EgresosBancarios';
-import ConciliacionBancaria from './pages/ConciliacionBancaria';
-import ReporteCuentas from './pages/ReporteCuentas';
-import PlanCuentas from './pages/PlanCuentas';
-import LibroMayor from './pages/LibroMayor';
 import __Layout from './Layout.jsx';
 
 
@@ -71,12 +71,15 @@ export const PAGES = {
     "AdminTiposGasto": AdminTiposGasto,
     "AdminUnidadesMedida": AdminUnidadesMedida,
     "AjusteInventario": AjusteInventario,
+    "BilleterasDigitales": BilleterasDigitales,
+    "CajaBancos": CajaBancos,
     "CajaConfig": CajaConfig,
     "CajaMovimientos": CajaMovimientos,
     "CajaTransferencias": CajaTransferencias,
     "CatalogoProductos": CatalogoProductos,
     "CompraInsumos": CompraInsumos,
     "ComprobanteEgreso": ComprobanteEgreso,
+    "ConciliacionBancaria": ConciliacionBancaria,
     "ContabilidadCobrar": ContabilidadCobrar,
     "ContabilidadGastos": ContabilidadGastos,
     "ContabilidadIngresos": ContabilidadIngresos,
@@ -86,14 +89,19 @@ export const PAGES = {
     "CostosOtrosCostos": CostosOtrosCostos,
     "CostosServicioManoObra": CostosServicioManoObra,
     "CostosServicioMaquinaria": CostosServicioMaquinaria,
+    "CuentasBancarias": CuentasBancarias,
     "Dashboard": Dashboard,
+    "EgresosBancarios": EgresosBancarios,
     "InformeCaja": InformeCaja,
     "InformeCostos": InformeCostos,
+    "IngresosBancarios": IngresosBancarios,
     "InventarioInsumos": InventarioInsumos,
     "InventarioProduccion": InventarioProduccion,
     "InventarioProductos": InventarioProductos,
     "LibroDiario": LibroDiario,
     "LibroDiarioNuevo": LibroDiarioNuevo,
+    "LibroMayor": LibroMayor,
+    "PlanCuentas": PlanCuentas,
     "ProcesoAcabado": ProcesoAcabado,
     "ProcesoCurtido": ProcesoCurtido,
     "ProcesoLimpieza": ProcesoLimpieza,
@@ -108,6 +116,7 @@ export const PAGES = {
     "RHNomina": RHNomina,
     "RecetasPintura": RecetasPintura,
     "ReciboCaja": ReciboCaja,
+    "ReporteCuentas": ReporteCuentas,
     "ReportesCompras": ReportesCompras,
     "ReportesFinancieros": ReportesFinancieros,
     "ReportesInventario": ReportesInventario,
@@ -119,15 +128,6 @@ export const PAGES = {
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
-    "CajaBancos": CajaBancos,
-    "CuentasBancarias": CuentasBancarias,
-    "BilleterasDigitales": BilleterasDigitales,
-    "IngresosBancarios": IngresosBancarios,
-    "EgresosBancarios": EgresosBancarios,
-    "ConciliacionBancaria": ConciliacionBancaria,
-    "ReporteCuentas": ReporteCuentas,
-    "PlanCuentas": PlanCuentas,
-    "LibroMayor": LibroMayor,
 }
 
 export const pagesConfig = {

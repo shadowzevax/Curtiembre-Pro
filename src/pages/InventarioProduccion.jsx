@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
+import InventarioItemDetail from '../components/inventario/InventarioItemDetail';
 import StockAlert from '../components/inventario/StockAlert';
 
 export default function InventarioProduccion() {

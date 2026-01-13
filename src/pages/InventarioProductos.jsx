@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Plus, Edit, Trash2, Eye, ClipboardList } from 'lucide-react';
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
+import InventarioItemDetail from '../components/inventario/InventarioItemDetail';
 import StockAlert from '../components/inventario/StockAlert';
 
 export default function InventarioProductos() {
