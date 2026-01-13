@@ -364,6 +364,95 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     const savedOrder = await onSubmit(finalData);
     const orderId = savedOrder?.id || finalData.id;
 
+    // REVERTIR MOVIMIENTOS ANTIGUOS SI ES EDICIÓN
+    if (documento && tipoDocumento === 'compra' && finalData.afecta_inventario) {
+        try {
+            // Buscar y eliminar movimientos antiguos de esta compra
+            const movimientosAntiguos = await MovimientoInventario.filter({ 
+                referencia: `${documento.prefijo_documento}-${documento.numero_documento}` 
+            });
+            
+            for (const mov of movimientosAntiguos) {
+                await MovimientoInventario.delete(mov.id);
+                
+                // Revertir el stock del producto
+                if (mov.insumo_id) {
+                    const catalogoItem = await ProductoCatalogo.filter({ codigo: mov.insumo_id });
+                    if (catalogoItem.length > 0) {
+                        const cat = catalogoItem[0].categoria;
+                        let entityType = null;
+                        let currentItemData = null;
+                        
+                        if (cat === 'materia_prima') {
+                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        } else if (cat === 'insumos_quimicos') {
+                            const items = await Insumo.filter({ id: mov.insumo_id });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
+                        } else if (cat === 'productos_terminados') {
+                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        }
+                        
+                        if (entityType && currentItemData) {
+                            const stockActual = currentItemData.stock_actual || 0;
+                            await entityType.update(currentItemData.id, {
+                                stock_actual: stockActual - (mov.cantidad || 0)
+                            });
+                        }
+                    }
+                }
+            }
+            console.log('✅ Movimientos antiguos revertidos');
+        } catch (e) {
+            console.error('Error revirtiendo movimientos:', e);
+        }
+    }
+
+    if (documento && tipoDocumento === 'venta') {
+        try {
+            // Buscar y eliminar movimientos antiguos de esta venta
+            const movimientosAntiguos = await MovimientoInventario.filter({ 
+                referencia: `${documento.prefijo_documento}-${documento.numero_documento}` 
+            });
+            
+            for (const mov of movimientosAntiguos) {
+                await MovimientoInventario.delete(mov.id);
+                
+                // Revertir el stock (sumar porque era salida negativa)
+                if (mov.insumo_id) {
+                    const catalogoItem = await ProductoCatalogo.filter({ codigo: mov.insumo_id });
+                    if (catalogoItem.length > 0) {
+                        const cat = catalogoItem[0].categoria;
+                        let entityType = null;
+                        let currentItemData = null;
+                        
+                        if (cat === 'materia_prima') {
+                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        } else if (cat === 'insumos_quimicos') {
+                            const items = await Insumo.filter({ id: mov.insumo_id });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
+                        } else if (cat === 'productos_terminados') {
+                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        }
+                        
+                        if (entityType && currentItemData) {
+                            const stockActual = currentItemData.stock_actual || 0;
+                            await entityType.update(currentItemData.id, {
+                                stock_actual: stockActual - (mov.cantidad || 0) // Revertir: si era -10, sumamos 10
+                            });
+                        }
+                    }
+                }
+            }
+            console.log('✅ Movimientos de venta antiguos revertidos');
+        } catch (e) {
+            console.error('Error revirtiendo movimientos de venta:', e);
+        }
+    }
+
     // DESPUÉS actualizar inventario (solo si la orden se guardó exitosamente)
     if (tipoDocumento === 'compra' && finalData.afecta_inventario) {
         for (const item of finalData.items) {
@@ -806,9 +895,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                                 className="h-8 text-xs"
                                             />
                                             <datalist id={`datalist-catalogo-${index}`}>
-                                                {productosCatalogo.map(p => (
-                                                    <option key={p.id} value={p.codigo}>{p.descripcion}</option>
-                                                ))}
+                                                {productosCatalogo
+                                                    .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
+                                                    .filter(p => {
+                                                        const searchTerm = (item.codigo || '').toLowerCase();
+                                                        return !searchTerm || 
+                                                               (p.codigo || '').toLowerCase().includes(searchTerm) ||
+                                                               (p.descripcion || '').toLowerCase().includes(searchTerm);
+                                                    })
+                                                    .map(p => (
+                                                        <option key={p.id} value={p.codigo}>{p.descripcion}</option>
+                                                    ))}
                                             </datalist>
                                         </div>
                                     </td>
