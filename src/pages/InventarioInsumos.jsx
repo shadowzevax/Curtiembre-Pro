@@ -235,30 +235,11 @@ export default function InventarioInsumos() {
                 />
             )}
 
-            <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Detalle del Insumo</DialogTitle></DialogHeader>
-                    {selectedItem && (
-                        <div className="space-y-3 text-sm">
-                            <p><span className="font-semibold">Código:</span> {selectedItem.codigo}</p>
-                            <p><span className="font-semibold">Nombre:</span> {selectedItem.nombre}</p>
-                            <p><span className="font-semibold">Categoría:</span> {selectedItem.categoria}</p>
-                            <p><span className="font-semibold">Descripción:</span> {selectedItem.descripcion || 'N/A'}</p>
-                            <p><span className="font-semibold">Stock Actual:</span> {selectedItem.stock_actual}</p>
-                            <p><span className="font-semibold">Stock Mínimo:</span> {selectedItem.stock_minimo}</p>
-                            <p><span className="font-semibold">Unidad de Medida:</span> {selectedItem.unidad_medida}</p>
-                            <p><span className="font-semibold">IVA:</span> {selectedItem.iva}</p>
-                            <p><span className="font-semibold">Costo Promedio:</span> {formatCurrency(selectedItem.costo_promedio)}</p>
-                            <p><span className="font-semibold">Precio Venta 1:</span> {formatCurrency(selectedItem.precio_venta_1)}</p>
-                            <p><span className="font-semibold">Precio Venta 2:</span> {formatCurrency(selectedItem.precio_venta_2)}</p>
-                            <p><span className="font-semibold">Estado:</span> {selectedItem.activo ? 'Activo' : 'Inactivo'}</p>
-                        </div>
-                    )}
-                    <div className="flex justify-end pt-4">
-                        <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <InventarioItemDetail 
+                open={showDetailModal}
+                onOpenChange={setShowDetailModal}
+                item={selectedItem}
+            />
         </div>
     );
 }

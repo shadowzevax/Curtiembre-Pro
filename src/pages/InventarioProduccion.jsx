@@ -216,30 +216,11 @@ export default function InventarioProduccion() {
                 />
             )}
 
-            <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Detalle del Producto</DialogTitle></DialogHeader>
-                    {selectedItem && (
-                        <div className="space-y-3 text-sm">
-                            <p><span className="font-semibold">Código:</span> {selectedItem.codigo}</p>
-                            <p><span className="font-semibold">Descripción:</span> {selectedItem.descripcion}</p>
-                            <p><span className="font-semibold">Categoría:</span> {selectedItem.categoria}</p>
-                            <p><span className="font-semibold">Stock Actual:</span> {selectedItem.stock_actual}</p>
-                            <p><span className="font-semibold">Stock Mínimo:</span> {selectedItem.stock_minimo}</p>
-                            <p><span className="font-semibold">Unidad de Medida:</span> {selectedItem.unidad_medida}</p>
-                            <p><span className="font-semibold">Ubicación:</span> {selectedItem.ubicacion || 'N/A'}</p>
-                            <p><span className="font-semibold">Costo Promedio:</span> {formatCurrency(selectedItem.costo_promedio)}</p>
-                            <p><span className="font-semibold">Precio Venta:</span> {formatCurrency(selectedItem.precio_venta_1 || selectedItem.precio_venta)}</p>
-                            {selectedItem.tipo_piel && <p><span className="font-semibold">Tipo de Piel:</span> {selectedItem.tipo_piel}</p>}
-                            {selectedItem.color && <p><span className="font-semibold">Color:</span> {selectedItem.color}</p>}
-                            {selectedItem.acabado && <p><span className="font-semibold">Acabado:</span> {selectedItem.acabado}</p>}
-                        </div>
-                    )}
-                    <div className="flex justify-end pt-4">
-                        <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
+            <InventarioItemDetail 
+                open={showDetailModal}
+                onOpenChange={setShowDetailModal}
+                item={selectedItem}
+            />
         </div>
     );
 }
