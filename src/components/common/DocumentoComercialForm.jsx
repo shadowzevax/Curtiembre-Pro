@@ -360,8 +360,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         finalData.codigo_lote_inventario = `LOTE-${Date.now()}`;
     }
 
-    // Lógica de actualización de Inventario y Costo Promedio - PRIMERO GUARDAR LA ORDEN
-    await onSubmit(finalData);
+    // Guardar la orden primero
+    const savedOrder = await onSubmit(finalData);
+    const orderId = savedOrder?.id || finalData.id;
 
     // DESPUÉS actualizar inventario (solo si la orden se guardó exitosamente)
     if (tipoDocumento === 'compra' && finalData.afecta_inventario) {
@@ -446,30 +447,165 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         }
     }
 
-    // Registro en Libro Diario
-    try {
-        const tipoMov = tipoDocumento === 'venta' ? 'ingreso' : 'egreso';
-        
-        if (finalData.monto_efectivo > 0) {
-             await MovimientoLibroDiario.create({
-                 fecha: finalData.fecha_orden,
-                 tipo_movimiento: tipoMov,
-                 tipo_tercero: tipoDocumento === 'venta' ? 'cliente' : 'proveedor',
-                 tipo_documento_soporte: 'factura',
-                 numero_documento: finalData.numero_documento,
-                 tercero_id: finalData.cliente_id || finalData.proveedor_id,
-                 tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === (finalData.cliente_id || finalData.proveedor_id))?.nombre || ''),
-                 cuenta_afectada: 'Caja Principal',
-                 descripcion: `${tipoMov === 'ingreso' ? 'Venta' : 'Compra'} ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                 valor_ingreso: tipoMov === 'ingreso' ? finalData.monto_efectivo : 0,
-                 valor_egreso: tipoMov === 'egreso' ? finalData.monto_efectivo : 0,
-                 medio_pago: 'efectivo',
-                 origen_modulo: tipoDocumento === 'venta' ? 'ventas' : 'compras',
-                 saldo_anterior: 0,
-                 saldo_final: 0
-             });
+    // AUTOMATIZACIÓN: Generar Recibo de Caja o Comprobante de Egreso si es contado
+    if (finalData.forma_pago === 'contado' && finalData.monto_efectivo > 0) {
+        try {
+            if (tipoDocumento === 'venta') {
+                // Generar Recibo de Caja automáticamente
+                const { ReciboCaja } = await import('@/entities/all');
+                const lastRecibos = await ReciboCaja.list('-created_date', 1);
+                const nextNum = lastRecibos.length > 0 ? parseInt(lastRecibos[0].numero_recibo || '0') + 1 : 1;
+
+                await ReciboCaja.create({
+                    numero_recibo: String(nextNum).padStart(6, '0'),
+                    fecha: finalData.fecha_orden,
+                    tipo_ingreso: 'venta',
+                    tercero_id: finalData.cliente_id || '',
+                    tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || ''),
+                    concepto: `Venta ${finalData.prefijo_documento}-${finalData.numero_documento}`,
+                    valor: finalData.monto_efectivo,
+                    medio_pago: finalData.medio_pago || 'efectivo',
+                    cuenta_destino_id: finalData.cuenta_destino_id || '',
+                    cuenta_destino_nombre: finalData.cuenta_destino_nombre || 'Caja Principal',
+                    venta_id: orderId,
+                    generado_automaticamente: true,
+                    observaciones: 'Generado automáticamente por venta de contado'
+                });
+
+                // Actualizar saldo de caja o cuenta bancaria
+                if (finalData.medio_pago === 'efectivo' && finalData.cuenta_destino_id) {
+                    const { Caja } = await import('@/entities/all');
+                    const caja = await Caja.get(finalData.cuenta_destino_id);
+                    if (caja) {
+                        await Caja.update(caja.id, {
+                            saldo_actual: (caja.saldo_actual || 0) + finalData.monto_efectivo
+                        });
+                    }
+                } else if (finalData.medio_pago !== 'efectivo' && finalData.cuenta_destino_id) {
+                    const { CuentaBancaria } = await import('@/entities/all');
+                    const cuenta = await CuentaBancaria.get(finalData.cuenta_destino_id);
+                    if (cuenta) {
+                        await CuentaBancaria.update(cuenta.id, {
+                            saldo_actual: (cuenta.saldo_actual || 0) + finalData.monto_efectivo
+                        });
+                    }
+                }
+
+                console.log('✅ Recibo de Caja generado automáticamente');
+            } else {
+                // Generar Comprobante de Egreso automáticamente
+                const { ComprobanteEgreso } = await import('@/entities/all');
+                const lastComprobantes = await ComprobanteEgreso.list('-created_date', 1);
+                const nextNum = lastComprobantes.length > 0 ? parseInt(lastComprobantes[0].numero_comprobante || '0') + 1 : 1;
+
+                await ComprobanteEgreso.create({
+                    numero_comprobante: String(nextNum).padStart(6, '0'),
+                    fecha: finalData.fecha_orden,
+                    tipo_egreso: 'compra',
+                    tercero_id: finalData.proveedor_id || '',
+                    tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
+                    concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
+                    valor: finalData.monto_efectivo,
+                    medio_pago: finalData.medio_pago || 'efectivo',
+                    cuenta_origen_id: finalData.cuenta_destino_id || '',
+                    cuenta_origen_nombre: finalData.cuenta_destino_nombre || 'Caja Principal',
+                    compra_id: orderId,
+                    generado_automaticamente: true,
+                    observaciones: 'Generado automáticamente por compra de contado'
+                });
+
+                // Actualizar saldo de caja o cuenta bancaria (restar)
+                if (finalData.medio_pago === 'efectivo' && finalData.cuenta_destino_id) {
+                    const { Caja } = await import('@/entities/all');
+                    const caja = await Caja.get(finalData.cuenta_destino_id);
+                    if (caja) {
+                        await Caja.update(caja.id, {
+                            saldo_actual: (caja.saldo_actual || 0) - finalData.monto_efectivo
+                        });
+                    }
+                } else if (finalData.medio_pago !== 'efectivo' && finalData.cuenta_destino_id) {
+                    const { CuentaBancaria } = await import('@/entities/all');
+                    const cuenta = await CuentaBancaria.get(finalData.cuenta_destino_id);
+                    if (cuenta) {
+                        await CuentaBancaria.update(cuenta.id, {
+                            saldo_actual: (cuenta.saldo_actual || 0) - finalData.monto_efectivo
+                        });
+                    }
+                }
+
+                console.log('✅ Comprobante de Egreso generado automáticamente');
+            }
+        } catch (e) {
+            console.error('Error generando documento automático:', e);
         }
-    } catch (e) { console.error("Error libro diario", e); }
+    }
+
+    // Generar Asiento Contable Automático
+    try {
+        const { AsientoContable } = await import('@/entities/all');
+        const lastAsientos = await AsientoContable.list('-created_date', 1);
+        const nextNum = lastAsientos.length > 0 ? parseInt(lastAsientos[0].numero_asiento || '0') + 1 : 1;
+
+        const detalle = [];
+        
+        if (tipoDocumento === 'venta') {
+            // Débito: Caja o Cuentas por Cobrar
+            detalle.push({
+                cuenta_codigo: finalData.forma_pago === 'contado' ? '1105' : '1305',
+                cuenta_nombre: finalData.forma_pago === 'contado' ? 'Caja' : 'Cuentas por Cobrar',
+                debe: finalData.total,
+                haber: 0,
+                tercero_id: finalData.cliente_id || '',
+                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '')
+            });
+            // Crédito: Ingresos por Ventas
+            detalle.push({
+                cuenta_codigo: '4135',
+                cuenta_nombre: 'Ingresos por Ventas',
+                debe: 0,
+                haber: finalData.total,
+                tercero_id: finalData.cliente_id || '',
+                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '')
+            });
+        } else {
+            // Débito: Inventario o Gastos
+            detalle.push({
+                cuenta_codigo: finalData.afecta_inventario ? '1435' : '5135',
+                cuenta_nombre: finalData.afecta_inventario ? 'Inventarios' : 'Gastos',
+                debe: finalData.total,
+                haber: 0,
+                tercero_id: finalData.proveedor_id || '',
+                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || '')
+            });
+            // Crédito: Caja o Cuentas por Pagar
+            detalle.push({
+                cuenta_codigo: finalData.forma_pago === 'contado' ? '1105' : '2205',
+                cuenta_nombre: finalData.forma_pago === 'contado' ? 'Caja' : 'Cuentas por Pagar',
+                debe: 0,
+                haber: finalData.total,
+                tercero_id: finalData.proveedor_id || '',
+                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || '')
+            });
+        }
+
+        await AsientoContable.create({
+            numero_asiento: String(nextNum).padStart(6, '0'),
+            fecha: finalData.fecha_orden,
+            tipo_asiento: 'movimiento',
+            descripcion: `${tipoDocumento === 'venta' ? 'Venta' : 'Compra'} ${finalData.prefijo_documento}-${finalData.numero_documento}`,
+            origen_modulo: tipoDocumento === 'venta' ? 'ventas' : 'compras',
+            referencia_origen_id: orderId,
+            detalle,
+            total_debe: finalData.total,
+            total_haber: finalData.total,
+            estado: 'contabilizado',
+            observaciones: 'Generado automáticamente'
+        });
+
+        console.log('✅ Asiento contable generado automáticamente');
+    } catch (e) {
+        console.error('Error generando asiento contable:', e);
+    }
 
     // Lógica de actualización de Inventario para VENTAS (Salidas)
     if (tipoDocumento === 'venta') {
