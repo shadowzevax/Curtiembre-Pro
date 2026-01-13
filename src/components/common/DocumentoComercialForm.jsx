@@ -24,9 +24,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   const [newProductCode, setNewProductCode] = useState("");
   const [newProductDesc, setNewProductDesc] = useState("");
   const [pendingItemIndex, setPendingItemIndex] = useState(null);
+  const [cajas, setCajas] = useState([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
 
   useEffect(() => {
       loadCatalogo();
+      loadCuentas();
   }, []);
 
   const loadCatalogo = async () => {
@@ -35,6 +38,19 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           setProductosCatalogo(prods);
       } catch (error) {
           console.error("Error loading catalog:", error);
+      }
+  };
+
+  const loadCuentas = async () => {
+      try {
+          const [cajasData, bancosData] = await Promise.all([
+              Caja.list(),
+              CuentaBancaria.list()
+          ]);
+          setCajas(cajasData);
+          setCuentasBancarias(bancosData);
+      } catch (error) {
+          console.error("Error loading accounts:", error);
       }
   };
 
@@ -65,6 +81,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         fecha_orden: new Date().toISOString().split('T')[0],
         fecha_vencimiento: new Date().toISOString().split('T')[0],
         forma_pago: 'contado',
+        medio_pago: 'efectivo',
+        cuenta_destino_id: '',
+        cuenta_destino_nombre: '',
         observaciones: "",
         soportes: [],
         items: [],
@@ -234,24 +253,33 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     return { totalBruto, subtotalConIva, ivaTotal, retefuenteTotal, totalNeto };
   }, [formData]);
 
-  // Recalcular créditos y saldos cuando cambie el total neto o el monto efectivo
+  // Recalcular créditos y saldos cuando cambie forma de pago o el total
   useEffect(() => {
     if (formData) {
         const { totalNeto } = calculateTotals();
-        const efectivo = parseFloat(formData.monto_efectivo) || 0;
-        const credito = totalNeto - efectivo;
-        const saldo = credito; // "Saldo por Cobrar/Pagar que me traiga el valor que quede en el campo Crédito"
         
-        // Solo actualizar si los valores son diferentes para evitar loops
-        if (formData.monto_credito !== credito || formData.saldo_pendiente !== saldo) {
-             setFormData(prev => ({
-                 ...prev,
-                 monto_credito: credito > 0 ? credito : 0,
-                 saldo_pendiente: saldo > 0 ? saldo : 0
-             }));
+        if (formData.forma_pago === 'contado') {
+            // Contado: todo se paga
+            setFormData(prev => ({
+                ...prev,
+                monto_efectivo: totalNeto,
+                monto_credito: 0,
+                saldo_pendiente: 0
+            }));
+        } else if (formData.forma_pago === 'credito') {
+            // Crédito: queda saldo pendiente
+            const efectivo = parseFloat(formData.monto_efectivo) || 0;
+            const credito = totalNeto - efectivo;
+            if (formData.monto_credito !== credito || formData.saldo_pendiente !== credito) {
+                setFormData(prev => ({
+                    ...prev,
+                    monto_credito: credito > 0 ? credito : 0,
+                    saldo_pendiente: credito > 0 ? credito : 0
+                }));
+            }
         }
     }
-  }, [formData?.monto_efectivo, formData?.items]);
+  }, [formData?.forma_pago, formData?.items]);
 
   const setVencimiento = (dias) => {
     if (!formData.fecha_orden) return;
@@ -689,37 +717,108 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                 </div>
             )}
 
-            {/* Totales y Observaciones */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+            {/* Información de Pago */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t">
                 <div className="md:col-span-2 space-y-4">
-                     {/* Moved Payment Info Here */}
-                     <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
-                         <div>
-                            <Label className="font-bold text-emerald-700">Efectivo</Label>
-                            <Input 
-                                type="number" 
-                                value={formData.monto_efectivo} 
-                                onChange={e => handleInputChange('monto_efectivo', parseFloat(e.target.value) || 0)}
-                                className="font-bold"
-                            />
+                     <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                         <h3 className="font-semibold text-lg">Información de Pago</h3>
+                         
+                         <div className="grid grid-cols-2 gap-4">
+                             <div>
+                                <Label className="font-bold">Tipo de {tipoDocumento === 'venta' ? 'Venta' : 'Compra'} *</Label>
+                                <Select value={formData.forma_pago} onValueChange={v => handleInputChange('forma_pago', v)}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="contado">Contado (se paga ahora)</SelectItem>
+                                        <SelectItem value="credito">Crédito (saldo pendiente)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                             </div>
+                             
+                             {formData.forma_pago === 'contado' && (
+                                 <div>
+                                    <Label className="font-bold">Medio de Pago *</Label>
+                                    <Select value={formData.medio_pago} onValueChange={v => handleInputChange('medio_pago', v)}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="efectivo">Efectivo</SelectItem>
+                                            <SelectItem value="nequi">Nequi</SelectItem>
+                                            <SelectItem value="transferencia">Transferencia Bancaria</SelectItem>
+                                            <SelectItem value="tarjeta">Tarjeta/PSE</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                 </div>
+                             )}
                          </div>
-                         <div>
-                            <Label className="font-bold text-blue-700">Crédito</Label>
-                            <Input 
-                                type="number" 
-                                value={formData.monto_credito} 
-                                readOnly 
-                                className="bg-blue-50 font-bold"
-                            />
-                         </div>
-                         <div>
-                            <Label className="font-bold text-red-700">{tipoDocumento === 'venta' ? 'Saldo por Cobrar' : 'Saldo por Pagar'}</Label>
-                            <Input 
-                                type="number" 
-                                value={formData.saldo_pendiente} 
-                                readOnly 
-                                className="bg-red-50 font-bold"
-                            />
+
+                         {/* Campos condicionales según medio de pago */}
+                         {formData.forma_pago === 'contado' && (
+                             <div>
+                                 {formData.medio_pago === 'efectivo' ? (
+                                     <div>
+                                         <Label className="font-bold">Caja *</Label>
+                                         <Select value={formData.cuenta_destino_id} onValueChange={v => {
+                                             const caja = cajas.find(c => c.id === v);
+                                             handleInputChange('cuenta_destino_id', v);
+                                             handleInputChange('cuenta_destino_nombre', caja?.nombre || '');
+                                         }}>
+                                             <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
+                                             <SelectContent>
+                                                 {cajas.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                                             </SelectContent>
+                                         </Select>
+                                     </div>
+                                 ) : (
+                                     <div>
+                                         <Label className="font-bold">Cuenta Destino *</Label>
+                                         <Select value={formData.cuenta_destino_id} onValueChange={v => {
+                                             const cuenta = cuentasBancarias.find(c => c.id === v);
+                                             handleInputChange('cuenta_destino_id', v);
+                                             handleInputChange('cuenta_destino_nombre', cuenta ? `${cuenta.banco} - ${cuenta.numero_cuenta}` : '');
+                                         }}>
+                                             <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                                             <SelectContent>
+                                                 {cuentasBancarias.map(c => (
+                                                     <SelectItem key={c.id} value={c.id}>
+                                                         {c.banco} - {c.numero_cuenta}
+                                                     </SelectItem>
+                                                 ))}
+                                             </SelectContent>
+                                         </Select>
+                                     </div>
+                                 )}
+                             </div>
+                         )}
+
+                         <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                             <div>
+                                <Label className="font-bold text-emerald-700">Valor {formData.forma_pago === 'contado' ? 'a Pagar' : 'Efectivo'}</Label>
+                                <Input 
+                                    type="number" 
+                                    value={formData.monto_efectivo} 
+                                    onChange={e => handleInputChange('monto_efectivo', parseFloat(e.target.value) || 0)}
+                                    className="font-bold"
+                                    readOnly={formData.forma_pago === 'contado'}
+                                />
+                             </div>
+                             <div>
+                                <Label className="font-bold text-blue-700">Crédito</Label>
+                                <Input 
+                                    type="number" 
+                                    value={formData.monto_credito} 
+                                    readOnly 
+                                    className="bg-blue-50 font-bold"
+                                />
+                             </div>
+                             <div>
+                                <Label className="font-bold text-red-700">Saldo Pendiente</Label>
+                                <Input 
+                                    type="number" 
+                                    value={formData.saldo_pendiente} 
+                                    readOnly 
+                                    className="bg-red-50 font-bold"
+                                />
+                             </div>
                          </div>
                      </div>
 
