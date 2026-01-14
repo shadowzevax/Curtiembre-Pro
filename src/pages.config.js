@@ -58,10 +58,11 @@ import ReportesProduccion from './pages/ReportesProduccion';
 import ReportesVentas from './pages/ReportesVentas';
 import RolesPermisos from './pages/RolesPermisos';
 import ServiciosProduccion from './pages/ServiciosProduccion';
+import TrasladoInventario from './pages/TrasladoInventario';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
-import TrasladoInventario from './pages/TrasladoInventario';
+import GestionPedidos from './pages/GestionPedidos';
 import __Layout from './Layout.jsx';
 
 
@@ -126,10 +127,11 @@ export const PAGES = {
     "ReportesVentas": ReportesVentas,
     "RolesPermisos": RolesPermisos,
     "ServiciosProduccion": ServiciosProduccion,
+    "TrasladoInventario": TrasladoInventario,
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
-    "TrasladoInventario": TrasladoInventario,
+    "GestionPedidos": GestionPedidos,
 }
 
 export const pagesConfig = {

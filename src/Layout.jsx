@@ -66,7 +66,8 @@ const menuItems = [
     roles: ["admin", "contador"],
     subItems: [
       { title: "Venta de Productos", url: createPageUrl("VentaProductos"), icon: TrendingUp },
-      { title: "Venta de Servicios", url: createPageUrl("VentaServicios"), icon: TrendingUp }
+      { title: "Venta de Servicios", url: createPageUrl("VentaServicios"), icon: TrendingUp },
+      { title: "Gestión de Pedidos", url: createPageUrl("GestionPedidos"), icon: TrendingUp }
     ]
   },
   {
@@ -341,6 +342,7 @@ export default function Layout({ children, currentPageName }) {
             'ProduccionReporteEtapas': 'Reporte de Etapas',
             'VentaProductos': 'Venta de Productos',
             'VentaServicios': 'Venta de Servicios',
+            'GestionPedidos': 'Gestión de Pedidos',
             'ReciboCaja': 'Recibo de Caja',
             'ComprobanteEgreso': 'Comprobante de Egreso',
             'InventarioProduccion': 'Inventario de Materias Primas',
