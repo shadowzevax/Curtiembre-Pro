@@ -1,353 +1,366 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ProcesoProduccion, CostoIndirecto, Proveedor, RecetaPintura, ServicioProduccion } from '@/entities/all';
-import { Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ProcesoProduccion } from '@/entities/all';
+import { Loader2, Save, Plus, Trash2 } from 'lucide-react';
+import { SeccionProductosQuimicos, SeccionRecurtidoPorColor } from './TablaCostosSecciones';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
+const formatNumber = (num) => parseFloat(num || 0).toFixed(2);
 
 export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote }) {
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [loteData, setLoteData] = useState(null);
+  const [procesos, setProcesos] = useState({
+    recepcion: null,
+    remojo: [],
+    pelambre: [],
+    curtido: [],
+    recurtido: []
+  });
+  
+  // Costos manuales
+  const [serviciosMaquinaria, setServiciosMaquinaria] = useState([]);
+  const [serviciosManoObra, setServiciosManoObra] = useState([]);
+  const [otrosCostos, setOtrosCostos] = useState([]);
 
-    useEffect(() => {
-        if (open && codigoLote) {
-            loadDetalleConsolidado();
-        }
-    }, [open, codigoLote]);
-
-    const loadDetalleConsolidado = async () => {
-        setLoading(true);
-        try {
-            const [procesos, costosIndirectos, proveedores, recetas] = await Promise.all([
-                ProcesoProduccion.filter({ codigo_lote: codigoLote }),
-                CostoIndirecto.filter({ codigo_lote: codigoLote }),
-                Proveedor.list(),
-                RecetaPintura.list()
-            ]);
-
-            // Agrupar por etapa
-            const recepcion = procesos.find(p => p.tipo_proceso === 'recepcion');
-            const limpieza = procesos.filter(p => p.tipo_proceso === 'limpieza');
-            const curtido = procesos.filter(p => p.tipo_proceso === 'curtido');
-            const recurtido = procesos.filter(p => p.tipo_proceso === 'recurtido');
-            const acabado = procesos.filter(p => p.tipo_proceso === 'acabado');
-
-            // Costos indirectos
-            const serviciosMaquinaria = costosIndirectos.filter(c => c.tipo_costo === 'servicio_maquinaria');
-            const manoObra = costosIndirectos.filter(c => c.tipo_costo === 'mano_obra');
-            const otrosCostos = costosIndirectos.filter(c => c.tipo_costo === 'otros_costos');
-            
-            // Servicios de Producción
-            const serviciosProduccion = await ServicioProduccion.filter({ codigo_lote: codigoLote });
-
-            const proveedor = recepcion ? proveedores.find(p => p.id === recepcion.proveedor_id) : null;
-
-            setData({
-                recepcion,
-                limpieza,
-                curtido,
-                recurtido,
-                acabado,
-                serviciosMaquinaria,
-                manoObra,
-                otrosCostos,
-                serviciosProduccion,
-                recetas,
-                proveedor
-            });
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (!data || loading) {
-        return (
-            <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-7xl">
-                    <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-                        <span className="ml-3">Cargando información del lote...</span>
-                    </div>
-                </DialogContent>
-            </Dialog>
-        );
+  useEffect(() => {
+    if (open && codigoLote) {
+      loadLoteDetails();
     }
+  }, [open, codigoLote]);
 
-    const calcularSubtotalEtapa = (procesos) => {
-        let total = 0;
-        procesos.forEach(p => {
-            (p.insumos_utilizados || []).forEach(ins => {
-                const costoConIva = (ins.precio_unitario || 0) * (1 + (ins.iva || 0));
-                total += (ins.cantidad || 0) * costoConIva;
-            });
+  const loadLoteDetails = async () => {
+    setLoading(true);
+    try {
+      const [recepcion, limpieza, curtido, recurtido] = await Promise.all([
+        ProcesoProduccion.filter({ codigo_lote: codigoLote, tipo_proceso: 'recepcion' }),
+        ProcesoProduccion.filter({ codigo_lote: codigoLote, tipo_proceso: 'limpieza' }),
+        ProcesoProduccion.filter({ codigo_lote: codigoLote, tipo_proceso: 'curtido' }),
+        ProcesoProduccion.filter({ codigo_lote: codigoLote, tipo_proceso: 'recurtido' })
+      ]);
+      
+      const remojo = limpieza.filter(p => p.seccion === 'remojo');
+      const pelambre = limpieza.filter(p => p.seccion === 'pelambre');
+      
+      setProcesos({
+        recepcion: recepcion[0] || null,
+        remojo,
+        pelambre,
+        curtido,
+        recurtido
+      });
+      
+      setLoteData(recepcion[0]);
+      
+      // Cargar costos manuales si existen
+      if (recepcion[0]) {
+        setServiciosMaquinaria(recepcion[0].servicios_maquinaria || []);
+        setServiciosManoObra(recepcion[0].servicios_mano_obra || []);
+        setOtrosCostos(recepcion[0].otros_costos || []);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calcular subtotales
+  const calcularSubtotalInsumos = (items) => {
+    return items.reduce((sum, item) => {
+      if (item.insumos_utilizados && Array.isArray(item.insumos_utilizados)) {
+        return sum + item.insumos_utilizados.reduce((s, ins) => s + (ins.valor_total || 0), 0);
+      }
+      return sum;
+    }, 0);
+  };
+
+  const subtotalRemojo = calcularSubtotalInsumos(procesos.remojo);
+  const subtotalPelambre = calcularSubtotalInsumos(procesos.pelambre);
+  const subtotalCurtido = calcularSubtotalInsumos(procesos.curtido);
+  
+  // Recurtido por color
+  const recurtidoPorColor = procesos.recurtido.reduce((acc, proc) => {
+    const color = proc.nombre_color || proc.codigo_color || 'SIN_COLOR';
+    if (!acc[color]) acc[color] = [];
+    acc[color].push(proc);
+    return acc;
+  }, {});
+  
+  const subtotalesRecurtido = Object.keys(recurtidoPorColor).map(color => ({
+    color,
+    items: recurtidoPorColor[color],
+    subtotal: calcularSubtotalInsumos(recurtidoPorColor[color])
+  }));
+  
+  const subtotalRecurtidoTotal = subtotalesRecurtido.reduce((sum, r) => sum + r.subtotal, 0);
+
+  // Calcular costos manuales
+  const subtotalMaquinaria = serviciosMaquinaria.reduce((sum, s) => sum + ((s.cantidad_pieles || 0) * (s.valor_unitario || 0)), 0);
+  const subtotalManoObra = serviciosManoObra.reduce((sum, s) => sum + ((s.cantidad || 0) * (s.valor || 0)), 0);
+  const subtotalOtros = otrosCostos.reduce((sum, c) => sum + ((c.cantidad || 0) * (c.valor || 0)), 0);
+
+  const totalCostoProceso = subtotalRemojo + subtotalPelambre + subtotalCurtido + subtotalRecurtidoTotal;
+  const totalGeneral = totalCostoProceso + subtotalMaquinaria + subtotalManoObra + subtotalOtros;
+
+  // Funciones para manejar costos manuales
+  const agregarServicioMaquinaria = () => {
+    setServiciosMaquinaria([...serviciosMaquinaria, { nombre_servicio: '', cantidad_pieles: 0, valor_unitario: 0 }]);
+  };
+  
+  const agregarServicioManoObra = () => {
+    setServiciosManoObra([...serviciosManoObra, { nombre_servicio: '', cantidad: 0, valor: 0 }]);
+  };
+  
+  const agregarOtroCosto = () => {
+    setOtrosCostos([...otrosCostos, { descripcion: '', cantidad: 0, valor: 0 }]);
+  };
+
+  const guardarCostosManuales = async () => {
+    setSaving(true);
+    try {
+      if (procesos.recepcion?.id) {
+        await ProcesoProduccion.update(procesos.recepcion.id, {
+          servicios_maquinaria: serviciosMaquinaria,
+          servicios_mano_obra: serviciosManoObra,
+          otros_costos: otrosCostos
         });
-        return total;
-    };
+        alert('Costos guardados exitosamente');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    const calcularSubtotalCostosIndirectos = (costos) => {
-        return costos.reduce((sum, c) => sum + (c.valor_total || c.subtotal || 0), 0);
-    };
+  if (!loteData) return null;
 
-    const subtotalRecepcion = calcularSubtotalEtapa(data.recepcion ? [data.recepcion] : []);
-    const subtotalLimpieza = calcularSubtotalEtapa(data.limpieza);
-    const subtotalCurtido = calcularSubtotalEtapa(data.curtido);
-    const subtotalRecurtido = calcularSubtotalEtapa(data.recurtido);
-    const subtotalAcabado = calcularSubtotalEtapa(data.acabado);
-    const subtotalMaquinaria = calcularSubtotalCostosIndirectos(data.serviciosMaquinaria);
-    const subtotalManoObra = calcularSubtotalCostosIndirectos(data.manoObra);
-    const subtotalOtrosCostos = calcularSubtotalCostosIndirectos(data.otrosCostos);
-    const subtotalServiciosProduccion = data.serviciosProduccion.reduce((sum, s) => sum + (s.costo_servicio || 0), 0);
-    const subtotalRecetas = data.recetas.reduce((sum, r) => sum + (r.costo_total_productos || 0), 0);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[98vw] max-h-[98vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold text-center">TABLA DE COSTOS POR LOTE - {codigoLote}</DialogTitle>
+        </DialogHeader>
 
-    const totalGeneral = subtotalRecepcion + subtotalLimpieza + subtotalCurtido + subtotalRecurtido + subtotalAcabado + subtotalMaquinaria + subtotalManoObra + subtotalOtrosCostos + subtotalServiciosProduccion + subtotalRecetas;
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-3 text-xs">
+            {/* ENCABEZADO */}
+            <div className="bg-blue-50 border-2 border-blue-300 rounded p-3">
+              <div className="grid grid-cols-4 gap-2">
+                <div><strong>CODIGO LOTE:</strong> {codigoLote}</div>
+                <div><strong>PROVEEDOR:</strong> {loteData.proveedor_id || 'N/A'}</div>
+                <div><strong>NO. DOCUMENTO:</strong> {loteData.no_documento || 'N/A'}</div>
+                <div><strong>FECHA RECEPCIÓN:</strong> {loteData.fecha_inicio ? new Date(loteData.fecha_inicio).toLocaleDateString('es-CO') : 'N/A'}</div>
+                <div><strong>CANT. TOTAL PIELES:</strong> {loteData.cantidad_pieles || 0}</div>
+                <div><strong>CANT. TOTAL HOJAS:</strong> {loteData.cantidad_total_lote_hojas || 0}</div>
+                <div><strong>PESO TOTAL (KG):</strong> {formatNumber(loteData.peso_total || 0)}</div>
+                <div><strong>PESO PROMEDIO PIEL:</strong> {formatNumber((loteData.peso_total || 0) / (loteData.cantidad_pieles || 1))}</div>
+              </div>
+            </div>
 
-    const renderInsumos = (insumos) => {
-        if (!insumos || insumos.length === 0) return <tr><td colSpan="7" className="text-center text-gray-400 py-2">Sin insumos</td></tr>;
-        return insumos.map((ins, idx) => {
-            const costoConIva = (ins.precio_unitario || 0) * (1 + (ins.iva || 0));
-            const valorTotal = (ins.cantidad || 0) * costoConIva;
-            return (
-                <tr key={idx} className="border-t">
-                    <td className="p-2">{ins.codigo}</td>
-                    <td className="p-2">{ins.producto}</td>
-                    <td className="p-2 text-right">{ins.cantidad}</td>
-                    <td className="p-2 text-right">{formatCurrency(ins.precio_unitario)}</td>
-                    <td className="p-2 text-right">{formatCurrency(ins.precio_unitario * (ins.iva || 0))}</td>
-                    <td className="p-2 text-right">{formatCurrency(costoConIva)}</td>
-                    <td className="p-2 text-right font-bold">{formatCurrency(valorTotal)}</td>
-                </tr>
-            );
-        });
-    };
+            {/* SECCIONES AUTOMÁTICAS */}
+            <SeccionProductosQuimicos titulo="REMOJO" items={procesos.remojo} peso={loteData.peso_total || 0} />
+            <SeccionProductosQuimicos titulo="PELAMBRE" items={procesos.pelambre} peso={loteData.peso_total || 0} />
+            <SeccionProductosQuimicos titulo="CURTIDO" items={procesos.curtido} peso={loteData.peso_total || 0} />
+            
+            {/* RECURTIDO POR COLOR */}
+            {subtotalesRecurtido.length > 0 && (
+              <div className="space-y-2">
+                <div className="bg-purple-700 text-white px-3 py-2 font-bold text-center">RECURTIDO</div>
+                {subtotalesRecurtido.map(({ color, items }) => (
+                  <SeccionRecurtidoPorColor key={color} color={color} items={items} peso={loteData.peso_total || 0} />
+                ))}
+              </div>
+            )}
 
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
-                <DialogHeader><DialogTitle>Detalle Consolidado del Lote: {codigoLote}</DialogTitle></DialogHeader>
-                
-                {/* Encabezado */}
-                <div className="bg-slate-100 p-4 rounded-lg grid grid-cols-6 gap-4 text-sm">
-                    <div><span className="font-semibold">Código Lote:</span> {codigoLote}</div>
-                    <div><span className="font-semibold">Proveedor:</span> {data.proveedor?.nombre || 'N/A'}</div>
-                    <div><span className="font-semibold">Doc. Compra:</span> {data.recepcion?.no_documento || 'N/A'}</div>
-                    <div><span className="font-semibold">Cant. Pieles:</span> {data.recepcion?.cantidad_total_lote_pieles || 0}</div>
-                    <div><span className="font-semibold">Cant. Hojas:</span> {data.recepcion?.cantidad_total_lote_hojas || 0}</div>
-                    <div><span className="font-semibold">Fecha:</span> {data.recepcion ? new Date(data.recepcion.fecha_inicio).toLocaleDateString() : 'N/A'}</div>
-                    <div className="col-span-6"><span className="font-semibold">Curtidor:</span> {data.recepcion?.nombre_curtidor || 'N/A'}</div>
-                </div>
+            {/* TOTAL COSTO PROCESO */}
+            <div className="bg-yellow-300 border-2 border-yellow-500 p-2 font-bold text-right text-base">
+              TOTAL COSTO PROCESO CUERO: {formatCurrency(totalCostoProceso)}
+            </div>
 
-                {/* Tabla Consolidada */}
-                <div className="border rounded-lg overflow-x-auto mt-4">
-                    <table className="w-full text-xs">
-                        <thead className="bg-slate-200">
-                            <tr>
-                                <th className="p-2 text-left">Etapa</th>
-                                <th className="p-2">Código</th>
-                                <th className="p-2">Producto</th>
-                                <th className="p-2 text-right">Cantidad</th>
-                                <th className="p-2 text-right">Costo Unit.</th>
-                                <th className="p-2 text-right">Valor IVA</th>
-                                <th className="p-2 text-right">Costo + IVA</th>
-                                <th className="p-2 text-right">Valor Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {/* RECEPCIÓN */}
-                            {data.recepcion && (
-                                <>
-                                    <tr className="bg-gray-100 font-bold">
-                                        <td className="p-2" colSpan="8">RECEPCIÓN - Pieles: {data.recepcion.cantidad_total_lote_pieles || 0}, Peso: {data.recepcion.peso_total || 0} kg</td>
-                                    </tr>
-                                    {renderInsumos(data.recepcion.insumos_utilizados || [])}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Recepción:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalRecepcion)}</td>
-                                    </tr>
-                                </>
-                            )}
+            {/* SERVICIO DE MAQUINARIA */}
+            <div className="border rounded">
+              <div className="bg-orange-600 text-white px-3 py-2 font-bold flex justify-between items-center">
+                <span>SERVICIO DE MAQUINARIA</span>
+                <Button size="sm" variant="secondary" onClick={agregarServicioMaquinaria}>
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th className="border p-1">NOMBRE DEL SERVICIO</th>
+                    <th className="border p-1">CANTIDAD EN PIELES</th>
+                    <th className="border p-1">VALOR UNITARIO</th>
+                    <th className="border p-1">VALOR TOTAL</th>
+                    <th className="border p-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serviciosMaquinaria.map((s, idx) => (
+                    <tr key={idx}>
+                      <td className="border p-1"><Input className="h-7 text-xs" value={s.nombre_servicio} onChange={e => {
+                        const u = [...serviciosMaquinaria];
+                        u[idx].nombre_servicio = e.target.value;
+                        setServiciosMaquinaria(u);
+                      }} /></td>
+                      <td className="border p-1"><Input type="number" className="h-7 text-xs" value={s.cantidad_pieles} onChange={e => {
+                        const u = [...serviciosMaquinaria];
+                        u[idx].cantidad_pieles = parseFloat(e.target.value) || 0;
+                        setServiciosMaquinaria(u);
+                      }} /></td>
+                      <td className="border p-1"><Input type="number" className="h-7 text-xs" value={s.valor_unitario} onChange={e => {
+                        const u = [...serviciosMaquinaria];
+                        u[idx].valor_unitario = parseFloat(e.target.value) || 0;
+                        setServiciosMaquinaria(u);
+                      }} /></td>
+                      <td className="border p-1 text-right font-semibold">{formatCurrency(s.cantidad_pieles * s.valor_unitario)}</td>
+                      <td className="border p-1 text-center">
+                        <Button size="sm" variant="destructive" onClick={() => setServiciosMaquinaria(serviciosMaquinaria.filter((_, i) => i !== idx))}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-yellow-200 font-bold">
+                    <td colSpan="3" className="border p-2 text-right">SUBTOTAL SERVICIO DE MAQUINARIA</td>
+                    <td className="border p-2 text-right">{formatCurrency(subtotalMaquinaria)}</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-                            {/* LIMPIEZA */}
-                            {data.limpieza.length > 0 && (
-                                <>
-                                    <tr className="bg-blue-100 font-bold">
-                                        <td className="p-2" colSpan="8">LIMPIEZA</td>
-                                    </tr>
-                                    {data.limpieza.map(p => renderInsumos(p.insumos_utilizados || []))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Limpieza:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalLimpieza)}</td>
-                                    </tr>
-                                </>
-                            )}
+            {/* SERVICIO DE MANO DE OBRA */}
+            <div className="border rounded">
+              <div className="bg-teal-600 text-white px-3 py-2 font-bold flex justify-between items-center">
+                <span>SERVICIO DE MANO DE OBRA</span>
+                <Button size="sm" variant="secondary" onClick={agregarServicioManoObra}>
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th className="border p-1">NOMBRE DEL SERVICIO</th>
+                    <th className="border p-1">CANTIDAD</th>
+                    <th className="border p-1">VALOR</th>
+                    <th className="border p-1">VALOR TOTAL</th>
+                    <th className="border p-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {serviciosManoObra.map((s, idx) => (
+                    <tr key={idx}>
+                      <td className="border p-1"><Input className="h-7 text-xs" value={s.nombre_servicio} onChange={e => {
+                        const u = [...serviciosManoObra];
+                        u[idx].nombre_servicio = e.target.value;
+                        setServiciosManoObra(u);
+                      }} /></td>
+                      <td className="border p-1"><Input type="number" className="h-7 text-xs" value={s.cantidad} onChange={e => {
+                        const u = [...serviciosManoObra];
+                        u[idx].cantidad = parseFloat(e.target.value) || 0;
+                        setServiciosManoObra(u);
+                      }} /></td>
+                      <td className="border p-1"><Input type="number" className="h-7 text-xs" value={s.valor} onChange={e => {
+                        const u = [...serviciosManoObra];
+                        u[idx].valor = parseFloat(e.target.value) || 0;
+                        setServiciosManoObra(u);
+                      }} /></td>
+                      <td className="border p-1 text-right font-semibold">{formatCurrency(s.cantidad * s.valor)}</td>
+                      <td className="border p-1 text-center">
+                        <Button size="sm" variant="destructive" onClick={() => setServiciosManoObra(serviciosManoObra.filter((_, i) => i !== idx))}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-yellow-200 font-bold">
+                    <td colSpan="3" className="border p-2 text-right">SUBTOTAL SERVICIO DE MANO DE OBRA</td>
+                    <td className="border p-2 text-right">{formatCurrency(subtotalManoObra)}</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-                            {/* CURTIDO */}
-                            {data.curtido.length > 0 && (
-                                <>
-                                    <tr className="bg-yellow-100 font-bold">
-                                        <td className="p-2" colSpan="8">CURTIDO</td>
-                                    </tr>
-                                    {data.curtido.map(p => renderInsumos(p.insumos_utilizados || []))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Curtido:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalCurtido)}</td>
-                                    </tr>
-                                </>
-                            )}
+            {/* OTROS COSTOS */}
+            <div className="border rounded">
+              <div className="bg-red-600 text-white px-3 py-2 font-bold flex justify-between items-center">
+                <span>OTROS COSTOS</span>
+                <Button size="sm" variant="secondary" onClick={agregarOtroCosto}>
+                  <Plus className="w-3 h-3" />
+                </Button>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th className="border p-1">OTROS COSTOS</th>
+                    <th className="border p-1">CANTIDAD</th>
+                    <th className="border p-1">VALOR</th>
+                    <th className="border p-1">VALOR TOTAL</th>
+                    <th className="border p-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otrosCostos.map((c, idx) => (
+                    <tr key={idx}>
+                      <td className="border p-1"><Input className="h-7 text-xs" value={c.descripcion} onChange={e => {
+                        const u = [...otrosCostos];
+                        u[idx].descripcion = e.target.value;
+                        setOtrosCostos(u);
+                      }} /></td>
+                      <td className="border p-1"><Input type="number" className="h-7 text-xs" value={c.cantidad} onChange={e => {
+                        const u = [...otrosCostos];
+                        u[idx].cantidad = parseFloat(e.target.value) || 0;
+                        setOtrosCostos(u);
+                      }} /></td>
+                      <td className="border p-1"><Input type="number" className="h-7 text-xs" value={c.valor} onChange={e => {
+                        const u = [...otrosCostos];
+                        u[idx].valor = parseFloat(e.target.value) || 0;
+                        setOtrosCostos(u);
+                      }} /></td>
+                      <td className="border p-1 text-right font-semibold">{formatCurrency(c.cantidad * c.valor)}</td>
+                      <td className="border p-1 text-center">
+                        <Button size="sm" variant="destructive" onClick={() => setOtrosCostos(otrosCostos.filter((_, i) => i !== idx))}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-yellow-200 font-bold">
+                    <td colSpan="3" className="border p-2 text-right">SUBTOTAL OTROS COSTOS</td>
+                    <td className="border p-2 text-right">{formatCurrency(subtotalOtros)}</td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-                            {/* RECURTIDO */}
-                            {data.recurtido.length > 0 && (
-                                <>
-                                    <tr className="bg-purple-100 font-bold">
-                                        <td className="p-2" colSpan="8">RECURTIDO</td>
-                                    </tr>
-                                    {data.recurtido.map(p => renderInsumos(p.insumos_utilizados || []))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Recurtido:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalRecurtido)}</td>
-                                    </tr>
-                                </>
-                            )}
+            {/* TOTAL GENERAL */}
+            <div className="bg-green-500 text-white border-4 border-green-700 p-4 font-bold text-right text-xl">
+              TOTAL GENERAL DEL LOTE: {formatCurrency(totalGeneral)}
+            </div>
+          </div>
+        )}
 
-                            {/* ACABADO */}
-                            {data.acabado.length > 0 && (
-                                <>
-                                    <tr className="bg-pink-100 font-bold">
-                                        <td className="p-2" colSpan="8">ACABADO</td>
-                                    </tr>
-                                    {data.acabado.map(p => renderInsumos(p.insumos_utilizados || []))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Acabado:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalAcabado)}</td>
-                                    </tr>
-                                </>
-                            )}
-
-                            {/* COSTOS INDIRECTOS - MAQUINARIA */}
-                            {data.serviciosMaquinaria.length > 0 && (
-                                <>
-                                    <tr className="bg-orange-100 font-bold">
-                                        <td className="p-2" colSpan="8">COSTOS INDIRECTOS - Servicios de Maquinaria</td>
-                                    </tr>
-                                    {data.serviciosMaquinaria.map((c, idx) => (
-                                        <tr key={idx} className="border-t">
-                                            <td></td>
-                                            <td className="p-2" colSpan="2">{c.nombre_servicio}</td>
-                                            <td className="p-2 text-right">{c.cantidad_pieles}</td>
-                                            <td className="p-2" colSpan="3"></td>
-                                            <td className="p-2 text-right font-bold">{formatCurrency(c.valor_total || c.subtotal)}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Maquinaria:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalMaquinaria)}</td>
-                                    </tr>
-                                </>
-                            )}
-
-                            {/* COSTOS INDIRECTOS - MANO DE OBRA */}
-                            {data.manoObra.length > 0 && (
-                                <>
-                                    <tr className="bg-orange-100 font-bold">
-                                        <td className="p-2" colSpan="8">COSTOS INDIRECTOS - Mano de Obra</td>
-                                    </tr>
-                                    {data.manoObra.map((c, idx) => (
-                                        <tr key={idx} className="border-t">
-                                            <td></td>
-                                            <td className="p-2" colSpan="2">{c.nombre_servicio}</td>
-                                            <td className="p-2 text-right">{c.cantidad_pieles}</td>
-                                            <td className="p-2" colSpan="3"></td>
-                                            <td className="p-2 text-right font-bold">{formatCurrency(c.valor_total || c.subtotal)}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Mano de Obra:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalManoObra)}</td>
-                                    </tr>
-                                </>
-                            )}
-
-                            {/* COSTOS INDIRECTOS - OTROS */}
-                            {data.otrosCostos.length > 0 && (
-                                <>
-                                    <tr className="bg-orange-100 font-bold">
-                                        <td className="p-2" colSpan="8">COSTOS INDIRECTOS - Otros Costos</td>
-                                    </tr>
-                                    {data.otrosCostos.map((c, idx) => (
-                                        <tr key={idx} className="border-t">
-                                            <td></td>
-                                            <td className="p-2" colSpan="2">{c.nombre_servicio}</td>
-                                            <td className="p-2 text-right">{c.cantidad_pieles}</td>
-                                            <td className="p-2" colSpan="3"></td>
-                                            <td className="p-2 text-right font-bold">{formatCurrency(c.subtotal || c.valor_total)}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Otros Costos:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalOtrosCostos)}</td>
-                                    </tr>
-                                </>
-                            )}
-
-                            {/* SERVICIOS DE PRODUCCIÓN */}
-                            {data.serviciosProduccion.length > 0 && (
-                                <>
-                                    <tr className="bg-indigo-100 font-bold">
-                                        <td className="p-2" colSpan="8">SERVICIOS DE PRODUCCIÓN</td>
-                                    </tr>
-                                    {data.serviciosProduccion.map((s, idx) => (
-                                        <tr key={idx} className="border-t">
-                                            <td></td>
-                                            <td className="p-2" colSpan="2">{s.tipo_servicio?.replace('_', ' ')}</td>
-                                            <td className="p-2 text-right">{s.cantidad_hojas || s.cantidad_pieles}</td>
-                                            <td className="p-2" colSpan="3"></td>
-                                            <td className="p-2 text-right font-bold">{formatCurrency(s.costo_servicio)}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Servicios Producción:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalServiciosProduccion)}</td>
-                                    </tr>
-                                </>
-                            )}
-
-                            {/* RECETAS DE PINTURA */}
-                            {data.recetas.length > 0 && (
-                                <>
-                                    <tr className="bg-purple-100 font-bold">
-                                        <td className="p-2" colSpan="8">RECETAS DE PINTURA</td>
-                                    </tr>
-                                    {data.recetas.map((r, idx) => (
-                                        <tr key={idx} className="border-t">
-                                            <td></td>
-                                            <td className="p-2" colSpan="2">{r.nombre_receta}</td>
-                                            <td className="p-2 text-right">{r.cantidad_base_por_hoja}</td>
-                                            <td className="p-2" colSpan="3"></td>
-                                            <td className="p-2 text-right font-bold">{formatCurrency(r.costo_total_productos)}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-emerald-50 font-bold">
-                                        <td colSpan="7" className="p-2 text-right">Subtotal Recetas Pintura:</td>
-                                        <td className="p-2 text-right text-emerald-700">{formatCurrency(subtotalRecetas)}</td>
-                                    </tr>
-                                </>
-                            )}
-
-                            {/* TOTAL GENERAL */}
-                            <tr className="bg-emerald-600 text-white font-bold text-lg">
-                                <td colSpan="7" className="p-3 text-right">COSTO TOTAL DEL LOTE:</td>
-                                <td className="p-3 text-right">{formatCurrency(totalGeneral)}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div className="flex justify-end pt-4">
-                    <Button onClick={() => onOpenChange(false)}>Cerrar</Button>
-                </div>
-            </DialogContent>
-        </Dialog>
-    );
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
+          <Button onClick={guardarCostosManuales} disabled={saving}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+            Guardar Costos Manuales
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
