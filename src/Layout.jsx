@@ -111,7 +111,8 @@ const menuItems = [
       { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
       { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
       { title: "Inventario de Productos Terminados", url: createPageUrl("InventarioProductos"), icon: Package },
-      { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package }
+      { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package },
+      { title: "Traslado de Inventarios", url: createPageUrl("TrasladoInventario"), icon: Package }
     ]
   },
   {
@@ -369,6 +370,7 @@ export default function Layout({ children, currentPageName }) {
             'AdminServicios': 'Gestión de Servicios',
             'AdminUnidadesMedida': 'Unidades de Medida',
             'AdminTiposGasto': 'Tipos de Gasto',
+            'TrasladoInventario': 'Traslado de Inventarios',
             'ReportesVentas': 'Reportes de Ventas',
             'ReportesCompras': 'Reportes de Compras',
             'ReportesInventario': 'Reportes de Inventario',

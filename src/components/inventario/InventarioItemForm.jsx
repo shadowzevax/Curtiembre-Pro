@@ -220,7 +220,7 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
                               <Label>Código *</Label>
-                              <Select value={formData.codigo} onValueChange={v => handleInputChange('codigo', v)}>
+                              <Select value={formData.codigo} onValueChange={v => handleInputChange('codigo', v)} disabled={isEditing}>
                                   <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
                                   <SelectContent>
                                       {productosCatalogo.map(p => (
@@ -235,7 +235,7 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                                   const prod = productosCatalogo.find(p => p.descripcion === v);
                                   if (prod) handleInputChange('codigo', prod.codigo);
                                   else setFormData(prev => ({...prev, descripcion: v}));
-                              }}>
+                              }} disabled={isEditing}>
                                   <SelectTrigger><SelectValue placeholder="Seleccionar descripción" /></SelectTrigger>
                                   <SelectContent>
                                       {productosCatalogo.map(p => (
@@ -248,7 +248,7 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
                                     <Label>Tipo de Producto</Label>
-                                    <Select value={formData.categoria} onValueChange={v => handleInputChange('categoria', v)}>
+                                    <Select value={formData.categoria} onValueChange={v => handleInputChange('categoria', v)} disabled={isEditing}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="pieles">Pieles</SelectItem>
@@ -262,14 +262,14 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                                 </div>
                                 <div>
                                     <Label>Unidad de Medida</Label>
-                                    <Select value={formData.unidad_medida} onValueChange={v => handleInputChange('unidad_medida', v)}>
+                                    <Select value={formData.unidad_medida} onValueChange={v => handleInputChange('unidad_medida', v)} disabled={isEditing}>
                                         <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                         <SelectContent>{unidadesMedida.map(u => <SelectItem key={u.id} value={u.abreviatura}>{u.nombre} ({u.abreviatura})</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
                                  <div>
                                     <Label>IVA</Label>
-                                    <Select value={formData.iva} onValueChange={v => handleInputChange('iva', v)}>
+                                    <Select value={formData.iva} onValueChange={v => handleInputChange('iva', v)} disabled={isEditing}>
                                         <SelectTrigger><SelectValue/></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="grabado_19">Grabado (19%)</SelectItem>
@@ -282,8 +282,8 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                             </div>
                              <div className="grid grid-cols-4 gap-4">
                                 <div><Label>Stock Actual</Label><Input type="number" value={formData.stock_actual} readOnly className="bg-gray-100 font-medium" title="Calculado desde movimientos" /></div>
-                                <div><Label>Stock Mínimo</Label><Input type="number" value={formData.stock_minimo} onChange={e => handleInputChange('stock_minimo', parseFloat(e.target.value) || 0)}/></div>
-                                <div><Label>Costo Promedio</Label><Input type="number" value={formData.costo_promedio} onChange={e => handleInputChange('costo_promedio', parseFloat(e.target.value) || 0)} /></div>
+                                <div><Label>Stock Mínimo</Label><Input type="number" value={formData.stock_minimo} readOnly={isEditing} className={isEditing ? "bg-gray-100" : ""} onChange={e => handleInputChange('stock_minimo', parseFloat(e.target.value) || 0)}/></div>
+                                <div><Label>Costo Promedio</Label><Input type="number" value={formData.costo_promedio} readOnly className="bg-gray-100" title="Calculado automáticamente por el sistema" /></div>
                                 <div><Label>Existencia</Label><Input type="number" value={formData.existencia} readOnly className="bg-blue-50 font-bold text-blue-600" title="Calculado desde ajustes" /></div>
                             </div>
 

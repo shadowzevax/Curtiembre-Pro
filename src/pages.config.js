@@ -61,6 +61,7 @@ import ServiciosProduccion from './pages/ServiciosProduccion';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
+import TrasladoInventario from './pages/TrasladoInventario';
 import __Layout from './Layout.jsx';
 
 
@@ -128,6 +129,7 @@ export const PAGES = {
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
+    "TrasladoInventario": TrasladoInventario,
 }
 
 export const pagesConfig = {
