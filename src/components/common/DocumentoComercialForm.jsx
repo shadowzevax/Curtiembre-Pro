@@ -80,10 +80,18 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         telefono_cliente: '',
         fecha_orden: new Date().toISOString().split('T')[0],
         fecha_vencimiento: new Date().toISOString().split('T')[0],
-        forma_pago: 'contado',
-        medio_pago: 'efectivo',
+        condicion_pago: 'contado',
+        forma_pago: 'efectivo',
         cuenta_destino_id: '',
         cuenta_destino_nombre: '',
+        documento_origen_id: '',
+        documento_origen_numero: '',
+        motivo_nota: '',
+        afecta_inventario_nota: true,
+        afecta_contabilidad_nota: true,
+        afecta_impuestos_nota: true,
+        afecta_cartera_nota: true,
+        usuario_responsable: '',
         observaciones: "",
         soportes: [],
         items: [],
@@ -92,8 +100,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         codigo_lote_piel: '',
         codigo_lote_inventario: '',
         afecta_inventario: true,
-        monto_efectivo: 0,
-        monto_credito: 0,
+        valor_total_compra: 0,
+        valor_total_venta: 0,
+        valor_pagado: 0,
         saldo_pendiente: 0,
         empresa: 'ARTECUEROS',
       };
@@ -253,33 +262,45 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     return { totalBruto, subtotalConIva, ivaTotal, retefuenteTotal, totalNeto };
   }, [formData]);
 
-  // Recalcular créditos y saldos cuando cambie forma de pago o el total
+  // Recalcular créditos y saldos cuando cambie condicion de pago o el total
   useEffect(() => {
     if (formData) {
         const { totalNeto } = calculateTotals();
         
-        if (formData.forma_pago === 'contado') {
+        if (formData.condicion_pago === 'contado') {
             // Contado: todo se paga
             setFormData(prev => ({
                 ...prev,
-                monto_efectivo: totalNeto,
-                monto_credito: 0,
+                valor_total_compra: totalNeto,
+                valor_total_venta: totalNeto,
+                valor_pagado: totalNeto,
                 saldo_pendiente: 0
             }));
-        } else if (formData.forma_pago === 'credito') {
+        } else if (formData.condicion_pago === 'credito') {
             // Crédito: queda saldo pendiente
-            const efectivo = parseFloat(formData.monto_efectivo) || 0;
-            const credito = totalNeto - efectivo;
-            if (formData.monto_credito !== credito || formData.saldo_pendiente !== credito) {
+            const pagado = parseFloat(formData.valor_pagado) || 0;
+            const saldo = totalNeto - pagado;
+            if (formData.saldo_pendiente !== saldo) {
                 setFormData(prev => ({
                     ...prev,
-                    monto_credito: credito > 0 ? credito : 0,
-                    saldo_pendiente: credito > 0 ? credito : 0
+                    valor_total_compra: totalNeto,
+                    valor_total_venta: totalNeto,
+                    saldo_pendiente: saldo > 0 ? saldo : 0
                 }));
             }
+        } else if (formData.condicion_pago === 'mixto') {
+            // Mixto: se puede pagar parte
+            const pagado = parseFloat(formData.valor_pagado) || 0;
+            const saldo = totalNeto - pagado;
+            setFormData(prev => ({
+                ...prev,
+                valor_total_compra: totalNeto,
+                valor_total_venta: totalNeto,
+                saldo_pendiente: saldo > 0 ? saldo : 0
+            }));
         }
     }
-  }, [formData?.forma_pago, formData?.items]);
+  }, [formData?.condicion_pago, formData?.items]);
 
   const setVencimiento = (dias) => {
     if (!formData.fecha_orden) return;
@@ -537,7 +558,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     }
 
     // AUTOMATIZACIÓN: Generar Recibo de Caja o Comprobante de Egreso si es contado
-    if (finalData.forma_pago === 'contado' && finalData.monto_efectivo > 0) {
+    if ((finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') && finalData.valor_pagado > 0) {
         try {
             if (tipoDocumento === 'venta') {
                 // Generar Recibo de Caja automáticamente
@@ -552,30 +573,30 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                     tercero_id: finalData.cliente_id || '',
                     tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || ''),
                     concepto: `Venta ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                    valor: finalData.monto_efectivo,
-                    medio_pago: finalData.medio_pago || 'efectivo',
+                    valor: finalData.valor_pagado,
+                    medio_pago: finalData.forma_pago || 'efectivo',
                     cuenta_destino_id: finalData.cuenta_destino_id || '',
-                    cuenta_destino_nombre: finalData.cuenta_destino_nombre || 'Caja Principal',
+                    cuenta_destino_nombre: finalData.cuenta_destino_nombre || 'CAJA GENERAL',
                     venta_id: orderId,
                     generado_automaticamente: true,
-                    observaciones: 'Generado automáticamente por venta de contado'
+                    observaciones: `Generado automáticamente por venta ${finalData.condicion_pago}`
                 });
 
                 // Actualizar saldo de caja o cuenta bancaria
-                if (finalData.medio_pago === 'efectivo' && finalData.cuenta_destino_id) {
+                if (finalData.forma_pago === 'efectivo' && finalData.cuenta_destino_id) {
                     const { Caja } = await import('@/entities/all');
                     const caja = await Caja.get(finalData.cuenta_destino_id);
                     if (caja) {
                         await Caja.update(caja.id, {
-                            saldo_actual: (caja.saldo_actual || 0) + finalData.monto_efectivo
+                            saldo_actual: (caja.saldo_actual || 0) + finalData.valor_pagado
                         });
                     }
-                } else if (finalData.medio_pago !== 'efectivo' && finalData.cuenta_destino_id) {
+                } else if (finalData.forma_pago !== 'efectivo' && finalData.cuenta_destino_id) {
                     const { CuentaBancaria } = await import('@/entities/all');
                     const cuenta = await CuentaBancaria.get(finalData.cuenta_destino_id);
                     if (cuenta) {
                         await CuentaBancaria.update(cuenta.id, {
-                            saldo_actual: (cuenta.saldo_actual || 0) + finalData.monto_efectivo
+                            saldo_actual: (cuenta.saldo_actual || 0) + finalData.valor_pagado
                         });
                     }
                 }
@@ -594,30 +615,30 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                     tercero_id: finalData.proveedor_id || '',
                     tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
                     concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                    valor: finalData.monto_efectivo,
-                    medio_pago: finalData.medio_pago || 'efectivo',
+                    valor: finalData.valor_pagado,
+                    medio_pago: finalData.forma_pago || 'efectivo',
                     cuenta_origen_id: finalData.cuenta_destino_id || '',
-                    cuenta_origen_nombre: finalData.cuenta_destino_nombre || 'Caja Principal',
+                    cuenta_origen_nombre: finalData.cuenta_destino_nombre || 'CAJA GENERAL',
                     compra_id: orderId,
                     generado_automaticamente: true,
-                    observaciones: 'Generado automáticamente por compra de contado'
+                    observaciones: `Generado automáticamente por compra ${finalData.condicion_pago}`
                 });
 
                 // Actualizar saldo de caja o cuenta bancaria (restar)
-                if (finalData.medio_pago === 'efectivo' && finalData.cuenta_destino_id) {
+                if (finalData.forma_pago === 'efectivo' && finalData.cuenta_destino_id) {
                     const { Caja } = await import('@/entities/all');
                     const caja = await Caja.get(finalData.cuenta_destino_id);
                     if (caja) {
                         await Caja.update(caja.id, {
-                            saldo_actual: (caja.saldo_actual || 0) - finalData.monto_efectivo
+                            saldo_actual: (caja.saldo_actual || 0) - finalData.valor_pagado
                         });
                     }
-                } else if (finalData.medio_pago !== 'efectivo' && finalData.cuenta_destino_id) {
+                } else if (finalData.forma_pago !== 'efectivo' && finalData.cuenta_destino_id) {
                     const { CuentaBancaria } = await import('@/entities/all');
                     const cuenta = await CuentaBancaria.get(finalData.cuenta_destino_id);
                     if (cuenta) {
                         await CuentaBancaria.update(cuenta.id, {
-                            saldo_actual: (cuenta.saldo_actual || 0) - finalData.monto_efectivo
+                            saldo_actual: (cuenta.saldo_actual || 0) - finalData.valor_pagado
                         });
                     }
                 }
@@ -640,8 +661,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         if (tipoDocumento === 'venta') {
             // Débito: Caja o Cuentas por Cobrar
             detalle.push({
-                cuenta_codigo: finalData.forma_pago === 'contado' ? '1105' : '1305',
-                cuenta_nombre: finalData.forma_pago === 'contado' ? 'Caja' : 'Cuentas por Cobrar',
+                cuenta_codigo: finalData.condicion_pago === 'contado' ? '1105' : '1305',
+                cuenta_nombre: finalData.condicion_pago === 'contado' ? 'Caja' : 'Cuentas por Cobrar',
                 debe: finalData.total,
                 haber: 0,
                 tercero_id: finalData.cliente_id || '',
@@ -668,8 +689,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
             });
             // Crédito: Caja o Cuentas por Pagar
             detalle.push({
-                cuenta_codigo: finalData.forma_pago === 'contado' ? '1105' : '2205',
-                cuenta_nombre: finalData.forma_pago === 'contado' ? 'Caja' : 'Cuentas por Pagar',
+                cuenta_codigo: finalData.condicion_pago === 'contado' ? '1105' : '2205',
+                cuenta_nombre: finalData.condicion_pago === 'contado' ? 'Caja' : 'Cuentas por Pagar',
                 debe: 0,
                 haber: finalData.total,
                 tercero_id: finalData.proveedor_id || '',
@@ -798,7 +819,10 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                             <SelectItem value="cuenta_cobro">Cuenta de Cobro</SelectItem>
                             <SelectItem value="remision">Remisión</SelectItem>
                             {tipoDocumento === 'compra' && <SelectItem value="otras_compras">Otras Compras</SelectItem>}
+                            {tipoDocumento === 'compra' && <SelectItem value="nota_credito_proveedor">Nota Crédito Proveedor</SelectItem>}
                             {tipoDocumento === 'venta' && <SelectItem value="otras_ventas">Otras Ventas</SelectItem>}
+                            {tipoDocumento === 'venta' && <SelectItem value="nota_credito_cliente">Nota Crédito Cliente</SelectItem>}
+                            {tipoDocumento === 'venta' && <SelectItem value="nota_debito_cliente">Nota Débito Cliente</SelectItem>}
                         </SelectContent>
                     </Select>
                 </div>
@@ -833,6 +857,86 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                   <div><Label>Código Lote de Piel</Label><Input value={formData.codigo_lote_piel || ''} onChange={e => handleInputChange('codigo_lote_piel', e.target.value)} placeholder="Ej: LOTE-001" /></div>
                 )}
             </div>
+            
+            {/* Campos para Notas Crédito/Débito */}
+            {(formData.tipo_documento === 'nota_credito_proveedor' || formData.tipo_documento === 'nota_credito_cliente' || formData.tipo_documento === 'nota_debito_cliente') && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div>
+                        <Label className="font-bold">Documento Origen *</Label>
+                        <Input 
+                            value={formData.documento_origen_numero || ''} 
+                            onChange={e => handleInputChange('documento_origen_numero', e.target.value)} 
+                            placeholder="Ej: FV-001"
+                            required
+                        />
+                    </div>
+                    <div className="md:col-span-2">
+                        <Label className="font-bold">Motivo *</Label>
+                        <Input 
+                            value={formData.motivo_nota || ''} 
+                            onChange={e => handleInputChange('motivo_nota', e.target.value)} 
+                            placeholder="Describe el motivo de la nota"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <Label className="font-bold">¿Afecta Inventario?</Label>
+                        <Select value={formData.afecta_inventario_nota ? 'si' : 'no'} onValueChange={v => handleInputChange('afecta_inventario_nota', v === 'si')}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="si">SÍ</SelectItem>
+                                <SelectItem value="no">NO</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {formData.tipo_documento === 'nota_credito_proveedor' && (
+                        <div>
+                            <Label className="font-bold">¿Afecta Contabilidad?</Label>
+                            <Select value={formData.afecta_contabilidad_nota ? 'si' : 'no'} onValueChange={v => handleInputChange('afecta_contabilidad_nota', v === 'si')}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="si">SÍ</SelectItem>
+                                    <SelectItem value="no">NO</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+                    {formData.tipo_documento === 'nota_debito_cliente' && (
+                        <>
+                            <div>
+                                <Label className="font-bold">¿Afecta Impuestos?</Label>
+                                <Select value={formData.afecta_impuestos_nota ? 'si' : 'no'} onValueChange={v => handleInputChange('afecta_impuestos_nota', v === 'si')}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="si">SÍ</SelectItem>
+                                        <SelectItem value="no">NO</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label className="font-bold">¿Afecta Cartera?</Label>
+                                <Select value={formData.afecta_cartera_nota ? 'si' : 'no'} onValueChange={v => handleInputChange('afecta_cartera_nota', v === 'si')}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="si">SÍ</SelectItem>
+                                        <SelectItem value="no">NO</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </>
+                    )}
+                    {(formData.tipo_documento === 'nota_credito_cliente' || formData.tipo_documento === 'nota_debito_cliente') && (
+                        <div>
+                            <Label className="font-bold">Usuario Responsable</Label>
+                            <Input 
+                                value={formData.usuario_responsable || ''} 
+                                onChange={e => handleInputChange('usuario_responsable', e.target.value)} 
+                                placeholder="Nombre del responsable"
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div><Label>Fecha</Label><Input type="date" value={formData.fecha_orden} onChange={e => handleInputChange('fecha_orden', e.target.value)} required /></div>
                 
@@ -958,46 +1062,52 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                          
                          <div className="grid grid-cols-2 gap-4">
                              <div>
-                                <Label className="font-bold">Tipo de {tipoDocumento === 'venta' ? 'Venta' : 'Compra'} *</Label>
-                                <Select value={formData.forma_pago} onValueChange={v => handleInputChange('forma_pago', v)}>
+                                <Label className="font-bold">Condición de Pago *</Label>
+                                <Select value={formData.condicion_pago} onValueChange={v => handleInputChange('condicion_pago', v)}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="contado">Contado (se paga ahora)</SelectItem>
+                                        <SelectItem value="contado">Contado (se paga completo)</SelectItem>
                                         <SelectItem value="credito">Crédito (saldo pendiente)</SelectItem>
+                                        <SelectItem value="mixto">Mixto (pago parcial)</SelectItem>
                                     </SelectContent>
                                 </Select>
                              </div>
-                             
-                             {formData.forma_pago === 'contado' && (
+
+                             {(formData.condicion_pago === 'contado' || formData.condicion_pago === 'mixto') && (
                                  <div>
-                                    <Label className="font-bold">Medio de Pago *</Label>
-                                    <Select value={formData.medio_pago} onValueChange={v => handleInputChange('medio_pago', v)}>
+                                    <Label className="font-bold">Forma de Pago *</Label>
+                                    <Select value={formData.forma_pago} onValueChange={v => handleInputChange('forma_pago', v)}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="efectivo">Efectivo</SelectItem>
+                                            <SelectItem value="transferencia">Transferencia</SelectItem>
                                             <SelectItem value="nequi">Nequi</SelectItem>
-                                            <SelectItem value="transferencia">Transferencia Bancaria</SelectItem>
-                                            <SelectItem value="tarjeta">Tarjeta/PSE</SelectItem>
+                                            <SelectItem value="daviplata">Daviplata</SelectItem>
+                                            <SelectItem value="consignacion">Consignación</SelectItem>
+                                            <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                                            <SelectItem value="cheque">Cheque</SelectItem>
+                                            <SelectItem value="otro">Otro</SelectItem>
                                         </SelectContent>
                                     </Select>
                                  </div>
                              )}
                          </div>
 
-                         {/* Campos condicionales según medio de pago */}
-                         {formData.forma_pago === 'contado' && (
+                         {/* Campos condicionales según forma de pago */}
+                         {(formData.condicion_pago === 'contado' || formData.condicion_pago === 'mixto') && (
                              <div>
-                                 {formData.medio_pago === 'efectivo' ? (
+                                 {formData.forma_pago === 'efectivo' ? (
                                      <div>
                                          <Label className="font-bold">Caja *</Label>
-                                         <Select value={formData.cuenta_destino_id} onValueChange={v => {
-                                             const caja = cajas.find(c => c.id === v);
-                                             handleInputChange('cuenta_destino_id', v);
-                                             handleInputChange('cuenta_destino_nombre', caja?.nombre || '');
+                                         <Select value={formData.cuenta_destino_nombre} onValueChange={v => {
+                                             handleInputChange('cuenta_destino_nombre', v);
+                                             const caja = cajas.find(c => c.nombre === v);
+                                             if (caja) handleInputChange('cuenta_destino_id', caja.id);
                                          }}>
                                              <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                                              <SelectContent>
-                                                 {cajas.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                                                 <SelectItem value="CAJA GENERAL">CAJA GENERAL</SelectItem>
+                                                 <SelectItem value="CAJA MENOR">CAJA MENOR</SelectItem>
                                              </SelectContent>
                                          </Select>
                                      </div>
@@ -1025,22 +1135,22 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
                          <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                              <div>
-                                <Label className="font-bold text-emerald-700">Valor {formData.forma_pago === 'contado' ? 'a Pagar' : 'Efectivo'}</Label>
+                                <Label className="font-bold text-emerald-700">Valor Total de {tipoDocumento === 'venta' ? 'Venta' : 'Compra'}</Label>
                                 <Input 
                                     type="number" 
-                                    value={formData.monto_efectivo} 
-                                    onChange={e => handleInputChange('monto_efectivo', parseFloat(e.target.value) || 0)}
-                                    className="font-bold"
-                                    readOnly={formData.forma_pago === 'contado'}
+                                    value={tipoDocumento === 'venta' ? formData.valor_total_venta : formData.valor_total_compra} 
+                                    readOnly 
+                                    className="bg-gray-100 font-bold"
                                 />
                              </div>
                              <div>
-                                <Label className="font-bold text-blue-700">Crédito</Label>
+                                <Label className="font-bold text-blue-700">Valor Pagado</Label>
                                 <Input 
                                     type="number" 
-                                    value={formData.monto_credito} 
-                                    readOnly 
-                                    className="bg-blue-50 font-bold"
+                                    value={formData.valor_pagado} 
+                                    onChange={e => handleInputChange('valor_pagado', parseFloat(e.target.value) || 0)}
+                                    className="font-bold"
+                                    readOnly={formData.condicion_pago === 'contado'}
                                 />
                              </div>
                              <div>
