@@ -44,6 +44,7 @@ export default function GestionPedidos() {
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [filtroNumeroPedido, setFiltroNumeroPedido] = useState('');
   const [filteredPedidos, setFilteredPedidos] = useState([]);
+  const [selectedForConsolidation, setSelectedForConsolidation] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -74,14 +75,18 @@ export default function GestionPedidos() {
     }
   };
 
-  const handleOpenModal = (pedido = null) => {
+  const handleOpenModal = async (pedido = null) => {
     setIsEditing(!!pedido);
     if (!pedido) {
-      const nextNum = pedidos.length + 1;
+      // Generar número ID automático formato 2026-0001
+      const year = new Date().getFullYear();
+      const pedidosDelAnio = pedidos.filter(p => p.numero_pedido?.startsWith(String(year)));
+      const nextNum = pedidosDelAnio.length + 1;
+      
       setCurrentPedido({
-        numero_pedido: `PED-${String(nextNum).padStart(3, '0')}`,
+        numero_pedido: `${year}-${String(nextNum).padStart(4, '0')}`,
+        pedido_consolidado: '',
         fecha_solicitud: new Date().toISOString().split('T')[0],
-        fecha_entrega: '',
         nombre_marroquinero: '',
         cliente_id: '',
         estado: 'pendiente',
@@ -199,19 +204,19 @@ export default function GestionPedidos() {
     return Object.values(consolidado).sort((a, b) => a.color.localeCompare(b.color));
   };
 
-  const headers = ['No. Pedido', 'Fecha Solicitud', 'Fecha Entrega', 'Marroquinero', 'Total Hojas', 'Estado', 'Acciones'];
+  const headers = ['No. ID', 'Pedido Consolidado', 'Fecha Solicitud', 'Marroquinero', 'Total Hojas', 'Estado', 'Acciones'];
   const renderRow = (pedido) => (
     <tr key={pedido.id}>
       <td className="font-mono font-bold">{pedido.numero_pedido}</td>
+      <td className="font-mono text-sm">{pedido.pedido_consolidado || '-'}</td>
       <td>{formatDate(pedido.fecha_solicitud)}</td>
-      <td>{formatDate(pedido.fecha_entrega)}</td>
       <td>{pedido.nombre_marroquinero}</td>
       <td className="font-bold text-center">{pedido.total_hojas}</td>
       <td>
         <span className={`px-2 py-1 rounded text-xs font-medium ${
           pedido.estado === 'entregado' ? 'bg-green-100 text-green-700' :
-          pedido.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' :
-          pedido.estado === 'completado' ? 'bg-purple-100 text-purple-700' :
+          pedido.estado === 'en_produccion' ? 'bg-blue-100 text-blue-700' :
+          pedido.estado === 'consolidado' ? 'bg-purple-100 text-purple-700' :
           'bg-yellow-100 text-yellow-700'
         }`}>
           {pedido.estado}
@@ -278,17 +283,17 @@ export default function GestionPedidos() {
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-4 gap-4">
-              <div><Label>No. Pedido</Label><Input value={currentPedido?.numero_pedido || ''} readOnly className="bg-gray-100" /></div>
+              <div><Label>No. ID</Label><Input value={currentPedido?.numero_pedido || ''} readOnly className="bg-gray-100" /></div>
+              <div><Label>Pedido Consolidado</Label><Input value={currentPedido?.pedido_consolidado || ''} readOnly className="bg-gray-50" placeholder="Se asigna al consolidar" /></div>
               <div><Label>Fecha Solicitud *</Label><Input type="date" value={currentPedido?.fecha_solicitud || ''} onChange={e => setCurrentPedido({...currentPedido, fecha_solicitud: e.target.value})} required /></div>
-              <div><Label>Fecha Entrega *</Label><Input type="date" value={currentPedido?.fecha_entrega || ''} onChange={e => setCurrentPedido({...currentPedido, fecha_entrega: e.target.value})} required /></div>
               <div>
                 <Label>Estado</Label>
                 <Select value={currentPedido?.estado || 'pendiente'} onValueChange={v => setCurrentPedido({...currentPedido, estado: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pendiente">Pendiente</SelectItem>
-                    <SelectItem value="en_proceso">En Proceso</SelectItem>
-                    <SelectItem value="completado">Completado</SelectItem>
+                    <SelectItem value="consolidado">Consolidado</SelectItem>
+                    <SelectItem value="en_produccion">En Producción</SelectItem>
                     <SelectItem value="entregado">Entregado</SelectItem>
                   </SelectContent>
                 </Select>
@@ -377,10 +382,10 @@ export default function GestionPedidos() {
           {selectedPedido && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <p><strong>No. Pedido:</strong> {selectedPedido.numero_pedido}</p>
+                <p><strong>No. ID:</strong> {selectedPedido.numero_pedido}</p>
+                <p><strong>Pedido Consolidado:</strong> {selectedPedido.pedido_consolidado || 'Sin consolidar'}</p>
                 <p><strong>Marroquinero:</strong> {selectedPedido.nombre_marroquinero}</p>
                 <p><strong>Fecha Solicitud:</strong> {formatDate(selectedPedido.fecha_solicitud)}</p>
-                <p><strong>Fecha Entrega:</strong> {formatDate(selectedPedido.fecha_entrega)}</p>
                 <p><strong>Estado:</strong> {selectedPedido.estado}</p>
                 <p><strong>Total Hojas:</strong> {selectedPedido.total_hojas}</p>
               </div>
@@ -419,11 +424,114 @@ export default function GestionPedidos() {
         <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="text-xl font-bold text-center">CONSOLIDADO GENERAL DE PEDIDOS</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <Tabs defaultValue="general">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs defaultValue="pendientes">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="pendientes">Pendientes de Consolidar</TabsTrigger>
                 <TabsTrigger value="general">Consolidado General</TabsTrigger>
                 <TabsTrigger value="por_pedido">Por Número de Pedido</TabsTrigger>
               </TabsList>
+              <TabsContent value="pendientes" className="space-y-3">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold mb-2">Lista de Pedidos Pendientes de Consolidar</h3>
+                  <p className="text-sm text-gray-600 mb-4">Seleccione los pedidos que desea consolidar</p>
+                  
+                  {pedidos.filter(p => p.estado === 'pendiente').length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">No hay pedidos pendientes de consolidar</p>
+                  ) : (
+                    <>
+                      <div className="border rounded-lg overflow-hidden mb-4">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="p-2 text-left">
+                                <input 
+                                  type="checkbox" 
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedForConsolidation(pedidos.filter(p => p.estado === 'pendiente').map(p => p.id));
+                                    } else {
+                                      setSelectedForConsolidation([]);
+                                    }
+                                  }}
+                                  checked={selectedForConsolidation.length === pedidos.filter(p => p.estado === 'pendiente').length && pedidos.filter(p => p.estado === 'pendiente').length > 0}
+                                />
+                              </th>
+                              <th className="p-2 text-left">No. ID</th>
+                              <th className="p-2 text-left">Marroquinero</th>
+                              <th className="p-2 text-left">Fecha Solicitud</th>
+                              <th className="p-2 text-right">Total Hojas</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pedidos.filter(p => p.estado === 'pendiente').map(pedido => (
+                              <tr key={pedido.id} className="border-t hover:bg-gray-50">
+                                <td className="p-2">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={selectedForConsolidation.includes(pedido.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedForConsolidation([...selectedForConsolidation, pedido.id]);
+                                      } else {
+                                        setSelectedForConsolidation(selectedForConsolidation.filter(id => id !== pedido.id));
+                                      }
+                                    }}
+                                  />
+                                </td>
+                                <td className="p-2 font-mono font-semibold">{pedido.numero_pedido}</td>
+                                <td className="p-2">{pedido.nombre_marroquinero}</td>
+                                <td className="p-2">{formatDate(pedido.fecha_solicitud)}</td>
+                                <td className="p-2 text-right font-bold">{pedido.total_hojas}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      <div className="flex justify-end">
+                        <Button 
+                          onClick={async () => {
+                            if (selectedForConsolidation.length === 0) {
+                              alert('Debe seleccionar al menos un pedido para consolidar');
+                              return;
+                            }
+                            
+                            try {
+                              // Generar número de pedido consolidado PED-2026-0001
+                              const year = new Date().getFullYear();
+                              const pedidosConsolidados = pedidos.filter(p => p.pedido_consolidado?.startsWith(`PED-${year}`));
+                              const nextNum = pedidosConsolidados.length > 0 
+                                ? Math.max(...pedidosConsolidados.map(p => parseInt(p.pedido_consolidado.split('-')[2]) || 0)) + 1
+                                : 1;
+                              const numeroPedidoConsolidado = `PED-${year}-${String(nextNum).padStart(4, '0')}`;
+                              
+                              // Actualizar todos los pedidos seleccionados
+                              for (const pedidoId of selectedForConsolidation) {
+                                await PedidoMarroquinero.update(pedidoId, {
+                                  pedido_consolidado: numeroPedidoConsolidado,
+                                  estado: 'consolidado'
+                                });
+                              }
+                              
+                              alert(`Pedidos consolidados exitosamente con número: ${numeroPedidoConsolidado}`);
+                              setSelectedForConsolidation([]);
+                              loadData();
+                            } catch (error) {
+                              console.error('Error consolidando pedidos:', error);
+                              alert('Error al consolidar pedidos');
+                            }
+                          }}
+                          disabled={selectedForConsolidation.length === 0}
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          Consolidar Seleccionados ({selectedForConsolidation.length})
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </TabsContent>
+              
               <TabsContent value="general" className="space-y-3">
                 {(() => {
                   const consolidado = calcularConsolidado(pedidos);
@@ -473,7 +581,10 @@ export default function GestionPedidos() {
                   {pedidos.map(pedido => (
                     <div key={pedido.id} className="border rounded p-4">
                       <h3 className="font-bold mb-2">Pedido {pedido.numero_pedido} - {pedido.nombre_marroquinero}</h3>
-                      <p className="text-sm text-gray-600 mb-3">Entrega: {formatDate(pedido.fecha_entrega)}</p>
+                      <p className="text-sm text-gray-600 mb-3">
+                        {pedido.pedido_consolidado && <span className="font-semibold">Consolidado: {pedido.pedido_consolidado} | </span>}
+                        Solicitud: {formatDate(pedido.fecha_solicitud)}
+                      </p>
                       {pedido.items && pedido.items.length > 0 && (
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs">

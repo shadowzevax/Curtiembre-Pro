@@ -25,6 +25,7 @@ import CostosServicioMaquinaria from './pages/CostosServicioMaquinaria';
 import CuentasBancarias from './pages/CuentasBancarias';
 import Dashboard from './pages/Dashboard';
 import EgresosBancarios from './pages/EgresosBancarios';
+import GestionPedidos from './pages/GestionPedidos';
 import InformeCaja from './pages/InformeCaja';
 import InformeCostos from './pages/InformeCostos';
 import IngresosBancarios from './pages/IngresosBancarios';
@@ -62,7 +63,6 @@ import TrasladoInventario from './pages/TrasladoInventario';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
-import GestionPedidos from './pages/GestionPedidos';
 import __Layout from './Layout.jsx';
 
 
@@ -94,6 +94,7 @@ export const PAGES = {
     "CuentasBancarias": CuentasBancarias,
     "Dashboard": Dashboard,
     "EgresosBancarios": EgresosBancarios,
+    "GestionPedidos": GestionPedidos,
     "InformeCaja": InformeCaja,
     "InformeCostos": InformeCostos,
     "IngresosBancarios": IngresosBancarios,
@@ -131,7 +132,6 @@ export const PAGES = {
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
-    "GestionPedidos": GestionPedidos,
 }
 
 export const pagesConfig = {
