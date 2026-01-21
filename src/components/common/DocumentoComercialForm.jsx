@@ -26,6 +26,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   const [pendingItemIndex, setPendingItemIndex] = useState(null);
   const [cajas, setCajas] = useState([]);
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [showLotePopup, setShowLotePopup] = useState(false);
+  const [loteData, setLoteData] = useState({ codigo_lote: '', estado_cuero: 'CRU' });
 
   useEffect(() => {
       loadCatalogo();
@@ -145,6 +147,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   }, [documento, open, itemsCatalogo, terceros, tipoDocumento, tipoItem]);
 
   const handleInputChange = (field, value) => {
+      if (field === 'prefijo_documento' && value === 'CH' && tipoDocumento === 'compra') {
+          // Generar código de lote automático
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const consecutivo = '001'; // Se puede mejorar con lógica de consecutivo
+          const codigoLote = `L${year}${month}-${consecutivo}`;
+          setLoteData({ codigo_lote: codigoLote, estado_cuero: 'CRU' });
+          setShowLotePopup(true);
+      }
+      
       if (field === 'proveedor_id' || field === 'cliente_id') {
           const selectedTercero = terceros.find(t => t.id === value);
           const nitField = tipoDocumento === 'compra' ? 'cc_nit_proveedor' : 'cc_nit_cliente';
@@ -1196,6 +1209,45 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           </div>
         </form>
       </DialogContent>
+      
+      {/* Popup Código de Lote */}
+      <Dialog open={showLotePopup} onOpenChange={setShowLotePopup}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Información de Lote - Compra de Hojas</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Código Lote *</Label>
+              <Input 
+                value={loteData.codigo_lote} 
+                onChange={e => setLoteData({...loteData, codigo_lote: e.target.value})} 
+              />
+            </div>
+            <div>
+              <Label>Estado del Cuero *</Label>
+              <Select value={loteData.estado_cuero} onValueChange={v => setLoteData({...loteData, estado_cuero: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CRU">CRU - Crudo</SelectItem>
+                  <SelectItem value="SAL">SAL - Salado</SelectItem>
+                  <SelectItem value="SEM">SEM - Semi Terminado</SelectItem>
+                  <SelectItem value="TERM">TERM - Terminado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowLotePopup(false)}>Cancelar</Button>
+              <Button type="button" onClick={() => {
+                handleInputChange('codigo_lote_inventario', loteData.codigo_lote);
+                handleInputChange('estado_cuero', loteData.estado_cuero);
+                setShowLotePopup(false);
+              }}>Aceptar</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <ProductCreationModal 
           open={showProductModal} 
           onOpenChange={setShowProductModal}
