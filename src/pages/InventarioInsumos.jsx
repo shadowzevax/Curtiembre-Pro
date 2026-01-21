@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Eye, Edit, Trash2, ClipboardList } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, ClipboardList, Calculator } from 'lucide-react';
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
 import InventarioItemDetail from '../components/inventario/InventarioItemDetail';
@@ -25,6 +25,8 @@ export default function InventarioInsumos() {
     const [isEditing, setIsEditing] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
     const [selectedItem, setSelectedItem] = useState(null);
+    const [showCalculoModal, setShowCalculoModal] = useState(false);
+    const [calculoDetalle, setCalculoDetalle] = useState(null);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -86,6 +88,57 @@ export default function InventarioInsumos() {
     const handleViewDetails = (item) => {
         setSelectedItem(item);
         setShowDetailModal(true);
+    };
+
+    const handleVerCalculo = async (insumo) => {
+        try {
+            const movimientos = await MovimientoInventario.filter({ insumo_id: insumo.id });
+            
+            // Filtrar solo entradas (cantidad positiva)
+            const entradas = movimientos.filter(m => parseFloat(m.cantidad) > 0);
+            
+            // Calcular costo promedio ponderado
+            let costoTotalAcumulado = 0;
+            let cantidadTotalAcumulada = 0;
+            const detalleMovimientos = [];
+            
+            entradas.forEach(mov => {
+                const cantidad = parseFloat(mov.cantidad) || 0;
+                const costoUnitario = parseFloat(mov.costo_unitario) || 0;
+                const costoTotal = cantidad * costoUnitario;
+                
+                cantidadTotalAcumulada += cantidad;
+                costoTotalAcumulado += costoTotal;
+                
+                detalleMovimientos.push({
+                    fecha: mov.fecha,
+                    documento: mov.numero_documento || 'N/A',
+                    cantidad,
+                    costoUnitario,
+                    costoTotal,
+                    costoPromedioAcumulado: cantidadTotalAcumulada > 0 ? costoTotalAcumulado / cantidadTotalAcumulada : 0
+                });
+            });
+            
+            const costoPromedio = cantidadTotalAcumulada > 0 ? costoTotalAcumulado / cantidadTotalAcumulada : 0;
+            const stockActual = insumo.stock_actual || 0;
+            const valorTotal = stockActual * costoPromedio;
+            
+            setCalculoDetalle({
+                insumo: insumo.descripcion || insumo.nombre,
+                codigo: insumo.codigo,
+                movimientos: detalleMovimientos,
+                cantidadTotalEntradas: cantidadTotalAcumulada,
+                costoTotalAcumulado,
+                costoPromedio,
+                stockActual,
+                valorTotal
+            });
+            setShowCalculoModal(true);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error al calcular el detalle');
+        }
     };
 
     const handleSave = async (formData) => {
@@ -154,6 +207,7 @@ export default function InventarioInsumos() {
             <td className="text-right font-bold text-emerald-700">{formatCurrency(valorTotalInventario)}</td>
             <td>
                 <div className="flex space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => handleVerCalculo(insumo)} title="Ver Cálculo de Costo Promedio"><Calculator className="w-4 h-4 text-blue-600" /></Button>
                     <Button variant="outline" size="sm" onClick={() => handleViewDetails(insumo)}><Eye className="w-4 h-4" /></Button>
                     <Button variant="outline" size="sm" onClick={() => handleOpenModal(insumo)}><Edit className="w-4 h-4" /></Button>
                     <Button variant="destructive" size="sm" onClick={() => handleDelete(insumo.id)}><Trash2 className="w-4 h-4" /></Button>
@@ -240,6 +294,87 @@ export default function InventarioInsumos() {
                 onOpenChange={setShowDetailModal}
                 item={selectedItem}
             />
+
+            <Dialog open={showCalculoModal} onOpenChange={setShowCalculoModal}>
+                <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Detalle del Cálculo de Costo Promedio y Valor Total</DialogTitle>
+                    </DialogHeader>
+                    {calculoDetalle && (
+                        <div className="space-y-6">
+                            <div className="bg-blue-50 p-4 rounded-lg">
+                                <h3 className="font-bold text-lg mb-2">{calculoDetalle.codigo} - {calculoDetalle.insumo}</h3>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <p><strong>Stock Actual:</strong> {calculoDetalle.stockActual}</p>
+                                    <p><strong>Costo Promedio:</strong> {formatCurrency(calculoDetalle.costoPromedio)}</p>
+                                    <p className="col-span-2 text-lg"><strong>Valor Total en Inventario:</strong> <span className="text-emerald-700">{formatCurrency(calculoDetalle.valorTotal)}</span></p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 className="font-bold text-md mb-3">Fórmula del Costo Promedio Ponderado:</h4>
+                                <div className="bg-gray-100 p-4 rounded border-l-4 border-blue-500">
+                                    <p className="font-mono text-sm mb-2">Costo Promedio = Σ(Cantidad × Costo Unitario) / Σ(Cantidad)</p>
+                                    <p className="text-xs text-gray-600">Donde Σ representa la suma de todas las entradas de inventario</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 className="font-bold text-md mb-2">Detalle de Movimientos (Entradas):</h4>
+                                <div className="overflow-x-auto border rounded">
+                                    <table className="w-full text-xs">
+                                        <thead className="bg-gray-200">
+                                            <tr>
+                                                <th className="border p-2">Fecha</th>
+                                                <th className="border p-2">Documento</th>
+                                                <th className="border p-2">Cantidad</th>
+                                                <th className="border p-2">Costo Unitario</th>
+                                                <th className="border p-2">Costo Total Movimiento</th>
+                                                <th className="border p-2">Costo Promedio Acumulado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {calculoDetalle.movimientos.map((mov, idx) => (
+                                                <tr key={idx} className="hover:bg-gray-50">
+                                                    <td className="border p-2">{new Date(mov.fecha).toLocaleDateString('es-CO')}</td>
+                                                    <td className="border p-2">{mov.documento}</td>
+                                                    <td className="border p-2 text-center">{mov.cantidad}</td>
+                                                    <td className="border p-2 text-right">{formatCurrency(mov.costoUnitario)}</td>
+                                                    <td className="border p-2 text-right">{formatCurrency(mov.costoTotal)}</td>
+                                                    <td className="border p-2 text-right font-semibold bg-blue-50">{formatCurrency(mov.costoPromedioAcumulado)}</td>
+                                                </tr>
+                                            ))}
+                                            <tr className="bg-green-100 font-bold">
+                                                <td colSpan="2" className="border p-2 text-right">TOTALES:</td>
+                                                <td className="border p-2 text-center">{calculoDetalle.cantidadTotalEntradas}</td>
+                                                <td className="border p-2"></td>
+                                                <td className="border p-2 text-right">{formatCurrency(calculoDetalle.costoTotalAcumulado)}</td>
+                                                <td className="border p-2 text-right bg-green-200">{formatCurrency(calculoDetalle.costoPromedio)}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div className="bg-yellow-50 p-4 rounded border-l-4 border-yellow-500">
+                                <h4 className="font-bold mb-2">Cálculo del Valor Total en Inventario:</h4>
+                                <div className="space-y-1 text-sm">
+                                    <p><strong>Fórmula:</strong> Valor Total = Stock Actual × Costo Promedio</p>
+                                    <p><strong>Sustitución:</strong> Valor Total = {calculoDetalle.stockActual} × {formatCurrency(calculoDetalle.costoPromedio)}</p>
+                                    <p className="text-lg"><strong>Resultado:</strong> <span className="text-emerald-700">{formatCurrency(calculoDetalle.valorTotal)}</span></p>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-50 p-4 rounded text-xs text-gray-600">
+                                <p><strong>Nota:</strong> El costo promedio se calcula utilizando el método de promedio ponderado, que considera todas las entradas de inventario con sus respectivos costos y cantidades. Las salidas de inventario no afectan el costo promedio, solo reducen el stock disponible.</p>
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex justify-end pt-4">
+                        <Button onClick={() => setShowCalculoModal(false)}>Cerrar</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
