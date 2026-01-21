@@ -63,6 +63,11 @@ import TrasladoInventario from './pages/TrasladoInventario';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
+import PedidoNuevo from './pages/PedidoNuevo';
+import PedidosIndividuales from './pages/PedidosIndividuales';
+import ConsolidarPedidos from './pages/ConsolidarPedidos';
+import ConsolidadosGenerales from './pages/ConsolidadosGenerales';
+import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
 import __Layout from './Layout.jsx';
 
 
@@ -132,6 +137,11 @@ export const PAGES = {
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
+    "PedidoNuevo": PedidoNuevo,
+    "PedidosIndividuales": PedidosIndividuales,
+    "ConsolidarPedidos": ConsolidarPedidos,
+    "ConsolidadosGenerales": ConsolidadosGenerales,
+    "VerConsolidadoDetalle": VerConsolidadoDetalle,
 }
 
 export const pagesConfig = {
