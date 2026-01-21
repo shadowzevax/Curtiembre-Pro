@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, ProductoTerminado, Proveedor } from '@/entities/all';
+import { ProcesoProduccion, Insumo, ProductoTerminado, Proveedor, OrdenCompra } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,20 +33,28 @@ export default function ProcesoRecepcion() {
   const [nextLoteNumber, setNextLoteNumber] = useState(1);
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
+  const [lotesCompras, setLotesCompras] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [recepcionesData, insumosData, productosData, proveedoresData] = await Promise.all([
+      const [recepcionesData, insumosData, productosData, proveedoresData, comprasData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recepcion' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        Proveedor.list()
+        Proveedor.list(),
+        OrdenCompra.list()
       ]);
       setRecepciones(recepcionesData);
       setInsumos(insumosData);
       setProductos(productosData);
       setProveedores(proveedoresData);
+      
+      // Extraer códigos de lote únicos de compras
+      const lotes = comprasData
+        .filter(c => c.codigo_lote_inventario)
+        .map(c => c.codigo_lote_inventario);
+      setLotesCompras([...new Set(lotes)]);
       
       // Calcular el siguiente número de lote
       if (recepcionesData.length > 0) {
@@ -251,7 +259,20 @@ export default function ProcesoRecepcion() {
           </DialogHeader>
           <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
-              <div><Label>Código Lote *</Label><Input value={currentItem?.codigo_lote || ''} onChange={e => setCurrentItem({...currentItem, codigo_lote: e.target.value})} required /></div>
+              <div>
+                <Label>Código Lote *</Label>
+                <Input 
+                  value={currentItem?.codigo_lote || ''} 
+                  onChange={e => setCurrentItem({...currentItem, codigo_lote: e.target.value})} 
+                  list="lotes-compras"
+                  required 
+                />
+                <datalist id="lotes-compras">
+                  {lotesCompras.map((lote, idx) => (
+                    <option key={idx} value={lote} />
+                  ))}
+                </datalist>
+              </div>
               <div><Label>Fecha de Recepción</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div>
                 <Label>Proveedor</Label>

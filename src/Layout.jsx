@@ -67,7 +67,10 @@ const menuItems = [
     subItems: [
       { title: "Venta de Productos", url: createPageUrl("VentaProductos"), icon: TrendingUp },
       { title: "Venta de Servicios", url: createPageUrl("VentaServicios"), icon: TrendingUp },
-      { title: "Gestión de Pedidos", url: createPageUrl("GestionPedidos"), icon: TrendingUp }
+      { title: "Nuevo Pedido", url: createPageUrl("PedidoNuevo"), icon: TrendingUp },
+      { title: "Pedidos Individuales", url: createPageUrl("PedidosIndividuales"), icon: TrendingUp },
+      { title: "Consolidar Pedidos", url: createPageUrl("ConsolidarPedidos"), icon: TrendingUp },
+      { title: "Consolidados Generales", url: createPageUrl("ConsolidadosGenerales"), icon: TrendingUp }
     ]
   },
   {
