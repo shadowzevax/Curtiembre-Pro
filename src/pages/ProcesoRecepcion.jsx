@@ -305,8 +305,12 @@ export default function ProcesoRecepcion() {
             <div className="grid grid-cols-4 gap-4">
               <div><Label>Cantidad Total Lote en Hojas</Label><Input type="number" value={currentItem?.cantidad_total_lote_hojas || ''} onChange={e => setCurrentItem({...currentItem, cantidad_total_lote_hojas: parseFloat(e.target.value) || 0})} /></div>
               <div><Label>Cantidad Total Lote en Pieles</Label><Input type="number" value={currentItem?.cantidad_total_lote_pieles || ''} onChange={e => setCurrentItem({...currentItem, cantidad_total_lote_pieles: parseFloat(e.target.value) || 0})} /></div>
-              <div><Label>Peso Total (kg)</Label><Input type="number" step="0.01" value={currentItem?.peso_total || ''} onChange={e => setCurrentItem({...currentItem, peso_total: parseFloat(e.target.value) || 0})} /></div>
-              <div><Label>Peso Promedio Estándar por Piel (kg)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio_estandar_por_piel || ''} onChange={e => setCurrentItem({...currentItem, peso_promedio_estandar_por_piel: parseFloat(e.target.value) || 0})} /></div>
+              <div><Label>Peso Total Hojas (kg)</Label><Input type="number" step="0.01" value={currentItem?.peso_total || ''} onChange={e => {
+                const peso = parseFloat(e.target.value) || 0;
+                const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 1;
+                setCurrentItem({...currentItem, peso_total: peso, peso_promedio_estandar_por_piel: peso / hojas});
+              }} /></div>
+              <div><Label>Peso Promedio Estándar por Hoja (kg)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio_estandar_por_piel || ''} readOnly className="bg-blue-50" title="Auto-calculado: Peso Total / Cantidad Hojas" /></div>
             </div>
             <div><Label>Nombre Curtidor</Label><Input value={currentItem?.nombre_curtidor || ''} onChange={e => setCurrentItem({...currentItem, nombre_curtidor: e.target.value})} placeholder="Nombre del curtidor responsable" /></div>
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>

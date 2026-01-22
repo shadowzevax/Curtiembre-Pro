@@ -305,9 +305,63 @@ export default function ProcesoRecurtido() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Código Color</Label><Input value={currentItem?.codigo_color || ''} onChange={e => setCurrentItem({...currentItem, codigo_color: e.target.value})} /></div>
-              <div><Label>Nombre Color</Label><Input value={currentItem?.nombre_color || ''} onChange={e => setCurrentItem({...currentItem, nombre_color: e.target.value})} /></div>
-              <div><Label>Cantidad Pieles</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
+              <div>
+                <Label>Código Color</Label>
+                <Select value={currentItem?.codigo_color || ''} onValueChange={v => {
+                  const colores = {
+                    'PR001': 'NEGRO',
+                    'PR002': 'CAFE',
+                    'PR003': 'MIEL',
+                    'PR004': 'QUEBRACHO',
+                    'PR005': 'BLANCO',
+                    'PR006': 'AZUL',
+                    'PR007': 'ROJO',
+                    'PR008': 'VERDE'
+                  };
+                  setCurrentItem({...currentItem, codigo_color: v, nombre_color: colores[v] || ''});
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PR001">PR001</SelectItem>
+                    <SelectItem value="PR002">PR002</SelectItem>
+                    <SelectItem value="PR003">PR003</SelectItem>
+                    <SelectItem value="PR004">PR004</SelectItem>
+                    <SelectItem value="PR005">PR005</SelectItem>
+                    <SelectItem value="PR006">PR006</SelectItem>
+                    <SelectItem value="PR007">PR007</SelectItem>
+                    <SelectItem value="PR008">PR008</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Nombre Color</Label>
+                <Select value={currentItem?.nombre_color || ''} onValueChange={v => {
+                  const coloresInv = {
+                    'NEGRO': 'PR001',
+                    'CAFE': 'PR002',
+                    'MIEL': 'PR003',
+                    'QUEBRACHO': 'PR004',
+                    'BLANCO': 'PR005',
+                    'AZUL': 'PR006',
+                    'ROJO': 'PR007',
+                    'VERDE': 'PR008'
+                  };
+                  setCurrentItem({...currentItem, nombre_color: v, codigo_color: coloresInv[v] || ''});
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NEGRO">NEGRO</SelectItem>
+                    <SelectItem value="CAFE">CAFE</SelectItem>
+                    <SelectItem value="MIEL">MIEL</SelectItem>
+                    <SelectItem value="QUEBRACHO">QUEBRACHO</SelectItem>
+                    <SelectItem value="BLANCO">BLANCO</SelectItem>
+                    <SelectItem value="AZUL">AZUL</SelectItem>
+                    <SelectItem value="ROJO">ROJO</SelectItem>
+                    <SelectItem value="VERDE">VERDE</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
                 const cant = parseFloat(e.target.value) || 0;
                 const peso = parseFloat(currentItem.peso_actual) || 0;
                 const prom = cant > 0 ? peso / cant : 0;
@@ -378,23 +432,11 @@ export default function ProcesoRecurtido() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
-              <div>
-                <Label>Subtotal Humectación</Label>
-                <div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">
-                  {formatCurrency(currentItem?.subtotal_humectacion || 0)}
-                </div>
-              </div>
-              <div>
-                <Label>Subtotal Recromado</Label>
-                <div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">
-                  {formatCurrency(currentItem?.subtotal_recromado || 0)}
-                </div>
-              </div>
+            <div className="bg-gray-50 p-4 rounded-lg">
               <div>
                 <Label>Subtotal Recurtido</Label>
                 <div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">
-                  {formatCurrency(currentItem?.subtotal_recurtido || 0)}
+                  {formatCurrency(currentItem?.subtotal_humectacion || 0)}
                 </div>
               </div>
             </div>

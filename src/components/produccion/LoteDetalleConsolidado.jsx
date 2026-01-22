@@ -25,6 +25,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
   const [serviciosMaquinaria, setServiciosMaquinaria] = useState([]);
   const [serviciosManoObra, setServiciosManoObra] = useState([]);
   const [otrosCostos, setOtrosCostos] = useState([]);
+  const [otrosConceptos, setOtrosConceptos] = useState([]);
 
   useEffect(() => {
     if (open && codigoLote) {
@@ -60,6 +61,16 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
         setServiciosMaquinaria(recepcion[0].servicios_maquinaria || []);
         setServiciosManoObra(recepcion[0].servicios_mano_obra || []);
         setOtrosCostos(recepcion[0].otros_costos || []);
+        setOtrosConceptos(recepcion[0].otros_conceptos || [
+          { concepto: 'CARNAZA QUE DEJA EN KILOS', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'COSTOS NETOS', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'COSTO DE CROSTA POR HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'PROMEDIO DE MEDIDA PIES/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'COSTO DE CROSTA POR PIE', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'COSTO DE PINTURA TERMINADA/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'COSTO DE UNA HOJA YA TERMINADA', cantidad: 0, valor: 0, valor_total: 0 },
+          { concepto: 'COSTO DEL PIE TERMINADO', cantidad: 0, valor: 0, valor_total: 0 }
+        ]);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -104,7 +115,41 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
   const subtotalOtros = otrosCostos.reduce((sum, c) => sum + ((c.cantidad || 0) * (c.valor || 0)), 0);
 
   const totalCostoProceso = subtotalRemojo + subtotalPelambre + subtotalCurtido + subtotalRecurtidoTotal;
-  const totalGeneral = totalCostoProceso + subtotalMaquinaria + subtotalManoObra + subtotalOtros;
+  const sumasTotalLote = totalCostoProceso + subtotalMaquinaria + subtotalManoObra + subtotalOtros;
+  
+  // Calcular valores de "Otros Conceptos" automáticamente
+  const calcularOtrosConceptos = () => {
+    const updated = [...otrosConceptos];
+    
+    // 1. CARNAZA QUE DEJA EN KILOS (manual)
+    updated[0].valor_total = (updated[0].cantidad || 0) * (updated[0].valor || 0);
+    
+    // 2. COSTOS NETOS = SUMAS TOTAL LOTE - CARNAZA
+    updated[1].valor_total = sumasTotalLote - updated[0].valor_total;
+    
+    // 3. COSTO DE CROSTA POR HOJA = COSTOS NETOS / CANTIDAD TOTAL HOJAS
+    const cantHojas = loteData?.cantidad_total_lote_hojas || 1;
+    updated[2].valor_total = updated[1].valor_total / cantHojas;
+    
+    // 4. PROMEDIO DE MEDIDA PIES/HOJA (manual - valor)
+    
+    // 5. COSTO DE CROSTA POR PIE = COSTO DE CROSTA POR HOJA / PROMEDIO PIES/HOJA
+    const promPies = updated[3].valor || 1;
+    updated[4].valor_total = updated[2].valor_total / promPies;
+    
+    // 6. COSTO DE PINTURA TERMINADA/HOJA (manual - valor)
+    
+    // 7. COSTO DE UNA HOJA YA TERMINADA = COSTO DE CROSTA POR HOJA + COSTO DE PINTURA/HOJA
+    updated[6].valor_total = updated[2].valor_total + (updated[5].valor || 0);
+    
+    // 8. COSTO DEL PIE TERMINADO = COSTO HOJA TERMINADA / PROMEDIO PIES/HOJA
+    updated[7].valor_total = updated[6].valor_total / promPies;
+    
+    return updated;
+  };
+  
+  const otrosConceptosCalculados = calcularOtrosConceptos();
+  const totalGeneral = sumasTotalLote;
 
   // Funciones para manejar costos manuales
   const agregarServicioMaquinaria = () => {
@@ -126,7 +171,8 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
         await ProcesoProduccion.update(procesos.recepcion.id, {
           servicios_maquinaria: serviciosMaquinaria,
           servicios_mano_obra: serviciosManoObra,
-          otros_costos: otrosCostos
+          otros_costos: otrosCostos,
+          otros_conceptos: otrosConceptosCalculados
         });
         alert('Costos guardados exitosamente');
       }
@@ -185,6 +231,11 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
             {/* TOTAL COSTO PROCESO */}
             <div className="bg-yellow-300 border-2 border-yellow-500 p-2 font-bold text-right text-base">
               TOTAL COSTO PROCESO CUERO: {formatCurrency(totalCostoProceso)}
+            </div>
+            
+            {/* SUMAS TOTAL LOTE */}
+            <div className="bg-orange-300 border-2 border-orange-500 p-2 font-bold text-right text-base">
+              SUMAS TOTAL LOTE: {formatCurrency(sumasTotalLote)}
             </div>
 
             {/* SERVICIO DE MAQUINARIA */}
@@ -346,6 +397,61 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
               </table>
             </div>
 
+            {/* OTROS CONCEPTOS */}
+            <div className="border rounded">
+              <div className="bg-indigo-700 text-white px-3 py-2 font-bold text-center">
+                OTROS CONCEPTOS
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-200">
+                  <tr>
+                    <th className="border p-2">CONCEPTO</th>
+                    <th className="border p-2">CANTIDAD</th>
+                    <th className="border p-2">VALOR</th>
+                    <th className="border p-2">VALOR TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {otrosConceptosCalculados.map((item, idx) => (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="border p-2 font-medium">{item.concepto}</td>
+                      <td className="border p-2">
+                        {(idx === 0) ? (
+                          <Input 
+                            type="number" 
+                            className="h-7 text-xs" 
+                            value={otrosConceptos[idx]?.cantidad || 0} 
+                            onChange={e => {
+                              const u = [...otrosConceptos];
+                              u[idx].cantidad = parseFloat(e.target.value) || 0;
+                              setOtrosConceptos(u);
+                            }} 
+                          />
+                        ) : '-'}
+                      </td>
+                      <td className="border p-2">
+                        {(idx === 0 || idx === 3 || idx === 5) ? (
+                          <Input 
+                            type="number" 
+                            className="h-7 text-xs" 
+                            value={otrosConceptos[idx]?.valor || 0} 
+                            onChange={e => {
+                              const u = [...otrosConceptos];
+                              u[idx].valor = parseFloat(e.target.value) || 0;
+                              setOtrosConceptos(u);
+                            }} 
+                          />
+                        ) : '-'}
+                      </td>
+                      <td className="border p-2 text-right font-semibold text-blue-700">
+                        {formatCurrency(item.valor_total)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
             {/* TOTAL GENERAL */}
             <div className="bg-green-500 text-white border-4 border-green-700 p-4 font-bold text-right text-xl">
               TOTAL GENERAL DEL LOTE: {formatCurrency(totalGeneral)}

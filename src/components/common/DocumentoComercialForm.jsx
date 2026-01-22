@@ -28,6 +28,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [showLotePopup, setShowLotePopup] = useState(false);
   const [loteData, setLoteData] = useState({ codigo_lote: '', estado_cuero: 'CRU' });
+  const [lotesDisponibles, setLotesDisponibles] = useState([]);
 
   useEffect(() => {
       loadCatalogo();
@@ -45,12 +46,22 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
   const loadCuentas = async () => {
       try {
-          const [cajasData, bancosData] = await Promise.all([
+          const [cajasData, bancosData, comprasData] = await Promise.all([
               Caja.list(),
-              CuentaBancaria.list()
+              CuentaBancaria.list(),
+              OrdenCompra.list()
           ]);
           setCajas(cajasData);
           setCuentasBancarias(bancosData);
+          
+          // Extraer códigos de lote únicos de compras con prefijo CH
+          const lotes = comprasData
+            .filter(c => c.prefijo_documento === 'CH' && c.codigo_lote_inventario)
+            .map(c => ({
+              codigo: c.codigo_lote_inventario,
+              estado: c.estado_cuero || 'CRU'
+            }));
+          setLotesDisponibles(lotes);
       } catch (error) {
           console.error("Error loading accounts:", error);
       }
@@ -146,16 +157,36 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     }
   }, [documento, open, itemsCatalogo, terceros, tipoDocumento, tipoItem]);
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = async (field, value) => {
       if (field === 'prefijo_documento' && value === 'CH' && tipoDocumento === 'compra') {
-          // Generar código de lote automático
+          // Generar código de lote automático con consecutivo
           const now = new Date();
           const year = now.getFullYear();
           const month = String(now.getMonth() + 1).padStart(2, '0');
-          const consecutivo = '001'; // Se puede mejorar con lógica de consecutivo
-          const codigoLote = `L${year}${month}-${consecutivo}`;
-          setLoteData({ codigo_lote: codigoLote, estado_cuero: 'CRU' });
+          
+          // Obtener último lote del mes actual
+          try {
+            const compras = await OrdenCompra.filter({ prefijo_documento: 'CH' });
+            const lotesDelMes = compras
+              .filter(c => c.codigo_lote_inventario && c.codigo_lote_inventario.startsWith(`L${year}${month}`))
+              .map(c => {
+                const match = c.codigo_lote_inventario.match(/L\d{6}-(\d{3})/);
+                return match ? parseInt(match[1]) : 0;
+              });
+            const maxConsecutivo = lotesDelMes.length > 0 ? Math.max(...lotesDelMes) : 0;
+            const nuevoConsecutivo = String(maxConsecutivo + 1).padStart(3, '0');
+            const codigoLote = `L${year}${month}-${nuevoConsecutivo}`;
+            setLoteData({ codigo_lote: codigoLote, estado_cuero: 'CRU' });
+          } catch (e) {
+            setLoteData({ codigo_lote: `L${year}${month}-001`, estado_cuero: 'CRU' });
+          }
           setShowLotePopup(true);
+      }
+      
+      if (field === 'condicion_pago' && value === 'credito') {
+          // Cuando es crédito, valor pagado debe ser 0
+          setFormData(prev => ({ ...prev, condicion_pago: value, valor_pagado: 0 }));
+          return;
       }
       
       if (field === 'proveedor_id' || field === 'cliente_id') {
@@ -1219,10 +1250,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           <div className="space-y-4">
             <div>
               <Label>Código Lote *</Label>
-              <Input 
-                value={loteData.codigo_lote} 
-                onChange={e => setLoteData({...loteData, codigo_lote: e.target.value})} 
-              />
+              <Select value={loteData.codigo_lote} onValueChange={v => setLoteData({...loteData, codigo_lote: v})}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar lote activo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={loteData.codigo_lote}>{loteData.codigo_lote} (Nuevo)</SelectItem>
+                  {lotesDisponibles.map((lote, idx) => (
+                    <SelectItem key={idx} value={lote.codigo}>
+                      {lote.codigo} - {lote.estado}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Estado del Cuero *</Label>

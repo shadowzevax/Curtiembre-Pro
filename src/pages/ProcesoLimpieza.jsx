@@ -374,7 +374,7 @@ export default function ProcesoLimpieza() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Cantidad Pieles</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => handleCantidadPielesChange(e.target.value)} /></div>
+              <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => handleCantidadPielesChange(e.target.value)} /></div>
               <div>
                 <Label>Sección *</Label>
                 <Select value={currentItem?.seccion || 'remojo'} onValueChange={v => setCurrentItem({...currentItem, seccion: v})}>
