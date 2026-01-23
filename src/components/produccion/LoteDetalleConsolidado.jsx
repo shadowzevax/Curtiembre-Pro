@@ -119,31 +119,44 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
   
   // Calcular valores de "Otros Conceptos" automáticamente
   const calcularOtrosConceptos = () => {
+    if (!otrosConceptos || otrosConceptos.length === 0) {
+      return [
+        { concepto: 'CARNAZA QUE DEJA EN KILOS', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'COSTOS NETOS', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'COSTO DE CROSTA POR HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'PROMEDIO DE MEDIDA PIES/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'COSTO DE CROSTA POR PIE', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'COSTO DE PINTURA TERMINADA/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'COSTO DE UNA HOJA YA TERMINADA', cantidad: 0, valor: 0, valor_total: 0 },
+        { concepto: 'COSTO DEL PIE TERMINADO', cantidad: 0, valor: 0, valor_total: 0 }
+      ];
+    }
+    
     const updated = [...otrosConceptos];
     
     // 1. CARNAZA QUE DEJA EN KILOS (manual)
-    updated[0].valor_total = (updated[0].cantidad || 0) * (updated[0].valor || 0);
+    updated[0].valor_total = (updated[0]?.cantidad || 0) * (updated[0]?.valor || 0);
     
     // 2. COSTOS NETOS = SUMAS TOTAL LOTE - CARNAZA
-    updated[1].valor_total = sumasTotalLote - updated[0].valor_total;
+    updated[1].valor_total = sumasTotalLote - (updated[0]?.valor_total || 0);
     
     // 3. COSTO DE CROSTA POR HOJA = COSTOS NETOS / CANTIDAD TOTAL HOJAS
     const cantHojas = loteData?.cantidad_total_lote_hojas || 1;
-    updated[2].valor_total = updated[1].valor_total / cantHojas;
+    updated[2].valor_total = (updated[1]?.valor_total || 0) / cantHojas;
     
     // 4. PROMEDIO DE MEDIDA PIES/HOJA (manual - valor)
     
     // 5. COSTO DE CROSTA POR PIE = COSTO DE CROSTA POR HOJA / PROMEDIO PIES/HOJA
-    const promPies = updated[3].valor || 1;
-    updated[4].valor_total = updated[2].valor_total / promPies;
+    const promPies = updated[3]?.valor || 1;
+    updated[4].valor_total = (updated[2]?.valor_total || 0) / promPies;
     
     // 6. COSTO DE PINTURA TERMINADA/HOJA (manual - valor)
     
     // 7. COSTO DE UNA HOJA YA TERMINADA = COSTO DE CROSTA POR HOJA + COSTO DE PINTURA/HOJA
-    updated[6].valor_total = updated[2].valor_total + (updated[5].valor || 0);
+    updated[6].valor_total = (updated[2]?.valor_total || 0) + (updated[5]?.valor || 0);
     
     // 8. COSTO DEL PIE TERMINADO = COSTO HOJA TERMINADA / PROMEDIO PIES/HOJA
-    updated[7].valor_total = updated[6].valor_total / promPies;
+    updated[7].valor_total = (updated[6]?.valor_total || 0) / promPies;
     
     return updated;
   };
