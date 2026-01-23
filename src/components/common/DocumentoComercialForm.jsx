@@ -438,37 +438,51 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
             });
             
             for (const mov of movimientosAntiguos) {
-                await MovimientoInventario.delete(mov.id);
-                
-                // Revertir el stock del producto
+                // Revertir el stock del producto ANTES de eliminar
                 if (mov.insumo_id) {
-                    const catalogoItem = await ProductoCatalogo.filter({ codigo: mov.insumo_id });
-                    if (catalogoItem.length > 0) {
-                        const cat = catalogoItem[0].categoria;
+                    try {
+                        // Buscar directamente por ID en cada entidad
                         let entityType = null;
                         let currentItemData = null;
                         
-                        if (cat === 'materia_prima') {
-                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                        } else if (cat === 'insumos_quimicos') {
-                            const items = await Insumo.filter({ id: mov.insumo_id });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
-                        } else if (cat === 'productos_terminados') {
-                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        // Intentar en ProductoTerminado (pieles)
+                        const itemsPT = await ProductoTerminado.filter({ id: mov.insumo_id });
+                        if (itemsPT.length > 0) {
+                            currentItemData = itemsPT[0];
+                            entityType = ProductoTerminado;
+                        }
+                        
+                        // Si no, intentar en Insumo (insumos químicos)
+                        if (!currentItemData) {
+                            const itemsInsumo = await Insumo.filter({ id: mov.insumo_id });
+                            if (itemsInsumo.length > 0) {
+                                currentItemData = itemsInsumo[0];
+                                entityType = Insumo;
+                            }
                         }
                         
                         if (entityType && currentItemData) {
-                            const stockActual = currentItemData.stock_actual || 0;
+                            // Recalcular stock desde movimientos EXCLUYENDO este que vamos a borrar
+                            const todosMovimientos = await MovimientoInventario.filter({ insumo_id: mov.insumo_id });
+                            const stockSinEsteMovimiento = todosMovimientos
+                                .filter(m => m.id !== mov.id)
+                                .reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+                            
                             await entityType.update(currentItemData.id, {
-                                stock_actual: stockActual - (mov.cantidad || 0)
+                                stock_actual: stockSinEsteMovimiento
                             });
+                            
+                            console.log(`✅ Stock revertido para ${currentItemData.codigo}: ${stockSinEsteMovimiento}`);
                         }
+                    } catch (err) {
+                        console.error('Error revirtiendo stock:', err);
                     }
                 }
+                
+                // Ahora sí eliminar el movimiento
+                await MovimientoInventario.delete(mov.id);
             }
-            console.log('✅ Movimientos antiguos revertidos');
+            console.log('✅ Movimientos antiguos eliminados');
         } catch (e) {
             console.error('Error revirtiendo movimientos:', e);
         }
