@@ -250,18 +250,92 @@ export default function PedidosIndividuales() {
       </Card>
 
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Detalle del Pedido</DialogTitle></DialogHeader>
           {selectedPedido && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <p><strong>No. ID:</strong> {selectedPedido.numero_pedido}</p>
+              <div className="bg-blue-50 p-4 rounded-lg grid grid-cols-3 gap-3 text-sm border border-blue-200">
+                <p><strong>No. ID:</strong> <span className="font-mono">{selectedPedido.numero_pedido}</span></p>
+                <p><strong>Fecha Solicitud:</strong> {formatDate(selectedPedido.fecha_solicitud)}</p>
                 <p><strong>Marroquinero:</strong> {selectedPedido.nombre_marroquinero}</p>
-                <p><strong>Fecha:</strong> {formatDate(selectedPedido.fecha_solicitud)}</p>
-                <p><strong>Total Hojas:</strong> {selectedPedido.total_hojas}</p>
               </div>
+
+              {selectedPedido.items && selectedPedido.items.length > 0 && (
+                <div>
+                  <h4 className="font-bold mb-3 text-lg">Detalle del Pedido</h4>
+                  <div className="border rounded-lg overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
+                          {(() => {
+                            const placas = new Set();
+                            selectedPedido.items.forEach(item => {
+                              Object.keys(item).forEach(key => {
+                                if (key !== 'color' && key !== 'total' && item[key] > 0) {
+                                  placas.add(key);
+                                }
+                              });
+                            });
+                            return Array.from(placas).map(placa => (
+                              <th key={placa} className="border p-2 text-center">{placa.toUpperCase()}</th>
+                            ));
+                          })()}
+                          <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedPedido.items.map((item, idx) => {
+                          const placas = new Set();
+                          selectedPedido.items.forEach(i => {
+                            Object.keys(i).forEach(key => {
+                              if (key !== 'color' && key !== 'total' && i[key] > 0) {
+                                placas.add(key);
+                              }
+                            });
+                          });
+                          return (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className="border p-2 font-medium sticky left-0 bg-white">{item.color}</td>
+                              {Array.from(placas).map(placa => (
+                                <td key={placa} className="border p-2 text-center">
+                                  {item[placa] || 0}
+                                </td>
+                              ))}
+                              <td className="border p-2 text-center font-bold bg-yellow-50">{item.total}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-green-100 font-bold">
+                          <td className="border p-2 sticky left-0 bg-green-100">TOTALES</td>
+                          {(() => {
+                            const placas = new Set();
+                            selectedPedido.items.forEach(item => {
+                              Object.keys(item).forEach(key => {
+                                if (key !== 'color' && key !== 'total' && item[key] > 0) {
+                                  placas.add(key);
+                                }
+                              });
+                            });
+                            return Array.from(placas).map(placa => {
+                              const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
+                              return (
+                                <td key={placa} className="border p-2 text-center">{total}</td>
+                              );
+                            });
+                          })()}
+                          <td className="border p-2 text-center bg-yellow-200">{selectedPedido.total_hojas}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
