@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProcesoProduccion } from '@/entities/all';
-import { Loader2, Save, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Save, Plus, Trash2, Edit2, Printer, Download } from 'lucide-react';
 import { SeccionProductosQuimicos, SeccionRecurtidoPorColor } from './TablaCostosSecciones';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
@@ -26,6 +26,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
   const [serviciosManoObra, setServiciosManoObra] = useState([]);
   const [otrosCostos, setOtrosCostos] = useState([]);
   const [otrosConceptos, setOtrosConceptos] = useState([]);
+  const [editingIndexes, setEditingIndexes] = useState({ maquinaria: null, manoObra: null, otros: null });
 
   useEffect(() => {
     if (open && codigoLote) {
@@ -188,6 +189,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
           otros_conceptos: otrosConceptosCalculados
         });
         alert('Costos guardados exitosamente');
+        setEditingIndexes({ maquinaria: null, manoObra: null, otros: null });
       }
     } catch (error) {
       console.error('Error:', error);
@@ -195,6 +197,39 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportExcel = () => {
+    const csvData = [
+      ['TABLA DE COSTOS POR LOTE', codigoLote],
+      [''],
+      ['CODIGO LOTE', codigoLote],
+      ['PROVEEDOR', loteData.proveedor_id || 'N/A'],
+      ['NO. DOCUMENTO', loteData.no_documento || 'N/A'],
+      ['CANT. TOTAL PIELES', loteData.cantidad_pieles || 0],
+      ['CANT. TOTAL HOJAS', loteData.cantidad_total_lote_hojas || 0],
+      [''],
+      ['TOTAL COSTO PROCESO CUERO', totalCostoProceso],
+      ['SUBTOTAL SERVICIO DE MAQUINARIA', subtotalMaquinaria],
+      ['SUBTOTAL SERVICIO DE MANO DE OBRA', subtotalManoObra],
+      ['SUBTOTAL OTROS COSTOS', subtotalOtros],
+      ['SUMAS TOTAL LOTE', sumasTotalLote],
+      ['COSTO POR PIEL PUESTA EN PASTO', sumasTotalLote / (loteData.cantidad_pieles || 1)],
+      ['TOTAL GENERAL DEL LOTE', totalGeneral]
+    ];
+
+    const csv = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `costos_lote_${codigoLote}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!loteData) return null;
@@ -245,11 +280,6 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
             <div className="bg-yellow-300 border-2 border-yellow-500 p-2 font-bold text-right text-base">
               TOTAL COSTO PROCESO CUERO: {formatCurrency(totalCostoProceso)}
             </div>
-            
-            {/* SUMAS TOTAL LOTE */}
-            <div className="bg-orange-300 border-2 border-orange-500 p-2 font-bold text-right text-base">
-              SUMAS TOTAL LOTE: {formatCurrency(sumasTotalLote)}
-            </div>
 
             {/* SERVICIO DE MAQUINARIA */}
             <div className="border rounded">
@@ -289,9 +319,14 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
                       }} /></td>
                       <td className="border p-1 text-right font-semibold">{formatCurrency(s.cantidad_pieles * s.valor_unitario)}</td>
                       <td className="border p-1 text-center">
-                        <Button size="sm" variant="destructive" onClick={() => setServiciosMaquinaria(serviciosMaquinaria.filter((_, i) => i !== idx))}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                        <div className="flex gap-1 justify-center">
+                          <Button size="sm" variant="outline" onClick={() => setEditingIndexes({...editingIndexes, maquinaria: idx})}>
+                            <Edit2 className="w-3 h-3" />
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => setServiciosMaquinaria(serviciosMaquinaria.filter((_, i) => i !== idx))}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -342,9 +377,14 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
                       }} /></td>
                       <td className="border p-1 text-right font-semibold">{formatCurrency(s.cantidad * s.valor)}</td>
                       <td className="border p-1 text-center">
-                        <Button size="sm" variant="destructive" onClick={() => setServiciosManoObra(serviciosManoObra.filter((_, i) => i !== idx))}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                        <div className="flex gap-1 justify-center">
+                          <Button size="sm" variant="outline" onClick={() => setEditingIndexes({...editingIndexes, manoObra: idx})}>
+                            <Edit2 className="w-3 h-3" />
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => setServiciosManoObra(serviciosManoObra.filter((_, i) => i !== idx))}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -395,15 +435,30 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
                       }} /></td>
                       <td className="border p-1 text-right font-semibold">{formatCurrency(c.cantidad * c.valor)}</td>
                       <td className="border p-1 text-center">
-                        <Button size="sm" variant="destructive" onClick={() => setOtrosCostos(otrosCostos.filter((_, i) => i !== idx))}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                        <div className="flex gap-1 justify-center">
+                          <Button size="sm" variant="outline" onClick={() => setEditingIndexes({...editingIndexes, otros: idx})}>
+                            <Edit2 className="w-3 h-3" />
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => setOtrosCostos(otrosCostos.filter((_, i) => i !== idx))}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   <tr className="bg-yellow-200 font-bold">
                     <td colSpan="3" className="border p-2 text-right">SUBTOTAL OTROS COSTOS</td>
                     <td className="border p-2 text-right">{formatCurrency(subtotalOtros)}</td>
+                    <td></td>
+                  </tr>
+                  <tr className="bg-orange-300 font-bold text-base">
+                    <td colSpan="3" className="border p-2 text-right">SUMAS TOTAL LOTE</td>
+                    <td className="border p-2 text-right">{formatCurrency(sumasTotalLote)}</td>
+                    <td></td>
+                  </tr>
+                  <tr className="bg-blue-200 font-bold">
+                    <td colSpan="3" className="border p-2 text-right">COSTO POR PIEL PUESTA EN PASTO</td>
+                    <td className="border p-2 text-right">{formatCurrency(sumasTotalLote / (loteData.cantidad_pieles || 1))}</td>
                     <td></td>
                   </tr>
                 </tbody>
@@ -472,12 +527,24 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
           </div>
         )}
 
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
-          <Button onClick={guardarCostosManuales} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-            Guardar Costos Manuales
-          </Button>
+        <div className="flex justify-between items-center mt-4">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handlePrint}>
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimir
+            </Button>
+            <Button variant="outline" onClick={handleExportExcel}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar Excel
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
+            <Button onClick={guardarCostosManuales} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+              Guardar Costos Manuales
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

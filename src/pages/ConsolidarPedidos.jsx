@@ -21,6 +21,15 @@ export default function ConsolidarPedidos() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    // Cargar IDs seleccionados desde URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const selectedIds = urlParams.get('selected');
+    if (selectedIds) {
+      setSelectedForConsolidation(selectedIds.split(','));
+    }
+  }, []);
+
   const loadData = async () => {
     try {
       const data = await PedidoMarroquinero.list();

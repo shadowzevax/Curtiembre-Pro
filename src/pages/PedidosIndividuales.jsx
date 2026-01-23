@@ -241,7 +241,10 @@ export default function PedidosIndividuales() {
           {selectedForConsolidation.length > 0 && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded flex justify-between items-center">
               <span className="font-semibold">{selectedForConsolidation.length} pedido(s) seleccionado(s) para consolidar</span>
-              <Button onClick={() => window.location.href = '/ConsolidarPedidos'}>
+              <Button onClick={() => {
+                const selectedIds = selectedForConsolidation.join(',');
+                window.location.href = `/ConsolidarPedidos?selected=${selectedIds}`;
+              }}>
                 Ir a Consolidar
               </Button>
             </div>
@@ -269,15 +272,17 @@ export default function PedidosIndividuales() {
                         <tr>
                           <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
                           {(() => {
-                            const placas = new Set();
+                            const placasMap = new Map();
                             selectedPedido.items.forEach(item => {
                               Object.keys(item).forEach(key => {
-                                if (key !== 'color' && key !== 'total' && item[key] > 0) {
-                                  placas.add(key);
+                                if (key !== 'color' && key !== 'total' && typeof item[key] === 'number') {
+                                  if (item[key] > 0 && !placasMap.has(key)) {
+                                    placasMap.set(key, true);
+                                  }
                                 }
                               });
                             });
-                            return Array.from(placas).map(placa => (
+                            return Array.from(placasMap.keys()).map(placa => (
                               <th key={placa} className="border p-2 text-center">{placa.toUpperCase()}</th>
                             ));
                           })()}
@@ -286,18 +291,21 @@ export default function PedidosIndividuales() {
                       </thead>
                       <tbody>
                         {selectedPedido.items.map((item, idx) => {
-                          const placas = new Set();
+                          const placasMap = new Map();
                           selectedPedido.items.forEach(i => {
                             Object.keys(i).forEach(key => {
-                              if (key !== 'color' && key !== 'total' && i[key] > 0) {
-                                placas.add(key);
+                              if (key !== 'color' && key !== 'total' && typeof i[key] === 'number') {
+                                if (i[key] > 0 && !placasMap.has(key)) {
+                                  placasMap.set(key, true);
+                                }
                               }
                             });
                           });
+                          const placasArray = Array.from(placasMap.keys());
                           return (
                             <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                               <td className="border p-2 font-medium sticky left-0 bg-white">{item.color}</td>
-                              {Array.from(placas).map(placa => (
+                              {placasArray.map(placa => (
                                 <td key={placa} className="border p-2 text-center">
                                   {item[placa] || 0}
                                 </td>
@@ -309,15 +317,17 @@ export default function PedidosIndividuales() {
                         <tr className="bg-green-100 font-bold">
                           <td className="border p-2 sticky left-0 bg-green-100">TOTALES</td>
                           {(() => {
-                            const placas = new Set();
+                            const placasMap = new Map();
                             selectedPedido.items.forEach(item => {
                               Object.keys(item).forEach(key => {
-                                if (key !== 'color' && key !== 'total' && item[key] > 0) {
-                                  placas.add(key);
+                                if (key !== 'color' && key !== 'total' && typeof item[key] === 'number') {
+                                  if (item[key] > 0 && !placasMap.has(key)) {
+                                    placasMap.set(key, true);
+                                  }
                                 }
                               });
                             });
-                            return Array.from(placas).map(placa => {
+                            return Array.from(placasMap.keys()).map(placa => {
                               const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
                               return (
                                 <td key={placa} className="border p-2 text-center">{total}</td>
