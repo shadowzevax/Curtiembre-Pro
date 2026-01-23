@@ -570,41 +570,47 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                  }
 
                  if (entityType && currentItemData) {
-                     // Obtener Stock Actual desde movimientos
+                     // Obtener todos los movimientos actuales (ya sin los viejos si estamos editando)
                      const movimientos = await MovimientoInventario.filter({ insumo_id: currentItemData.id });
                      const stockActual = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-                     const costoPromedioActual = parseFloat(currentItemData.costo_promedio) || 0;
-                     
+
                      const cantidadCompra = parseFloat(item.cantidad) || 0;
                      const costoUnitarioCompra = parseFloat(item.precio_unitario) || 0;
-                     
+
                      const nuevoStock = stockActual + cantidadCompra;
-                     let nuevoCostoPromedio = costoUnitarioCompra; // Default
-                     
+
+                     // Calcular nuevo costo promedio ponderado correctamente
+                     let nuevoCostoPromedio = costoUnitarioCompra;
+
                      if (nuevoStock > 0) {
-                         const valorTotalAnterior = stockActual * costoPromedioActual;
+                         // Calcular valor total de todos los movimientos de entrada existentes
+                         const movimientosEntrada = movimientos.filter(m => m.tipo_movimiento === 'entrada');
+                         const valorTotalExistente = movimientosEntrada.reduce((sum, m) => {
+                             return sum + (parseFloat(m.cantidad) || 0) * (parseFloat(m.costo_unitario) || 0);
+                         }, 0);
+
                          const valorTotalCompra = cantidadCompra * costoUnitarioCompra;
-                         nuevoCostoPromedio = (valorTotalAnterior + valorTotalCompra) / nuevoStock;
+                         nuevoCostoPromedio = (valorTotalExistente + valorTotalCompra) / nuevoStock;
                      }
 
-                     // Actualizar Costo Promedio en la Entidad
-                     await entityType.update(currentItemData.id, {
-                         costo_promedio: nuevoCostoPromedio,
-                         stock_actual: nuevoStock
-                     });
-                     
-                     // Crear Movimiento de Entrada
+                     // Crear Movimiento de Entrada PRIMERO (con el costo unitario de la compra)
                      await MovimientoInventario.create({
                          tipo_movimiento: 'entrada',
                          insumo_id: currentItemData.id,
                          cantidad: cantidadCompra,
-                         costo_unitario: nuevoCostoPromedio,
+                         costo_unitario: costoUnitarioCompra,
                          fecha_movimiento: finalData.fecha_orden,
                          referencia: `${finalData.prefijo_documento}-${finalData.numero_documento}`,
                          observaciones: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
                          usuario_id: 'system'
                      });
-                     
+
+                     // Actualizar entidad con nuevo costo promedio y stock
+                     await entityType.update(currentItemData.id, {
+                         costo_promedio: nuevoCostoPromedio,
+                         stock_actual: nuevoStock
+                     });
+
                      console.log(`✅ Inventario actualizado para ${item.codigo}: Stock=${nuevoStock}, Costo Promedio=${nuevoCostoPromedio}`);
                  } else {
                      console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);

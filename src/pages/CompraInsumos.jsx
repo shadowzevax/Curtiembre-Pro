@@ -167,12 +167,84 @@ export default function CompraInsumos() {
   const handleDelete = async (ordenId) => {
     if (!window.confirm("¿Está seguro de que desea eliminar esta orden de compra?")) return;
     try {
+      const orden = ordenes.find(o => o.id === ordenId);
+      if (!orden) return;
+
+      // IMPORTANTE: Eliminar movimientos de inventario asociados ANTES de eliminar la compra
+      if (orden.afecta_inventario) {
+        const { MovimientoInventario, ProductoCatalogo, Insumo, ProductoTerminado } = await import('@/entities/all');
+        
+        const movimientosAEliminar = await MovimientoInventario.filter({ 
+          referencia: `${orden.prefijo_documento}-${orden.numero_documento}` 
+        });
+        
+        console.log(`🔍 Encontrados ${movimientosAEliminar.length} movimientos a eliminar`);
+        
+        for (const mov of movimientosAEliminar) {
+          if (mov.insumo_id) {
+            try {
+              // Buscar el producto en las entidades correctas
+              let entityType = null;
+              let currentItemData = null;
+              
+              const itemsPT = await ProductoTerminado.filter({ id: mov.insumo_id });
+              if (itemsPT.length > 0) {
+                currentItemData = itemsPT[0];
+                entityType = ProductoTerminado;
+              }
+              
+              if (!currentItemData) {
+                const itemsInsumo = await Insumo.filter({ id: mov.insumo_id });
+                if (itemsInsumo.length > 0) {
+                  currentItemData = itemsInsumo[0];
+                  entityType = Insumo;
+                }
+              }
+              
+              if (entityType && currentItemData) {
+                // Recalcular stock SIN este movimiento
+                const todosMovimientos = await MovimientoInventario.filter({ insumo_id: mov.insumo_id });
+                const stockSinEsteMovimiento = todosMovimientos
+                  .filter(m => m.id !== mov.id)
+                  .reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+                
+                // Recalcular costo promedio sin este movimiento
+                let nuevoCostoPromedio = 0;
+                if (stockSinEsteMovimiento > 0) {
+                  const movimientosRestantes = todosMovimientos.filter(m => m.id !== mov.id && m.tipo_movimiento === 'entrada');
+                  if (movimientosRestantes.length > 0) {
+                    const valorTotal = movimientosRestantes.reduce((sum, m) => {
+                      return sum + (parseFloat(m.cantidad) || 0) * (parseFloat(m.costo_unitario) || 0);
+                    }, 0);
+                    nuevoCostoPromedio = valorTotal / stockSinEsteMovimiento;
+                  }
+                }
+                
+                await entityType.update(currentItemData.id, {
+                  stock_actual: stockSinEsteMovimiento,
+                  costo_promedio: nuevoCostoPromedio
+                });
+                
+                console.log(`✅ Stock actualizado para ${currentItemData.codigo}: Stock=${stockSinEsteMovimiento}, Costo=${nuevoCostoPromedio}`);
+              }
+            } catch (err) {
+              console.error('Error actualizando stock:', err);
+            }
+          }
+          
+          // Eliminar el movimiento
+          await MovimientoInventario.delete(mov.id);
+          console.log(`✅ Movimiento ${mov.id} eliminado`);
+        }
+      }
+
+      // Ahora sí eliminar la orden de compra
       await OrdenCompra.delete(ordenId);
       loadData();
       alert("Orden de compra eliminada con éxito.");
     } catch (error) {
       console.error("Error deleting order:", error);
-      alert("Error al eliminar la orden de compra.");
+      alert("Error al eliminar la orden de compra: " + error.message);
     }
   };
 
