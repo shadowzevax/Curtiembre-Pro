@@ -62,6 +62,13 @@ export default function InventarioInsumos() {
 
     useEffect(() => {
         loadData();
+        
+        // Recargar cada 3 segundos para mantener sincronizado con compras
+        const interval = setInterval(() => {
+            loadData();
+        }, 3000);
+        
+        return () => clearInterval(interval);
     }, [loadData]);
 
     // Filtrado por código y descripción
