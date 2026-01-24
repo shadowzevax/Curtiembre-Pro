@@ -272,17 +272,16 @@ export default function PedidosIndividuales() {
                         <tr>
                           <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
                           {(() => {
-                            const placasMap = new Map();
+                            // Extraer TODAS las placas que existen en ANY item del pedido
+                            const placasSet = new Set();
                             selectedPedido.items.forEach(item => {
                               Object.keys(item).forEach(key => {
-                                if (key !== 'color' && key !== 'total' && typeof item[key] === 'number') {
-                                  if (item[key] > 0 && !placasMap.has(key)) {
-                                    placasMap.set(key, true);
-                                  }
+                                if (key !== 'color' && key !== 'total') {
+                                  placasSet.add(key);
                                 }
                               });
                             });
-                            return Array.from(placasMap.keys()).map(placa => (
+                            return Array.from(placasSet).sort().map(placa => (
                               <th key={placa} className="border p-2 text-center">{placa.toUpperCase()}</th>
                             ));
                           })()}
@@ -291,20 +290,20 @@ export default function PedidosIndividuales() {
                       </thead>
                       <tbody>
                         {selectedPedido.items.map((item, idx) => {
-                          const placasMap = new Map();
+                          // Extraer todas las placas disponibles
+                          const placasSet = new Set();
                           selectedPedido.items.forEach(i => {
                             Object.keys(i).forEach(key => {
-                              if (key !== 'color' && key !== 'total' && typeof i[key] === 'number') {
-                                if (i[key] > 0 && !placasMap.has(key)) {
-                                  placasMap.set(key, true);
-                                }
+                              if (key !== 'color' && key !== 'total') {
+                                placasSet.add(key);
                               }
                             });
                           });
-                          const placasArray = Array.from(placasMap.keys());
+                          const placasArray = Array.from(placasSet).sort();
+                          
                           return (
                             <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                              <td className="border p-2 font-medium sticky left-0 bg-white">{item.color}</td>
+                              <td className="border p-2 font-medium sticky left-0 bg-white z-10">{item.color}</td>
                               {placasArray.map(placa => (
                                 <td key={placa} className="border p-2 text-center">
                                   {item[placa] || 0}
@@ -315,19 +314,17 @@ export default function PedidosIndividuales() {
                           );
                         })}
                         <tr className="bg-green-100 font-bold">
-                          <td className="border p-2 sticky left-0 bg-green-100">TOTALES</td>
+                          <td className="border p-2 sticky left-0 bg-green-100 z-10">TOTALES</td>
                           {(() => {
-                            const placasMap = new Map();
+                            const placasSet = new Set();
                             selectedPedido.items.forEach(item => {
                               Object.keys(item).forEach(key => {
-                                if (key !== 'color' && key !== 'total' && typeof item[key] === 'number') {
-                                  if (item[key] > 0 && !placasMap.has(key)) {
-                                    placasMap.set(key, true);
-                                  }
+                                if (key !== 'color' && key !== 'total') {
+                                  placasSet.add(key);
                                 }
                               });
                             });
-                            return Array.from(placasMap.keys()).map(placa => {
+                            return Array.from(placasSet).sort().map(placa => {
                               const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
                               return (
                                 <td key={placa} className="border p-2 text-center">{total}</td>

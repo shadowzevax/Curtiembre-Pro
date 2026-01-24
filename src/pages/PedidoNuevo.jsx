@@ -186,21 +186,21 @@ export default function PedidoNuevo() {
 
             {currentPedido.items.length > 0 && (
               <div className="overflow-x-auto border rounded">
-                <table className="w-full text-xs">
+                <table className="w-full text-xs border-collapse">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-2">COLOR</th>
-                      {todasLasPlacas.map(placa => <th key={placa.key} className="border p-2">{placa.label}</th>)}
-                      <th className="border p-2 bg-yellow-100">TOTAL HOJAS</th>
-                      <th className="border p-2"></th>
+                      <th className="border p-2 sticky left-0 bg-gray-100 z-10 min-w-[150px]">COLOR</th>
+                      {todasLasPlacas.map(placa => <th key={placa.key} className="border p-2 min-w-[80px]">{placa.label}</th>)}
+                      <th className="border p-2 bg-yellow-100 min-w-[100px]">TOTAL HOJAS</th>
+                      <th className="border p-2 min-w-[60px]"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentPedido.items.map((item, idx) => (
                       <tr key={idx}>
-                        <td className="border p-1">
+                        <td className="border p-1 sticky left-0 bg-white z-10">
                           <Select value={item.color} onValueChange={v => actualizarItem(idx, 'color', v)}>
-                            <SelectTrigger className="h-8"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                             <SelectContent>
                               {todosLosColores.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                             </SelectContent>
@@ -208,7 +208,12 @@ export default function PedidoNuevo() {
                         </td>
                         {todasLasPlacas.map(placa => (
                           <td key={placa.key} className="border p-1">
-                            <Input type="number" className="h-8 text-center" value={item[placa.key] || 0} onChange={e => actualizarItem(idx, placa.key, e.target.value)} />
+                            <Input 
+                              type="number" 
+                              className="h-8 text-center text-xs w-full min-w-[60px]" 
+                              value={item[placa.key] || 0} 
+                              onChange={e => actualizarItem(idx, placa.key, e.target.value)} 
+                            />
                           </td>
                         ))}
                         <td className="border p-1 text-center font-bold bg-yellow-50">{item.total}</td>
@@ -220,7 +225,7 @@ export default function PedidoNuevo() {
                       </tr>
                     ))}
                     <tr className="bg-green-100 font-bold">
-                      <td className="border p-2">TOTAL</td>
+                      <td className="border p-2 sticky left-0 bg-green-100 z-10">TOTAL</td>
                       {todasLasPlacas.map(placa => (
                         <td key={placa.key} className="border p-2 text-center">
                           {currentPedido.items.reduce((sum, item) => sum + (item[placa.key] || 0), 0)}

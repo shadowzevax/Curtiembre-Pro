@@ -74,17 +74,27 @@ export default function ProcesoRecepcion() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleOpenModal = (item = null) => {
+  const handleOpenModal = async (item = null) => {
     setIsEditing(!!item);
     if (!item) {
-      const codigoLote = `L${String(nextLoteNumber).padStart(4, '0')}`;
+      // Generar código LT2026-001
+      const year = new Date().getFullYear();
+      const recepcionesDelAnio = recepciones.filter(r => r.codigo_lote?.startsWith(`LT${year}`));
+      const consecutivos = recepcionesDelAnio.map(r => {
+        const match = r.codigo_lote?.match(/LT\d{4}-(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      });
+      const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
+      const codigoLote = `LT${year}-${String(nextConsecutivo).padStart(3, '0')}`;
+      
       setCurrentItem({
         tipo_proceso: 'recepcion',
         codigo_lote: codigoLote,
         fecha_inicio: new Date().toISOString().split('T')[0],
         proveedor_id: '',
         no_documento: '',
-        nombre_inventario: '',
+        codigo_producto: '',
+        descripcion_producto: '',
         cantidad_total_lote_hojas: 0,
         cantidad_total_lote_pieles: 0,
         peso_total: 0,
@@ -138,17 +148,60 @@ export default function ProcesoRecepcion() {
         sublotes: currentItem.dividir_lote ? sublotes : [],
         numero_proceso: currentItem.codigo_lote
       };
+      
+      // Guardar el proceso
+      let procesoId;
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
+        procesoId = currentItem.id;
       } else {
-        await ProcesoProduccion.create(dataToSave);
+        const created = await ProcesoProduccion.create(dataToSave);
+        procesoId = created.id;
       }
+      
+      // AFECTAR INVENTARIO DE MATERIA PRIMA (restar cantidad de hojas)
+      if (!isEditing && currentItem.cantidad_total_lote_hojas > 0 && currentItem.codigo_producto) {
+        const { MovimientoInventario } = await import('@/entities/all');
+        
+        // Buscar el producto en materia prima por código
+        const productosMP = await ProductoTerminado.filter({ 
+          codigo: currentItem.codigo_producto, 
+          categoria: 'pieles' 
+        });
+        
+        if (productosMP.length > 0) {
+          const producto = productosMP[0];
+          
+          // Crear movimiento de salida (negativo)
+          await MovimientoInventario.create({
+            tipo_movimiento: 'salida',
+            insumo_id: producto.id,
+            cantidad: -(currentItem.cantidad_total_lote_hojas),
+            costo_unitario: producto.costo_promedio || 0,
+            fecha_movimiento: currentItem.fecha_inicio,
+            referencia: `RECEPCION-${currentItem.codigo_lote}`,
+            observaciones: `Salida por recepción de lote ${currentItem.codigo_lote}`,
+            usuario_id: 'system'
+          });
+          
+          // Actualizar stock en ProductoTerminado
+          const movimientos = await MovimientoInventario.filter({ insumo_id: producto.id });
+          const nuevoStock = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0) - currentItem.cantidad_total_lote_hojas;
+          
+          await ProductoTerminado.update(producto.id, {
+            stock_actual: nuevoStock
+          });
+          
+          console.log(`✅ Inventario actualizado: -${currentItem.cantidad_total_lote_hojas} hojas de ${currentItem.codigo_producto}`);
+        }
+      }
+      
       setShowModal(false);
       loadData();
       alert('Recepción guardada con éxito.');
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Error al guardar la recepción.');
+      alert('Error al guardar la recepción: ' + error.message);
     }
   };
 
@@ -205,7 +258,7 @@ export default function ProcesoRecepcion() {
     ...productos.map(p => ({ ...p, tipo: 'producto', displayName: p.descripcion || p.nombre }))
   ];
 
-  const headers = ['Código Lote', 'Fecha', 'Proveedor', 'Nombre Inventario', 'Cant. Hojas', 'Cant. Pieles', 'Peso Total', 'Estado', 'Acciones'];
+  const headers = ['Código Lote', 'Fecha', 'Proveedor', 'Código', 'Descripción', 'Cant. Hojas', 'Cant. Pieles', 'Peso Total', 'Estado', 'Acciones'];
   const renderRow = (item) => {
     const proveedor = proveedores.find(p => p.id === item.proveedor_id);
     return (
@@ -213,7 +266,8 @@ export default function ProcesoRecepcion() {
       <td>{item.codigo_lote}</td>
       <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
       <td>{proveedor?.nombre || 'N/A'}</td>
-      <td>{item.nombre_inventario || 'N/A'}</td>
+      <td>{item.codigo_producto || 'N/A'}</td>
+      <td>{item.descripcion_producto || item.nombre_inventario || 'N/A'}</td>
       <td>{item.cantidad_total_lote_hojas || item.cantidad_total_lote || 0}</td>
       <td>{item.cantidad_total_lote_pieles || 0}</td>
       <td>{item.peso_total} kg</td>
@@ -289,18 +343,38 @@ export default function ProcesoRecepcion() {
               </div>
             </div>
             <div><Label>No. de Documento</Label><Input value={currentItem?.no_documento || ''} onChange={e => setCurrentItem({...currentItem, no_documento: e.target.value})} placeholder="Número de factura o documento" /></div>
-            <div>
-              <Label>Nombre de Inventario *</Label>
-              <Select value={currentItem?.nombre_inventario || ''} onValueChange={v => setCurrentItem({...currentItem, nombre_inventario: v})}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar item del inventario" /></SelectTrigger>
-                <SelectContent>
-                  {todosLosItems.map(item => (
-                    <SelectItem key={item.id} value={item.displayName || 'sin-nombre'}>
-                      {item.displayName} ({item.tipo})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Código *</Label>
+                <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
+                  const catalogoProd = productos.find(p => p.codigo === v);
+                  setCurrentItem({
+                    ...currentItem, 
+                    codigo_producto: v,
+                    descripcion_producto: catalogoProd ? catalogoProd.descripcion : ''
+                  });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
+                  <SelectContent>
+                    {productos
+                      .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
+                      .map(prod => (
+                        <SelectItem key={prod.id} value={prod.codigo}>
+                          {prod.codigo}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Descripción *</Label>
+                <Input 
+                  value={currentItem?.descripcion_producto || ''} 
+                  readOnly 
+                  className="bg-gray-100" 
+                  placeholder="Auto-cargado desde catálogo"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-4 gap-4">
               <div><Label>Cantidad Total Lote en Hojas</Label><Input type="number" value={currentItem?.cantidad_total_lote_hojas || ''} onChange={e => setCurrentItem({...currentItem, cantidad_total_lote_hojas: parseFloat(e.target.value) || 0})} /></div>
@@ -356,25 +430,26 @@ export default function ProcesoRecepcion() {
         <DialogContent>
           <DialogHeader><DialogTitle>Detalle de Recepción</DialogTitle></DialogHeader>
           {selectedItem && (
-            <div className="space-y-3 text-sm">
-              <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
-              <p><span className="font-semibold">Fecha:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
-              <p><span className="font-semibold">Nombre Inventario:</span> {selectedItem.nombre_inventario || 'N/A'}</p>
-              <p><span className="font-semibold">Cantidad:</span> {selectedItem.cantidad_total_lote}</p>
-              <p><span className="font-semibold">Peso Total:</span> {selectedItem.peso_total} kg</p>
-              <p><span className="font-semibold">Estado:</span> {selectedItem.estado}</p>
-              {selectedItem.sublotes && selectedItem.sublotes.length > 0 && (
-                <div>
-                  <p className="font-semibold">Sublotes:</p>
-                  <ul className="list-disc pl-5">
-                    {selectedItem.sublotes.map((sub, idx) => (
-                      <li key={idx}>{sub.codigo} - Cantidad: {sub.cantidad}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
-            </div>
+           <div className="space-y-3 text-sm">
+             <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
+             <p><span className="font-semibold">Fecha:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
+             <p><span className="font-semibold">Código:</span> {selectedItem.codigo_producto || 'N/A'}</p>
+             <p><span className="font-semibold">Descripción:</span> {selectedItem.descripcion_producto || selectedItem.nombre_inventario || 'N/A'}</p>
+             <p><span className="font-semibold">Cantidad:</span> {selectedItem.cantidad_total_lote}</p>
+             <p><span className="font-semibold">Peso Total:</span> {selectedItem.peso_total} kg</p>
+             <p><span className="font-semibold">Estado:</span> {selectedItem.estado}</p>
+             {selectedItem.sublotes && selectedItem.sublotes.length > 0 && (
+               <div>
+                 <p className="font-semibold">Sublotes:</p>
+                 <ul className="list-disc pl-5">
+                   {selectedItem.sublotes.map((sub, idx) => (
+                     <li key={idx}>{sub.codigo} - Cantidad: {sub.cantidad}</li>
+                   ))}
+                 </ul>
+               </div>
+             )}
+             {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
+           </div>
           )}
           <div className="flex justify-end pt-4">
             <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
