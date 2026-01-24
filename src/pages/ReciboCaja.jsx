@@ -238,7 +238,7 @@ export default function ReciboCaja() {
                  </div>
             </div>
             <div>
-              <Label>Recibido De (Cliente)</Label>
+              <Label>Cliente/Tercero</Label>
               <Select value={currentItem?.proveedor_cliente_id || ''} onValueChange={v => {
                   const cliente = clientes.find(c => c.id === v);
                   setCurrentItem({ 
@@ -247,7 +247,7 @@ export default function ReciboCaja() {
                       cc_nit: cliente ? (cliente.numero_identificacion || cliente.nit) : currentItem?.cc_nit
                   });
               }}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar cliente o tercero" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={null}>Sin cliente</SelectItem>
                   {clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}

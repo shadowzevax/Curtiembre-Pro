@@ -29,7 +29,6 @@ export default function InventarioInsumos() {
     const [calculoDetalle, setCalculoDetalle] = useState(null);
 
     const loadData = useCallback(async () => {
-        setLoading(true);
         try {
             const [data, movimientos, productosCatalogo] = await Promise.all([
                 Insumo.list(),
@@ -63,9 +62,36 @@ export default function InventarioInsumos() {
     useEffect(() => {
         loadData();
         
-        // Recargar cada 3 segundos para mantener sincronizado con compras
+        // Recargar en background sin mostrar loading
         const interval = setInterval(() => {
-            loadData();
+            (async () => {
+                try {
+                    const [data, movimientos, productosCatalogo] = await Promise.all([
+                        Insumo.list(),
+                        MovimientoInventario.list(),
+                        ProductoCatalogo.list()
+                    ]);
+                    
+                    const insumosConStock = data.map(ins => {
+                        const movsIns = movimientos.filter(m => m.insumo_id === ins.id);
+                        const stockActual = movsIns.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+                        const catalogoItem = productosCatalogo.find(p => p.codigo === ins.codigo);
+                        
+                        return { 
+                            ...ins, 
+                            stock_actual: stockActual,
+                            descripcion: catalogoItem ? catalogoItem.descripcion : (ins.descripcion || ins.nombre),
+                            categoria: catalogoItem ? catalogoItem.categoria : ins.categoria
+                        };
+                    });
+                    
+                    setInsumos(insumosConStock);
+                    setFilteredInsumos(prev => {
+                        const prevIds = new Set(prev.map(p => p.id));
+                        return insumosConStock.filter(p => prevIds.has(p.id) || prev.length === 0);
+                    });
+                } catch (error) { console.error(error); }
+            })();
         }, 3000);
         
         return () => clearInterval(interval);

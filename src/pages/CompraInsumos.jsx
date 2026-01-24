@@ -172,7 +172,10 @@ export default function CompraInsumos() {
 
       // IMPORTANTE: Eliminar movimientos de inventario asociados ANTES de eliminar la compra
       if (orden.afecta_inventario) {
-        const { MovimientoInventario, ProductoCatalogo, Insumo, ProductoTerminado } = await import('@/entities/all');
+        const MovimientoInventario = (await import('@/entities/all')).MovimientoInventario;
+        const ProductoCatalogo = (await import('@/entities/all')).ProductoCatalogo;
+        const Insumo = (await import('@/entities/all')).Insumo;
+        const ProductoTerminado = (await import('@/entities/all')).ProductoTerminado;
         
         const movimientosAEliminar = await MovimientoInventario.filter({ 
           referencia: `${orden.prefijo_documento}-${orden.numero_documento}` 
@@ -188,14 +191,14 @@ export default function CompraInsumos() {
               let currentItemData = null;
               
               const itemsPT = await ProductoTerminado.filter({ id: mov.insumo_id });
-              if (itemsPT.length > 0) {
+              if (itemsPT && itemsPT.length > 0) {
                 currentItemData = itemsPT[0];
                 entityType = ProductoTerminado;
               }
               
               if (!currentItemData) {
                 const itemsInsumo = await Insumo.filter({ id: mov.insumo_id });
-                if (itemsInsumo.length > 0) {
+                if (itemsInsumo && itemsInsumo.length > 0) {
                   currentItemData = itemsInsumo[0];
                   entityType = Insumo;
                 }

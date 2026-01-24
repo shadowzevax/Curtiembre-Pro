@@ -27,13 +27,10 @@ export default function InventarioProductos() {
     const [selectedItem, setSelectedItem] = useState(null);
 
     const loadData = useCallback(async () => {
-        setLoading(true);
         try {
-            // Filtrar SOLO productos terminados (categoría 'producto_terminado')
             const data = await ProductoTerminado.filter({ categoria: 'producto_terminado' });
             const movimientos = await MovimientoInventario.list();
 
-            // Calculate stock_actual from movements
             const productosConStock = data.map(prod => {
                 const movsProd = movimientos.filter(m => m.insumo_id === prod.id);
                 const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
@@ -49,7 +46,33 @@ export default function InventarioProductos() {
         }
     }, []);
 
-    useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => { 
+        loadData(); 
+        
+        // Actualización en background sin parpadeo
+        const interval = setInterval(() => {
+            (async () => {
+                try {
+                    const data = await ProductoTerminado.filter({ categoria: 'producto_terminado' });
+                    const movimientos = await MovimientoInventario.list();
+
+                    const productosConStock = data.map(prod => {
+                        const movsProd = movimientos.filter(m => m.insumo_id === prod.id);
+                        const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+                        return { ...prod, stock_actual: stockActual };
+                    });
+
+                    setProductos(productosConStock);
+                    setFilteredProductos(prev => {
+                        const prevIds = new Set(prev.map(p => p.id));
+                        return productosConStock.filter(p => prevIds.has(p.id) || prev.length === 0);
+                    });
+                } catch (error) { console.error(error); }
+            })();
+        }, 3000);
+        
+        return () => clearInterval(interval);
+    }, [loadData]);
     
     // Filtrado por código y descripción
     useEffect(() => {
