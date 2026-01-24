@@ -458,7 +458,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
                   </tr>
                   <tr className="bg-blue-200 font-bold">
                     <td colSpan="3" className="border p-2 text-right">COSTO POR PIEL PUESTA EN PASTO</td>
-                    <td className="border p-2 text-right">{formatCurrency(sumasTotalLote / (loteData.cantidad_pieles || 1))}</td>
+                    <td className="border p-2 text-right">{formatCurrency(subtotalOtros / (loteData.cantidad_pieles || 1))}</td>
                     <td></td>
                   </tr>
                 </tbody>
