@@ -183,10 +183,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           setShowLotePopup(true);
       }
       
-      if (field === 'condicion_pago' && value === 'credito') {
-          // Cuando es crédito, valor pagado debe ser 0
-          setFormData(prev => ({ ...prev, condicion_pago: value, valor_pagado: 0 }));
-          return;
+      if (field === 'condicion_pago') {
+          if (value === 'credito') {
+              // Cuando es crédito, valor_pagado muestra el total como "Valor Crédito"
+              const totalActual = tipoDocumento === 'venta' ? formData.valor_total_venta : formData.valor_total_compra;
+              setFormData(prev => ({ ...prev, condicion_pago: value, valor_pagado: totalActual, saldo_pendiente: totalActual }));
+              return;
+          } else if (value === 'mixto') {
+              // En mixto, saldo_pendiente = total - valor_pagado
+              setFormData(prev => ({ ...prev, condicion_pago: value }));
+              return;
+          }
       }
       
       if (field === 'proveedor_id' || field === 'cliente_id') {
@@ -321,19 +328,16 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                 saldo_pendiente: 0
             }));
         } else if (formData.condicion_pago === 'credito') {
-            // Crédito: queda saldo pendiente
-            const pagado = parseFloat(formData.valor_pagado) || 0;
-            const saldo = totalNeto - pagado;
-            if (formData.saldo_pendiente !== saldo) {
-                setFormData(prev => ({
-                    ...prev,
-                    valor_total_compra: totalNeto,
-                    valor_total_venta: totalNeto,
-                    saldo_pendiente: saldo > 0 ? saldo : 0
-                }));
-            }
+            // Crédito: valor_pagado muestra el total como "Valor Crédito" y saldo_pendiente = total
+            setFormData(prev => ({
+                ...prev,
+                valor_total_compra: totalNeto,
+                valor_total_venta: totalNeto,
+                valor_pagado: totalNeto,
+                saldo_pendiente: totalNeto
+            }));
         } else if (formData.condicion_pago === 'mixto') {
-            // Mixto: se puede pagar parte
+            // Mixto: saldo_pendiente = total - valor_pagado
             const pagado = parseFloat(formData.valor_pagado) || 0;
             const saldo = totalNeto - pagado;
             setFormData(prev => ({
@@ -344,7 +348,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
             }));
         }
     }
-  }, [formData?.condicion_pago, formData?.items]);
+  }, [formData?.condicion_pago, formData?.items, formData?.valor_pagado]);
 
   const setVencimiento = (dias) => {
     if (!formData.fecha_orden) return;
@@ -1208,13 +1212,13 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                 />
                              </div>
                              <div>
-                                <Label className="font-bold text-blue-700">Valor Pagado</Label>
+                                <Label className="font-bold text-blue-700">{formData.condicion_pago === 'credito' ? 'Valor Crédito' : 'Valor Pagado'}</Label>
                                 <Input 
                                     type="number" 
                                     value={formData.valor_pagado} 
                                     onChange={e => handleInputChange('valor_pagado', parseFloat(e.target.value) || 0)}
                                     className="font-bold"
-                                    readOnly={formData.condicion_pago === 'contado'}
+                                    readOnly={formData.condicion_pago === 'contado' || formData.condicion_pago === 'credito'}
                                 />
                              </div>
                              <div>
