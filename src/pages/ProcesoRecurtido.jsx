@@ -306,7 +306,7 @@ export default function ProcesoRecurtido() {
                 </Select>
               </div>
               <div>
-                <Label>Código Color</Label>
+                <Label>Código Color Base</Label>
                 <Select value={currentItem?.codigo_color || ''} onValueChange={v => {
                   const colores = {
                     'PR001': 'NEGRO',
@@ -334,7 +334,7 @@ export default function ProcesoRecurtido() {
                 </Select>
               </div>
               <div>
-                <Label>Nombre Color</Label>
+                <Label>Nombre Color Base</Label>
                 <Select value={currentItem?.nombre_color || ''} onValueChange={v => {
                   const coloresInv = {
                     'NEGRO': 'PR001',

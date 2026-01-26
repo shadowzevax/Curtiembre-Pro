@@ -49,6 +49,7 @@ export default function OrdenDetalle({ orden, proveedorNombre, open, onOpenChang
                         <table className="w-full text-sm">
                             <thead className="bg-slate-50">
                                 <tr>
+                                    <th className="px-4 py-2 text-left font-medium text-slate-600">Código</th>
                                     <th className="px-4 py-2 text-left font-medium text-slate-600">Descripción</th>
                                     <th className="px-4 py-2 text-right font-medium text-slate-600">Cantidad</th>
                                     <th className="px-4 py-2 text-right font-medium text-slate-600">Precio Unit.</th>
@@ -58,6 +59,7 @@ export default function OrdenDetalle({ orden, proveedorNombre, open, onOpenChang
                             <tbody>
                                 {orden.items?.map((item, index) => (
                                     <tr key={index} className="border-t">
+                                        <td className="px-4 py-2">{item.codigo || 'N/A'}</td>
                                         <td className="px-4 py-2">{item.descripcion || 'N/A'}</td>
                                         <td className="px-4 py-2 text-right">{item.cantidad}</td>
                                         <td className="px-4 py-2 text-right">{formatCurrency(item.precio_unitario)}</td>
