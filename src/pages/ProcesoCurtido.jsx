@@ -237,12 +237,49 @@ export default function ProcesoCurtido() {
       } else {
         await ProcesoProduccion.create(dataToSave);
       }
+      
+      // AFECTAR INVENTARIO DE INSUMOS Y QUÍMICOS (descontar insumos utilizados)
+      if (!isEditing && dataToSave.insumos_utilizados && dataToSave.insumos_utilizados.length > 0) {
+        const { MovimientoInventario } = await import('@/entities/all');
+        
+        for (const insumo of dataToSave.insumos_utilizados) {
+          if (insumo.insumo_id && insumo.cantidad > 0) {
+            // Buscar el insumo por ID
+            const insumoData = insumos.find(i => i.id === insumo.insumo_id);
+            
+            if (insumoData) {
+              // Crear movimiento de salida (negativo)
+              await MovimientoInventario.create({
+                tipo_movimiento: 'salida',
+                insumo_id: insumo.insumo_id,
+                cantidad: -(insumo.cantidad),
+                costo_unitario: insumoData.costo_promedio || 0,
+                fecha_movimiento: dataToSave.fecha_inicio,
+                referencia: `CURTIDO-${dataToSave.codigo_lote}`,
+                observaciones: `Consumo en proceso de curtido - Lote ${dataToSave.codigo_lote}`,
+                usuario_id: 'system'
+              });
+              
+              // Actualizar stock en Insumo
+              const movimientos = await MovimientoInventario.filter({ insumo_id: insumo.insumo_id });
+              const nuevoStock = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0) - insumo.cantidad;
+              
+              await Insumo.update(insumo.insumo_id, {
+                stock_actual: nuevoStock
+              });
+              
+              console.log(`✅ Inventario actualizado: -${insumo.cantidad} kg de ${insumo.producto}`);
+            }
+          }
+        }
+      }
+      
       setShowModal(false);
       loadData();
       alert('Proceso de curtido guardado con éxito.');
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Error al guardar el proceso.');
+      alert('Error al guardar el proceso: ' + error.message);
     }
   };
 
