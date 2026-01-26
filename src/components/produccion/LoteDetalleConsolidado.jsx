@@ -57,21 +57,28 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
       
       setLoteData(recepcion[0]);
       
-      // Cargar costos manuales si existen
+      // Cargar costos manuales si existen - PRESERVAR DATOS EDITADOS MANUALMENTE
       if (recepcion[0]) {
         setServiciosMaquinaria(recepcion[0].servicios_maquinaria || []);
         setServiciosManoObra(recepcion[0].servicios_mano_obra || []);
         setOtrosCostos(recepcion[0].otros_costos || []);
-        setOtrosConceptos(recepcion[0].otros_conceptos || [
-          { concepto: 'CARNAZA QUE DEJA EN KILOS', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'COSTOS NETOS', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'COSTO DE CROSTA POR HOJA', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'PROMEDIO DE MEDIDA PIES/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'COSTO DE CROSTA POR PIE', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'COSTO DE PINTURA TERMINADA/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'COSTO DE UNA HOJA YA TERMINADA', cantidad: 0, valor: 0, valor_total: 0 },
-          { concepto: 'COSTO DEL PIE TERMINADO', cantidad: 0, valor: 0, valor_total: 0 }
-        ]);
+        
+        // Si ya hay otros_conceptos guardados, usarlos (datos manuales)
+        // Si no, inicializar con valores por defecto
+        if (recepcion[0].otros_conceptos && recepcion[0].otros_conceptos.length > 0) {
+          setOtrosConceptos(recepcion[0].otros_conceptos);
+        } else {
+          setOtrosConceptos([
+            { concepto: 'CARNAZA QUE DEJA EN KILOS', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'COSTOS NETOS', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'COSTO DE CROSTA POR HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'PROMEDIO DE MEDIDA PIES/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'COSTO DE CROSTA POR PIE', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'COSTO DE PINTURA TERMINADA/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'COSTO DE UNA HOJA YA TERMINADA', cantidad: 0, valor: 0, valor_total: 0 },
+            { concepto: 'COSTO DEL PIE TERMINADO', cantidad: 0, valor: 0, valor_total: 0 }
+          ]);
+        }
       }
     } catch (error) {
       console.error('Error:', error);
@@ -118,51 +125,51 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
   const totalCostoProceso = subtotalRemojo + subtotalPelambre + subtotalCurtido + subtotalRecurtidoTotal;
   const sumasTotalLote = totalCostoProceso + subtotalMaquinaria + subtotalManoObra + subtotalOtros;
   
-  // Calcular valores de "Otros Conceptos" automáticamente
-  const calcularOtrosConceptos = () => {
-    if (!otrosConceptos || otrosConceptos.length === 0) {
-      return [
-        { concepto: 'CARNAZA QUE DEJA EN KILOS', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'COSTOS NETOS', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'COSTO DE CROSTA POR HOJA', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'PROMEDIO DE MEDIDA PIES/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'COSTO DE CROSTA POR PIE', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'COSTO DE PINTURA TERMINADA/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'COSTO DE UNA HOJA YA TERMINADA', cantidad: 0, valor: 0, valor_total: 0 },
-        { concepto: 'COSTO DEL PIE TERMINADO', cantidad: 0, valor: 0, valor_total: 0 }
-      ];
-    }
+  // Calcular valores de "Otros Conceptos" DE FORMA REACTIVA sin perder datos manuales
+  const calcularOtrosConceptosReactivos = () => {
+    // Usar los valores actuales de otrosConceptos (que vienen de la BD o el estado)
+    const base = otrosConceptos && otrosConceptos.length > 0 ? [...otrosConceptos] : [
+      { concepto: 'CARNAZA QUE DEJA EN KILOS', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'COSTOS NETOS', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'COSTO DE CROSTA POR HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'PROMEDIO DE MEDIDA PIES/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'COSTO DE CROSTA POR PIE', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'COSTO DE PINTURA TERMINADA/HOJA', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'COSTO DE UNA HOJA YA TERMINADA', cantidad: 0, valor: 0, valor_total: 0 },
+      { concepto: 'COSTO DEL PIE TERMINADO', cantidad: 0, valor: 0, valor_total: 0 }
+    ];
     
-    const updated = [...otrosConceptos];
+    const updated = [...base];
     
-    // 1. CARNAZA QUE DEJA EN KILOS (manual)
+    // Solo recalcular los campos calculados (no tocar cantidad/valor manuales)
+    // 1. CARNAZA - valor_total = cantidad * valor (manual)
     updated[0].valor_total = (updated[0]?.cantidad || 0) * (updated[0]?.valor || 0);
     
-    // 2. COSTOS NETOS = SUMAS TOTAL LOTE - CARNAZA
+    // 2. COSTOS NETOS = SUMAS TOTAL LOTE - CARNAZA (calculado)
     updated[1].valor_total = sumasTotalLote - (updated[0]?.valor_total || 0);
     
-    // 3. COSTO DE CROSTA POR HOJA = COSTOS NETOS / CANTIDAD TOTAL HOJAS
+    // 3. COSTO DE CROSTA POR HOJA = COSTOS NETOS / CANTIDAD TOTAL HOJAS (calculado)
     const cantHojas = loteData?.cantidad_total_lote_hojas || 1;
     updated[2].valor_total = (updated[1]?.valor_total || 0) / cantHojas;
     
-    // 4. PROMEDIO DE MEDIDA PIES/HOJA (manual - valor)
+    // 4. PROMEDIO DE MEDIDA PIES/HOJA - valor es manual, no recalcular
     
-    // 5. COSTO DE CROSTA POR PIE = COSTO DE CROSTA POR HOJA / PROMEDIO PIES/HOJA
+    // 5. COSTO DE CROSTA POR PIE = COSTO DE CROSTA POR HOJA / PROMEDIO PIES/HOJA (calculado)
     const promPies = updated[3]?.valor || 1;
     updated[4].valor_total = (updated[2]?.valor_total || 0) / promPies;
     
-    // 6. COSTO DE PINTURA TERMINADA/HOJA (manual - valor)
+    // 6. COSTO DE PINTURA TERMINADA/HOJA - valor es manual, no recalcular
     
-    // 7. COSTO DE UNA HOJA YA TERMINADA = COSTO DE CROSTA POR HOJA + COSTO DE PINTURA/HOJA
+    // 7. COSTO DE UNA HOJA YA TERMINADA = COSTO DE CROSTA POR HOJA + COSTO DE PINTURA/HOJA (calculado)
     updated[6].valor_total = (updated[2]?.valor_total || 0) + (updated[5]?.valor || 0);
     
-    // 8. COSTO DEL PIE TERMINADO = COSTO HOJA TERMINADA / PROMEDIO PIES/HOJA
+    // 8. COSTO DEL PIE TERMINADO = COSTO HOJA TERMINADA / PROMEDIO PIES/HOJA (calculado)
     updated[7].valor_total = (updated[6]?.valor_total || 0) / promPies;
     
     return updated;
   };
   
-  const otrosConceptosCalculados = calcularOtrosConceptos();
+  const otrosConceptosCalculados = calcularOtrosConceptosReactivos();
   const totalGeneral = sumasTotalLote;
 
   // Funciones para manejar costos manuales
@@ -182,18 +189,20 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
     setSaving(true);
     try {
       if (procesos.recepcion?.id) {
+        // Guardar SOLO los campos editables manualmente, preservando los datos existentes
         await ProcesoProduccion.update(procesos.recepcion.id, {
           servicios_maquinaria: serviciosMaquinaria,
           servicios_mano_obra: serviciosManoObra,
           otros_costos: otrosCostos,
-          otros_conceptos: otrosConceptosCalculados
+          otros_conceptos: otrosConceptos // Guardamos los valores editados manualmente
         });
-        alert('Costos guardados exitosamente');
+        alert('Costos manuales guardados exitosamente. Los valores quedarán registrados y no se sobreescribirán.');
         setEditingIndexes({ maquinaria: null, manoObra: null, otros: null });
+        loadLoteDetails(); // Recargar para mostrar los datos guardados
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al guardar');
+      alert('Error al guardar: ' + error.message);
     } finally {
       setSaving(false);
     }
