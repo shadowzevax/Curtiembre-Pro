@@ -45,7 +45,7 @@ const menuItems = [
       { title: "Recurtido", url: createPageUrl("ProcesoRecurtido"), icon: Settings },
       { title: "Acabado", url: createPageUrl("ProcesoAcabado"), icon: Settings },
       { title: "Servicios de Producción", url: createPageUrl("ServiciosProduccion"), icon: Settings },
-      { title: "Recetas de Pintura", url: createPageUrl("RecetasPintura"), icon: Settings },
+      { title: "Pintura", url: createPageUrl("Pintura"), icon: Settings },
       { title: "Costos Indirectos", url: createPageUrl("CostosIndirectos"), icon: Settings }
     ]
   },
@@ -121,6 +121,7 @@ const menuItems = [
       { title: "Catálogo de Productos", url: createPageUrl("CatalogoProductos"), icon: Package },
       { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
       { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
+      { title: "Inventarios en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },
       { title: "Inventario de Productos Terminados", url: createPageUrl("InventarioProductos"), icon: Package },
       { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package },
       { title: "Traslado de Inventarios", url: createPageUrl("TrasladoInventario"), icon: Package }
