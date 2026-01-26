@@ -394,7 +394,7 @@ export default function Layout({ children, currentPageName }) {
             'CostosServicioMaquinaria': 'Servicios de Maquinaria',
             'CostosServicioManoObra': 'Servicio de Mano de Obra',
             'CostosOtrosCostos': 'Otros Costos',
-            'RecetasPintura': 'Recetas de Pintura',
+            'Pintura': 'Pintura',
             'RHEmpleados': 'Gestión de Empleados',
             'RHNomina': 'Gestión de Nómina',
             'RHAsistencia': 'Control de Asistencia',

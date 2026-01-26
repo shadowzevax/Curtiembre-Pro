@@ -69,6 +69,7 @@ import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
 import InventarioEnProceso from './pages/InventarioEnProceso';
+import Pintura from './pages/Pintura';
 import __Layout from './Layout.jsx';
 
 
@@ -144,6 +145,7 @@ export const PAGES = {
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
     "InventarioEnProceso": InventarioEnProceso,
+    "Pintura": Pintura,
 }
 
 export const pagesConfig = {
