@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Save } from 'lucide-react';
+import NumericInput from '../components/common/NumericInput';
 
 const COLORES_PREDEFINIDOS = [
   'AGUA MARINA', 'AGUA MARINA PASTEL', 'ALMENDRA', 'AMARILLO INTENSO', 'AMARILLO PASTEL',
@@ -208,11 +209,10 @@ export default function PedidoNuevo() {
                         </td>
                         {todasLasPlacas.map(placa => (
                           <td key={placa.key} className="border p-1">
-                            <Input 
-                              type="number" 
+                            <NumericInput 
                               className="h-8 text-center text-xs w-full min-w-[60px]" 
                               value={item[placa.key] || 0} 
-                              onChange={e => actualizarItem(idx, placa.key, e.target.value)} 
+                              onChange={v => actualizarItem(idx, placa.key, v)} 
                             />
                           </td>
                         ))}

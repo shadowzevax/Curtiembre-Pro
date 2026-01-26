@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Edit, Trash2, Eye, Printer, Download, Table as TableIcon, X } from 'lucide-react';
+import NumericInput from '../components/common/NumericInput';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('es-CO') : 'N/A';
@@ -465,7 +466,7 @@ export default function Pintura() {
                         </Select>
                       </td>
                       <td className="p-1"><Input value={consumo.descripcion} readOnly className="h-7 text-xs bg-gray-50" /></td>
-                      <td className="p-1"><Input type="number" step="0.01" value={consumo.cantidad_utilizada || ''} onChange={e => handleConsumoChange(idx, 'cantidad_utilizada', parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right" /></td>
+                      <td className="p-1"><NumericInput step="0.01" value={consumo.cantidad_utilizada || 0} onChange={v => handleConsumoChange(idx, 'cantidad_utilizada', v)} className="h-7 text-xs text-right" /></td>
                       <td className="p-1"><Input value={consumo.unidad_medida} readOnly className="h-7 text-xs bg-gray-50" /></td>
                       <td className="p-1"><Input value={consumo.color} onChange={e => handleConsumoChange(idx, 'color', e.target.value)} className="h-7 text-xs" /></td>
                       <td className="p-1">

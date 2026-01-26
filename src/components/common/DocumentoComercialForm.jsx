@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, X, Save, Upload } from 'lucide-react';
 import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
+import NumericInput from './NumericInput';
 import { ProductoCatalogo, OrdenCompra, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
@@ -1084,8 +1085,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                     <td className="p-1 min-w-[180px]"><Input value={item.descripcion} onChange={e => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripción" className="h-8 text-xs"/></td>
                                     <td className="p-1 min-w-[120px]"><Input value={item.categoria} onChange={e => handleItemChange(index, 'categoria', e.target.value)} placeholder="Cat." className="h-8 text-xs" readOnly title="Auto-fill"/></td>
                                     {tipoDocumento === 'compra' && <td className="p-1 min-w-[100px]"><Input value={item.unidad_medida} onChange={e => handleItemChange(index, 'unidad_medida', e.target.value)} placeholder="U.M." className="h-8 text-xs"/></td>}
-                                    <td className="p-1 w-24"><Input type="number" value={item.cantidad} onChange={e => handleItemChange(index, 'cantidad', e.target.value)} placeholder="0" className="text-right"/></td>
-                                    <td className="p-1 w-32"><Input type="number" value={item.precio_unitario} onChange={e => handleItemChange(index, 'precio_unitario', e.target.value)} placeholder="0" className="text-right"/></td>
+                                    <td className="p-1 w-24"><NumericInput value={item.cantidad || 0} onChange={v => handleItemChange(index, 'cantidad', v)} className="text-right"/></td>
+                                    <td className="p-1 w-32"><NumericInput value={item.precio_unitario || 0} onChange={v => handleItemChange(index, 'precio_unitario', v)} className="text-right"/></td>
                                     <td className="p-1 w-32 text-right font-medium">{formatCurrency(item.subtotal)}</td>
                                     <td className="p-1 w-28"><Select value={String(item.iva)} onValueChange={v => handleItemChange(index, 'iva', parseFloat(v))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="0.19">19%</SelectItem><SelectItem value="0.05">5%</SelectItem><SelectItem value="0">0% (Excl/Exen)</SelectItem></SelectContent></Select></td>
                                     <td className="p-1 w-28"><Select value={String(item.retefuente)} onValueChange={v => handleItemChange(index, 'retefuente', parseFloat(v))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="0.01">1%</SelectItem><SelectItem value="0.025">2.5%</SelectItem><SelectItem value="0.04">4%</SelectItem><SelectItem value="0.06">6%</SelectItem><SelectItem value="0.11">11%</SelectItem><SelectItem value="0">No aplica</SelectItem></SelectContent></Select></td>
