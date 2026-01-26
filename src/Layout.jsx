@@ -358,6 +358,7 @@ export default function Layout({ children, currentPageName }) {
             'ComprobanteEgreso': 'Comprobante de Egreso',
             'InventarioProduccion': 'Inventario de Materias Primas',
             'InventarioInsumos': 'Inventario de Insumos y Químicos',
+            'InventarioEnProceso': 'Inventarios en Proceso',
             'InventarioProductos': 'Inventario de Productos Terminados',
             'ContabilidadGastos': 'Registro de Gastos',
             'ContabilidadIngresos': 'Otros Ingresos',
