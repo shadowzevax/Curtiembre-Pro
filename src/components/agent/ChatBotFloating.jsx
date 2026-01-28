@@ -124,12 +124,14 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
   const handleMouseMove = (e) => {
     if (!isDragging || isMaximized) return;
     
+    e.preventDefault();
+    
     const newX = e.clientX - dragStart.x;
     const newY = e.clientY - dragStart.y;
     
     // Límites de la ventana
-    const maxX = window.innerWidth - (isOpen ? 400 : 80);
-    const maxY = window.innerHeight - (isOpen ? 100 : 80);
+    const maxX = window.innerWidth - 80;
+    const maxY = window.innerHeight - 80;
     
     const newPosition = {
       x: Math.max(0, Math.min(newX, maxX)),
@@ -240,7 +242,7 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
           left: `${position.x}px`,
           cursor: isDragging ? 'grabbing' : 'grab'
         }}
-        className="z-50 h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+        className="z-[9999] h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group select-none"
         title="Abrir Copiloto ERP - Arrastra para mover"
       >
         <MessageCircle className="w-8 h-8 text-white group-hover:animate-pulse" />
@@ -249,16 +251,22 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     );
   }
 
-  // Chat abierto
+  // Chat abierto - desplegarse desde la bola hacia arriba e izquierda
   const chatStyle = isMaximized
     ? { position: 'fixed', top: '20px', left: '20px', right: '20px', bottom: '20px', width: 'auto', height: 'auto' }
-    : { position: 'fixed', top: `${position.y}px`, left: `${position.x}px`, width: '400px', height: '600px' };
+    : { 
+        position: 'fixed', 
+        bottom: `${window.innerHeight - position.y}px`, 
+        right: `${window.innerWidth - position.x - 64}px`, 
+        width: '400px', 
+        height: '600px' 
+      };
 
   return (
     <div
       ref={chatRef}
       style={chatStyle}
-      className="z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+      className="z-[9999] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
     >
       {/* Header */}
       <div

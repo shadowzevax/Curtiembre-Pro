@@ -266,7 +266,7 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                                         <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                         <SelectContent>
                                           {unidadesMedida
-                                            .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                                            .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }))
                                             .map(u => <SelectItem key={u.id} value={u.abreviatura}>{u.nombre} ({u.abreviatura})</SelectItem>)}
                                         </SelectContent>
                                     </Select>
