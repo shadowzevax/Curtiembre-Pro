@@ -128,15 +128,14 @@ export default function CompraInsumos() {
   const handleSubmit = async (orderData) => {
     setLoading(true);
     try {
-      // Validar duplicidad: prefijo + numero_documento
+      // Validar duplicidad: numero_id
       const isDuplicate = ordenes.some(orden => 
-        orden.prefijo_documento === orderData.prefijo_documento && 
-        orden.numero_documento === orderData.numero_documento &&
+        orden.numero_id === orderData.numero_id &&
         (!editingOrder || orden.id !== editingOrder.id)
       );
       
       if (isDuplicate) {
-        alert("⚠️ REVISE DOCUMENTO YA EXISTE\n\nYa existe un documento con el mismo prefijo y número.");
+        alert("⚠️ REVISE DOCUMENTO YA EXISTE\n\nYa existe un documento con el mismo No. ID.");
         setLoading(false);
         return;
       }
@@ -263,13 +262,16 @@ export default function CompraInsumos() {
   };
 
   const handleExportCSV = () => {
-    const headers = ["Numero Orden", "Fecha", "Proveedor", "Total", "Estado"];
+    const headers = ["No. ID", "Prefijo", "Tipo Item", "No. Doc. Proveedor", "Fecha", "Proveedor", "Total", "Estado"];
     const csvRows = [headers.join(",")];
 
     filteredOrdenes.forEach(orden => {
       const row = [
-        `"${orden.prefijo_documento}-${orden.numero_documento}"`,
-        `"${formatDate(orden.fecha_orden)}"`,
+        `"${orden.numero_id || 'N/A'}"`,
+        `"${orden.prefijo}"`,
+        `"${orden.tipo_item}"`,
+        `"${orden.tipo_documento_proveedor} ${orden.numero_documento}"`,
+        `"${formatDate(orden.fecha_emision_documento || orden.fecha_orden)}"`,
         `"${getProveedorNombre(orden.proveedor_id)}"`,
         orden.total || 0,
         `"${orden.estado}"`
@@ -297,15 +299,16 @@ export default function CompraInsumos() {
   };
 
   const tableHeaders = [
-    "Tipo Doc.", "Prefijo", "Documento #", "Fecha", "Proveedor", "Valor", "Estado", "Soportes", "Acciones"
+    "No. ID", "Prefijo", "Tipo Item", "No. Doc. Proveedor", "Fecha Emisión", "Proveedor", "Valor", "Estado", "Soportes", "Acciones"
   ];
 
   const renderRow = (orden) => (
     <tr key={orden.id} className="hover:bg-gray-50">
-      <td className="px-4 py-2 text-sm capitalize">{orden.tipo_documento?.replace(/_/g, ' ')}</td>
-      <td className="px-4 py-2 text-sm">{orden.prefijo_documento}</td>
-      <td className="px-4 py-2 text-sm">{orden.numero_documento}</td>
-      <td className="px-4 py-2 text-sm">{formatDate(orden.fecha_orden)}</td>
+      <td className="px-4 py-2 text-sm font-mono font-bold text-emerald-700">{orden.numero_id || 'N/A'}</td>
+      <td className="px-4 py-2 text-sm font-semibold">{orden.prefijo}</td>
+      <td className="px-4 py-2 text-sm capitalize">{orden.tipo_item?.replace(/_/g, ' ')}</td>
+      <td className="px-4 py-2 text-sm">{orden.tipo_documento_proveedor} {orden.numero_documento}</td>
+      <td className="px-4 py-2 text-sm">{formatDate(orden.fecha_emision_documento || orden.fecha_orden)}</td>
       <td className="px-4 py-2 text-sm">{getProveedorNombre(orden.proveedor_id)}</td>
       <td className="px-4 py-2 text-sm font-medium">{formatCurrency(orden.total)}</td>
       <td className="px-4 py-2 text-sm"><Badge>{orden.estado}</Badge></td>

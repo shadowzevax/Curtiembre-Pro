@@ -83,6 +83,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
   useEffect(() => {
     const initialFormState = {
+        prefijo: tipoDocumento === 'compra' ? 'CH' : '',
+        tipo_item: tipoDocumento === 'compra' ? 'materia_prima' : '',
+        tipo_documento_proveedor: tipoDocumento === 'compra' ? 'FE' : '',
         tipo_documento: "factura_electronica",
         prefijo_documento: tipoDocumento === 'compra' ? 'FC' : 'FV',
         numero_documento: '',
@@ -382,46 +385,28 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
       total: totals.totalNeto,
     };
 
-    // Generar número_id único COMP-AAAA-0001 para compras
-    if (tipoDocumento === 'compra' && !documento) {
+    // Generar número_id único basado en PREFIJO-AAAA-0001 para compras
+    if (tipoDocumento === 'compra' && !documento && finalData.prefijo) {
         try {
              const year = new Date().getFullYear();
              const allCompras = await OrdenCompra.list();
-             const comprasDelAnio = allCompras.filter(c => c.numero_id?.startsWith(`COMP-${year}`));
-             const consecutivos = comprasDelAnio.map(c => {
-               const match = c.numero_id?.match(/COMP-\d{4}-(\d+)/);
+             const comprasConPrefijo = allCompras.filter(c => c.numero_id?.startsWith(`${finalData.prefijo}-${year}`));
+             const consecutivos = comprasConPrefijo.map(c => {
+               const match = c.numero_id?.match(/-\d{4}-(\d+)/);
                return match ? parseInt(match[1]) : 0;
              });
              const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
-             finalData.numero_id = `COMP-${year}-${String(nextConsecutivo).padStart(4, '0')}`;
+             finalData.numero_id = `${finalData.prefijo}-${year}-${String(nextConsecutivo).padStart(4, '0')}`;
         } catch (e) {
             console.error("Error generando numero_id", e);
             const year = new Date().getFullYear();
-            finalData.numero_id = `COMP-${year}-0001`;
+            finalData.numero_id = `${finalData.prefijo}-${year}-0001`;
         }
     }
     
-    // Lógica de consecutivo automático para Compras por Prefijo
-    if (tipoDocumento === 'compra' && !documento && !finalData.numero_documento) {
-        try {
-             const lastOrders = await OrdenCompra.filter({ prefijo_documento: finalData.prefijo_documento }, '-created_date', 1);
-             let nextNum = 1;
-             if (lastOrders && lastOrders.length > 0) {
-                 const lastNumInt = parseInt(lastOrders[0].numero_documento, 10);
-                 if (!isNaN(lastNumInt)) {
-                     nextNum = lastNumInt + 1;
-                 }
-             }
-             finalData.numero_documento = String(nextNum).padStart(3, '0');
-        } catch (e) {
-            console.error("Error generando consecutivo", e);
-            finalData.numero_documento = String(Date.now()).slice(-4);
-        }
-    }
-
     // Generar código de lote si no existe (solo para compras de materia prima)
-    if (tipoDocumento === 'compra' && finalData.afecta_inventario && !finalData.codigo_lote_inventario) {
-        // Auto-generar código de lote LOTE-XXXXXX (timestamp)
+    if (tipoDocumento === 'compra' && finalData.afecta_inventario && !finalData.codigo_lote_inventario && finalData.prefijo === 'CH') {
+        // Auto-generar código de lote solo para compras de hojas/materia prima
         finalData.codigo_lote_inventario = `LOTE-${Date.now()}`;
     }
 
@@ -874,7 +859,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         <form onSubmit={handleFinalSubmit} onKeyDown={handleKeyDown} className="flex flex-col h-full overflow-hidden">
           <div className="overflow-y-auto pr-6 space-y-4 flex-grow">
             {/* Encabezado */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 {tipoDocumento === 'compra' && (
                   <div>
                     <Label>No. ID</Label>
@@ -882,45 +867,63 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                       value={formData.numero_id || 'Auto-generado'} 
                       readOnly 
                       className="bg-gray-100 font-semibold text-emerald-700"
-                      title="ID único de compra autogenerado"
+                      title="ID único de compra autogenerado basado en PREFIJO"
                     />
                   </div>
                 )}
-                <div><Label>Prefijo</Label>
-                    {tipoDocumento === 'compra' ? (
-                        <Select value={formData.prefijo_documento} onValueChange={v => handleInputChange('prefijo_documento', v)}>
-                            <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="CC">CC - Cuenta de Cobro</SelectItem>
-                                <SelectItem value="CV">CV - Compras Varias</SelectItem>
-                                <SelectItem value="FC">FC - Factura de Compra</SelectItem>
-                                <SelectItem value="NC">NC - Nota Crédito Proveedor</SelectItem>
-                                <SelectItem value="ND">ND - Nota Débito Proveedor</SelectItem>
-                                <SelectItem value="REM">REM - Remisión del Proveedor</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    ) : (
-                        <Input value={formData.prefijo_documento} onChange={e => handleInputChange('prefijo_documento', e.target.value)} />
-                    )}
-                </div>
                 
-                <div><Label>Tipo Item</Label>
-                    <Select value={formData.tipo_documento} onValueChange={(v) => handleInputChange('tipo_documento', v)}>
-                        <SelectTrigger><SelectValue/></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="factura_electronica">Factura Electrónica</SelectItem>
-                            <SelectItem value="cuenta_cobro">Cuenta de Cobro</SelectItem>
-                            <SelectItem value="remision">Remisión</SelectItem>
-                            {tipoDocumento === 'compra' && <SelectItem value="otras_compras">Otras Compras</SelectItem>}
-                            {tipoDocumento === 'compra' && <SelectItem value="nota_credito_proveedor">Nota Crédito Proveedor</SelectItem>}
-                            {tipoDocumento === 'venta' && <SelectItem value="otras_ventas">Otras Ventas</SelectItem>}
-                            {tipoDocumento === 'venta' && <SelectItem value="nota_credito_cliente">Nota Crédito Cliente</SelectItem>}
-                            {tipoDocumento === 'venta' && <SelectItem value="nota_debito_cliente">Nota Débito Cliente</SelectItem>}
-                        </SelectContent>
+                {tipoDocumento === 'compra' && (
+                  <div>
+                    <Label>Prefijo *</Label>
+                    <Select value={formData.prefijo} onValueChange={v => handleInputChange('prefijo', v)}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CH">CH - Compra Hojas/Materia Prima</SelectItem>
+                        <SelectItem value="CI">CI - Compra Insumos y Químicos</SelectItem>
+                        <SelectItem value="CSP">CSP - Compra de Servicios de Producción</SelectItem>
+                        <SelectItem value="CGG">CGG - Compra de Gastos Generales</SelectItem>
+                        <SelectItem value="CV">CV - Compras Varias</SelectItem>
+                      </SelectContent>
                     </Select>
-                </div>
+                  </div>
+                )}
                 
-                <div><Label>No. Documento</Label><Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Auto si vacío (compras)" /></div>
+                {tipoDocumento === 'compra' && (
+                  <div>
+                    <Label>Tipo Item *</Label>
+                    <Select value={formData.tipo_item} onValueChange={v => handleInputChange('tipo_item', v)}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="materia_prima">Materia Prima</SelectItem>
+                        <SelectItem value="insumo_quimico">Insumo Químico</SelectItem>
+                        <SelectItem value="servicio">Servicio</SelectItem>
+                        <SelectItem value="activo_fijo">Activo Fijo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                {tipoDocumento === 'compra' && (
+                  <div>
+                    <Label>Tipo Documento Proveedor *</Label>
+                    <Select value={formData.tipo_documento_proveedor} onValueChange={v => handleInputChange('tipo_documento_proveedor', v)}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CC">CC - Cuenta de Cobro</SelectItem>
+                        <SelectItem value="SD">SD - Compra sin Documento</SelectItem>
+                        <SelectItem value="FE">FE - Factura Electrónica</SelectItem>
+                        <SelectItem value="NC">NC - Nota Crédito Proveedor</SelectItem>
+                        <SelectItem value="ND">ND - Nota Débito Proveedor</SelectItem>
+                        <SelectItem value="REM">REM - Remisión del Proveedor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                <div><Label>No. Documento Proveedor</Label><Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Número del proveedor" /></div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div><Label>{terceroLabel}</Label>
                     {!terceroPersonalizado ? (
                     <Select value={formData[terceroIdField]} onValueChange={v => v === 'personalizado' ? setTerceroPersonalizado(true) : handleInputChange(terceroIdField, v)}>
