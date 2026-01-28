@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { base44 } from '@/api/base44Client';
 import { ProcesoProduccion, Insumo, ProductoTerminado, Proveedor, OrdenCompra } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
@@ -34,6 +35,7 @@ export default function ProcesoRecepcion() {
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
   const [lotesCompras, setLotesCompras] = useState([]);
+  const [ordenesCompra, setOrdenesCompra] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -49,6 +51,7 @@ export default function ProcesoRecepcion() {
       setInsumos(insumosData);
       setProductos(productosData);
       setProveedores(proveedoresData);
+      setOrdenesCompra(comprasData);
       
       // Extraer códigos de lote únicos de compras
       const lotes = comprasData
@@ -91,6 +94,7 @@ export default function ProcesoRecepcion() {
         tipo_proceso: 'recepcion',
         codigo_lote: codigoLote,
         fecha_inicio: new Date().toISOString().split('T')[0],
+        id_orden_compra_origen: '',
         proveedor_id: '',
         no_documento: '',
         codigo_producto: '',
@@ -173,7 +177,7 @@ export default function ProcesoRecepcion() {
           const producto = productosMP[0];
           
           // Crear movimiento de salida (negativo)
-          await MovimientoInventario.create({
+          await base44.entities.MovimientoInventario.create({
             tipo_movimiento: 'salida',
             insumo_id: producto.id,
             cantidad: -(currentItem.cantidad_total_lote_hojas),
@@ -195,7 +199,7 @@ export default function ProcesoRecepcion() {
           console.log(`✅ Inventario actualizado: -${currentItem.cantidad_total_lote_hojas} hojas de ${currentItem.codigo_producto}`);
           
           // CREAR REGISTRO EN INVENTARIO EN PROCESO
-          await InventarioEnProceso.create({
+          await base44.entities.InventarioEnProceso.create({
             codigo: currentItem.codigo_producto,
             descripcion: currentItem.descripcion_producto,
             codigo_lote: currentItem.codigo_lote,
@@ -327,6 +331,29 @@ export default function ProcesoRecepcion() {
           </DialogHeader>
           <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>ID Orden de Compra Origen</Label>
+                <Select value={currentItem?.id_orden_compra_origen || ''} onValueChange={v => {
+                  const ordenCompra = ordenesCompra.find(oc => oc.id === v);
+                  setCurrentItem({
+                    ...currentItem, 
+                    id_orden_compra_origen: v,
+                    no_documento: ordenCompra?.numero_documento || currentItem?.no_documento || '',
+                    proveedor_id: ordenCompra?.proveedor_id || currentItem?.proveedor_id || ''
+                  });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar orden" /></SelectTrigger>
+                  <SelectContent>
+                    {ordenesCompra
+                      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
+                      .map(oc => (
+                        <SelectItem key={oc.id} value={oc.id}>
+                          {oc.numero_id || `${oc.prefijo_documento}-${oc.numero_documento}`} | {proveedores.find(p => p.id === oc.proveedor_id)?.nombre || 'N/A'} | {formatCurrency(oc.total)}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <Label>Código Lote *</Label>
                 <Input 
