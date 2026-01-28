@@ -159,30 +159,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   }, [documento, open, itemsCatalogo, terceros, tipoDocumento, tipoItem]);
 
   const handleInputChange = async (field, value) => {
-      if (field === 'prefijo_documento' && value === 'CH' && tipoDocumento === 'compra') {
-          // Generar código de lote automático con consecutivo
-          const now = new Date();
-          const year = now.getFullYear();
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          
-          // Obtener último lote del mes actual
-          try {
-            const compras = await OrdenCompra.filter({ prefijo_documento: 'CH' });
-            const lotesDelMes = compras
-              .filter(c => c.codigo_lote_inventario && c.codigo_lote_inventario.startsWith(`L${year}${month}`))
-              .map(c => {
-                const match = c.codigo_lote_inventario.match(/L\d{6}-(\d{3})/);
-                return match ? parseInt(match[1]) : 0;
-              });
-            const maxConsecutivo = lotesDelMes.length > 0 ? Math.max(...lotesDelMes) : 0;
-            const nuevoConsecutivo = String(maxConsecutivo + 1).padStart(3, '0');
-            const codigoLote = `L${year}${month}-${nuevoConsecutivo}`;
-            setLoteData({ codigo_lote: codigoLote, estado_cuero: 'CRU' });
-          } catch (e) {
-            setLoteData({ codigo_lote: `L${year}${month}-001`, estado_cuero: 'CRU' });
-          }
-          setShowLotePopup(true);
-      }
+      // NO MOSTRAR POPUP PARA CH - eliminado completamente
       
       if (field === 'condicion_pago') {
           if (value === 'credito') {
@@ -1101,7 +1078,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
             {/* Afecta Inventario y Código de Lote para Compras */}
             {tipoDocumento === 'compra' && (
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                     <div>
                         <Label>¿Afecta Inventario?</Label>
                         <Select value={formData.afecta_inventario ? 'si' : 'no'} onValueChange={v => handleInputChange('afecta_inventario', v === 'si')}>
@@ -1117,8 +1094,26 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                         <Input 
                             value={formData.codigo_lote_inventario || ''} 
                             onChange={e => handleInputChange('codigo_lote_inventario', e.target.value)}
-                            placeholder="Auto-generado si vacío"
+                            placeholder="Crear nuevo o seleccionar"
+                            list="lotes-disponibles"
                         />
+                        <datalist id="lotes-disponibles">
+                          {lotesDisponibles.map((lote, idx) => (
+                            <option key={idx} value={lote.codigo} />
+                          ))}
+                        </datalist>
+                    </div>
+                    <div>
+                        <Label>Estado de Cuero</Label>
+                        <Select value={formData.estado_cuero || 'CRU'} onValueChange={v => handleInputChange('estado_cuero', v)}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="CRU">CRU - Crudo</SelectItem>
+                                <SelectItem value="SAL">SAL - Salado</SelectItem>
+                                <SelectItem value="SEM">SEM - Semi Terminado</SelectItem>
+                                <SelectItem value="TERM">TERM - Terminado</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
             )}
@@ -1266,50 +1261,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         </form>
       </DialogContent>
       
-      {/* Popup Código de Lote */}
-      <Dialog open={showLotePopup} onOpenChange={setShowLotePopup}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Información de Lote - Compra de Hojas</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Código Lote *</Label>
-              <Select value={loteData.codigo_lote} onValueChange={v => setLoteData({...loteData, codigo_lote: v})}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar lote activo" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={loteData.codigo_lote}>{loteData.codigo_lote} (Nuevo)</SelectItem>
-                  {lotesDisponibles.map((lote, idx) => (
-                    <SelectItem key={idx} value={lote.codigo}>
-                      {lote.codigo} - {lote.estado}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Estado del Cuero *</Label>
-              <Select value={loteData.estado_cuero} onValueChange={v => setLoteData({...loteData, estado_cuero: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CRU">CRU - Crudo</SelectItem>
-                  <SelectItem value="SAL">SAL - Salado</SelectItem>
-                  <SelectItem value="SEM">SEM - Semi Terminado</SelectItem>
-                  <SelectItem value="TERM">TERM - Terminado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowLotePopup(false)}>Cancelar</Button>
-              <Button type="button" onClick={() => {
-                handleInputChange('codigo_lote_inventario', loteData.codigo_lote);
-                handleInputChange('estado_cuero', loteData.estado_cuero);
-                setShowLotePopup(false);
-              }}>Aceptar</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
       
       <ProductCreationModal 
           open={showProductModal} 

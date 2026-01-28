@@ -264,7 +264,11 @@ export default function InventarioItemForm({ open, onOpenChange, onSubmit, item,
                                     <Label>Unidad de Medida</Label>
                                     <Select value={formData.unidad_medida} onValueChange={v => handleInputChange('unidad_medida', v)} disabled={isEditing}>
                                         <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                        <SelectContent>{unidadesMedida.map(u => <SelectItem key={u.id} value={u.abreviatura}>{u.nombre} ({u.abreviatura})</SelectItem>)}</SelectContent>
+                                        <SelectContent>
+                                          {unidadesMedida
+                                            .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
+                                            .map(u => <SelectItem key={u.id} value={u.abreviatura}>{u.nombre} ({u.abreviatura})</SelectItem>)}
+                                        </SelectContent>
                                     </Select>
                                 </div>
                                  <div>

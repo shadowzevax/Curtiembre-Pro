@@ -161,7 +161,7 @@ export default function ProcesoRecepcion() {
       
       // AFECTAR INVENTARIO DE MATERIA PRIMA (restar cantidad de hojas)
       if (!isEditing && currentItem.cantidad_total_lote_hojas > 0 && currentItem.codigo_producto) {
-        const { MovimientoInventario } = await import('@/entities/all');
+        const { MovimientoInventario, InventarioEnProceso } = await import('@/entities/all');
         
         // Buscar el producto en materia prima por código
         const productosMP = await ProductoTerminado.filter({ 
@@ -193,6 +193,20 @@ export default function ProcesoRecepcion() {
           });
           
           console.log(`✅ Inventario actualizado: -${currentItem.cantidad_total_lote_hojas} hojas de ${currentItem.codigo_producto}`);
+          
+          // CREAR REGISTRO EN INVENTARIO EN PROCESO
+          await InventarioEnProceso.create({
+            codigo: currentItem.codigo_producto,
+            descripcion: currentItem.descripcion_producto,
+            codigo_lote: currentItem.codigo_lote,
+            origen_modulo: 'recepcion',
+            estado_proceso: 'piel_recibida',
+            cantidad_hojas: currentItem.cantidad_total_lote_hojas,
+            fecha_ingreso_proceso: currentItem.fecha_inicio,
+            proceso_origen_id: procesoId
+          });
+          
+          console.log(`✅ Inventario En Proceso creado para lote ${currentItem.codigo_lote}`);
         }
       }
       
@@ -318,12 +332,18 @@ export default function ProcesoRecepcion() {
                 <Input 
                   value={currentItem?.codigo_lote || ''} 
                   onChange={e => setCurrentItem({...currentItem, codigo_lote: e.target.value})} 
-                  list="lotes-compras"
+                  list="lotes-disponibles-recepcion"
                   required 
+                  placeholder="Crear nuevo o seleccionar"
                 />
-                <datalist id="lotes-compras">
+                <datalist id="lotes-disponibles-recepcion">
+                  {/* Códigos de compras */}
                   {lotesCompras.map((lote, idx) => (
-                    <option key={idx} value={lote} />
+                    <option key={`compra-${idx}`} value={lote} />
+                  ))}
+                  {/* Códigos de recepciones existentes */}
+                  {recepciones.map((recep) => (
+                    <option key={`recep-${recep.id}`} value={recep.codigo_lote} />
                   ))}
                 </datalist>
               </div>

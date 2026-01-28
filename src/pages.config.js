@@ -31,6 +31,7 @@ import GestionPedidos from './pages/GestionPedidos';
 import InformeCaja from './pages/InformeCaja';
 import InformeCostos from './pages/InformeCostos';
 import IngresosBancarios from './pages/IngresosBancarios';
+import InventarioEnProceso from './pages/InventarioEnProceso';
 import InventarioInsumos from './pages/InventarioInsumos';
 import InventarioProduccion from './pages/InventarioProduccion';
 import InventarioProductos from './pages/InventarioProductos';
@@ -39,6 +40,7 @@ import LibroDiarioNuevo from './pages/LibroDiarioNuevo';
 import LibroMayor from './pages/LibroMayor';
 import PedidoNuevo from './pages/PedidoNuevo';
 import PedidosIndividuales from './pages/PedidosIndividuales';
+import Pintura from './pages/Pintura';
 import PlanCuentas from './pages/PlanCuentas';
 import ProcesoAcabado from './pages/ProcesoAcabado';
 import ProcesoCurtido from './pages/ProcesoCurtido';
@@ -68,8 +70,6 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import InventarioEnProceso from './pages/InventarioEnProceso';
-import Pintura from './pages/Pintura';
 import __Layout from './Layout.jsx';
 
 
@@ -107,6 +107,7 @@ export const PAGES = {
     "InformeCaja": InformeCaja,
     "InformeCostos": InformeCostos,
     "IngresosBancarios": IngresosBancarios,
+    "InventarioEnProceso": InventarioEnProceso,
     "InventarioInsumos": InventarioInsumos,
     "InventarioProduccion": InventarioProduccion,
     "InventarioProductos": InventarioProductos,
@@ -115,6 +116,7 @@ export const PAGES = {
     "LibroMayor": LibroMayor,
     "PedidoNuevo": PedidoNuevo,
     "PedidosIndividuales": PedidosIndividuales,
+    "Pintura": Pintura,
     "PlanCuentas": PlanCuentas,
     "ProcesoAcabado": ProcesoAcabado,
     "ProcesoCurtido": ProcesoCurtido,
@@ -144,8 +146,6 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "InventarioEnProceso": InventarioEnProceso,
-    "Pintura": Pintura,
 }
 
 export const pagesConfig = {

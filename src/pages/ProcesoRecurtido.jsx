@@ -209,10 +209,13 @@ export default function ProcesoRecurtido() {
         dataToSave.estado = 'pendiente';
       }
 
+      let procesoId;
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
+        procesoId = currentItem.id;
       } else {
-        await ProcesoProduccion.create(dataToSave);
+        const created = await ProcesoProduccion.create(dataToSave);
+        procesoId = created.id;
       }
       
       // AFECTAR INVENTARIO DE INSUMOS Y QUÍMICOS (descontar insumos utilizados)
