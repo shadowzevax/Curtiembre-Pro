@@ -83,24 +83,108 @@ export default function PedidosIndividuales() {
 
   const handlePrint = (pedido) => {
     const printWindow = window.open('', '', 'width=800,height=600');
+    
+    // Extraer todas las placas disponibles en el pedido
+    const placasSet = new Set();
+    pedido.items?.forEach(item => {
+      Object.keys(item).forEach(key => {
+        if (key !== 'color' && key !== 'total') {
+          placasSet.add(key);
+        }
+      });
+    });
+    const placas = Array.from(placasSet).sort();
+    
+    // Generar HTML de la tabla
+    const tablaHTML = `
+      <table style="width:100%; border-collapse:collapse; font-size:10px; margin-top:20px;">
+        <thead>
+          <tr style="background-color:#e5e7eb;">
+            <th style="border:1px solid #333; padding:6px; text-align:left;">COLOR</th>
+            ${placas.map(p => `<th style="border:1px solid #333; padding:6px; text-align:center;">${p.toUpperCase()}</th>`).join('')}
+            <th style="border:1px solid #333; padding:6px; text-align:center; background-color:#fef3c7;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pedido.items.map((item, idx) => `
+            <tr style="background-color:${idx % 2 === 0 ? 'white' : '#f9fafb'};">
+              <td style="border:1px solid #333; padding:6px; font-weight:bold;">${item.color}</td>
+              ${placas.map(placa => `<td style="border:1px solid #333; padding:6px; text-align:center;">${item[placa] || 0}</td>`).join('')}
+              <td style="border:1px solid #333; padding:6px; text-align:center; font-weight:bold; background-color:#fef9e7;">${item.total}</td>
+            </tr>
+          `).join('')}
+          <tr style="background-color:#d1fae5; font-weight:bold;">
+            <td style="border:1px solid #333; padding:6px;">TOTALES</td>
+            ${placas.map(placa => {
+              const total = pedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
+              return `<td style="border:1px solid #333; padding:6px; text-align:center;">${total}</td>`;
+            }).join('')}
+            <td style="border:1px solid #333; padding:6px; text-align:center; background-color:#fde68a;">${pedido.total_hojas}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+    
     printWindow.document.write(`
-      <html><head><title>Pedido ${pedido.numero_pedido}</title></head>
-      <body><h2>Pedido ${pedido.numero_pedido}</h2>
-      <p><strong>Marroquinero:</strong> ${pedido.nombre_marroquinero}</p>
-      <p><strong>Fecha:</strong> ${formatDate(pedido.fecha_solicitud)}</p>
-      <p><strong>Total Hojas:</strong> ${pedido.total_hojas}</p>
-      </body></html>
+      <html>
+      <head>
+        <title>Pedido ${pedido.numero_pedido}</title>
+        <style>
+          @page { size: letter; margin: 1cm; }
+          body { font-family: Arial, sans-serif; }
+          @media print {
+            body { margin: 0; padding: 10px; }
+          }
+        </style>
+      </head>
+      <body>
+        <h2>Pedido Individual - ${pedido.numero_pedido}</h2>
+        <p><strong>Marroquinero:</strong> ${pedido.nombre_marroquinero}</p>
+        <p><strong>Fecha Solicitud:</strong> ${formatDate(pedido.fecha_solicitud)}</p>
+        <p><strong>Estado:</strong> ${pedido.estado.toUpperCase()}</p>
+        ${tablaHTML}
+      </body>
+      </html>
     `);
     printWindow.document.close();
     printWindow.print();
   };
 
   const handleExport = (pedido) => {
-    const csv = [
-      ['No. ID', 'Marroquinero', 'Fecha', 'Total Hojas'],
-      [pedido.numero_pedido, pedido.nombre_marroquinero, formatDate(pedido.fecha_solicitud), pedido.total_hojas]
-    ].map(row => row.join(',')).join('\n');
+    // Extraer todas las placas
+    const placasSet = new Set();
+    pedido.items?.forEach(item => {
+      Object.keys(item).forEach(key => {
+        if (key !== 'color' && key !== 'total') {
+          placasSet.add(key);
+        }
+      });
+    });
+    const placas = Array.from(placasSet).sort();
     
+    // Encabezados CSV
+    const headers = ['Color', ...placas.map(p => p.toUpperCase()), 'TOTAL'];
+    const csvRows = [headers.join(',')];
+    
+    // Filas de datos
+    pedido.items?.forEach(item => {
+      const row = [
+        item.color,
+        ...placas.map(placa => item[placa] || 0),
+        item.total
+      ];
+      csvRows.push(row.join(','));
+    });
+    
+    // Fila de totales
+    const totales = [
+      'TOTALES',
+      ...placas.map(placa => pedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0)),
+      pedido.total_hojas
+    ];
+    csvRows.push(totales.join(','));
+    
+    const csv = csvRows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

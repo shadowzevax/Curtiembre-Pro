@@ -115,6 +115,66 @@ export default function ConsolidarPedidos() {
       alert('Error al consolidar pedidos');
     }
   };
+  
+  const handlePrintConsolidado = () => {
+    if (!previewData) return;
+    
+    const printWindow = window.open('', '', 'width=900,height=700');
+    
+    const tablaHTML = `
+      <table style="width:100%; border-collapse:collapse; font-size:9px; margin-top:15px;">
+        <thead>
+          <tr style="background-color:#e5e7eb;">
+            <th style="border:1px solid #333; padding:5px; text-align:left;">COLOR</th>
+            ${previewData.placas.map(p => `<th style="border:1px solid #333; padding:5px; text-align:center;">${p.toUpperCase()}</th>`).join('')}
+            <th style="border:1px solid #333; padding:5px; text-align:center; background-color:#fef3c7;">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.keys(previewData.colores).map((color, idx) => `
+            <tr style="background-color:${idx % 2 === 0 ? 'white' : '#f9fafb'};">
+              <td style="border:1px solid #333; padding:5px; font-weight:bold;">${color}</td>
+              ${previewData.placas.map(placa => `<td style="border:1px solid #333; padding:5px; text-align:center;">${previewData.colores[color][placa] || 0}</td>`).join('')}
+              <td style="border:1px solid #333; padding:5px; text-align:center; font-weight:bold; background-color:#fef9e7;">${previewData.colores[color].total}</td>
+            </tr>
+          `).join('')}
+          <tr style="background-color:#d1fae5; font-weight:bold;">
+            <td style="border:1px solid #333; padding:5px;">TOTALES</td>
+            ${previewData.placas.map(placa => {
+              const total = Object.keys(previewData.colores).reduce((sum, color) => sum + (previewData.colores[color][placa] || 0), 0);
+              return `<td style="border:1px solid #333; padding:5px; text-align:center;">${total}</td>`;
+            }).join('')}
+            <td style="border:1px solid #333; padding:5px; text-align:center; background-color:#fde68a;">
+              ${Object.keys(previewData.colores).reduce((sum, color) => sum + previewData.colores[color].total, 0)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+    
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>Pedido Consolidado</title>
+        <style>
+          @page { size: letter landscape; margin: 0.5cm; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }
+          @media print {
+            body { margin: 0; padding: 5px; }
+          }
+        </style>
+      </head>
+      <body>
+        <h2>Pedido Consolidado</h2>
+        <p><strong>Cantidad de pedidos consolidados:</strong> ${previewData.cantidadPedidos}</p>
+        <p><strong>Fecha de consolidación:</strong> ${formatDate(new Date().toISOString())}</p>
+        ${tablaHTML}
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
 
   return (
     <div className="p-6">
@@ -255,6 +315,13 @@ export default function ConsolidarPedidos() {
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => handlePrintConsolidado()}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Imprimir Vista Previa
+                </Button>
                 <Button 
                   variant="outline" 
                   onClick={() => setShowPreview(false)}
