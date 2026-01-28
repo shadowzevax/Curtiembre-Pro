@@ -9,22 +9,35 @@ import ReactMarkdown from 'react-markdown';
 export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [position, setPosition] = useState({ x: window.innerWidth - 420, y: window.innerHeight - 600 });
+  const [position, setPosition] = useState(() => {
+    const saved = localStorage.getItem('copiloto_position');
+    return saved ? JSON.parse(saved) : { x: window.innerWidth - 420, y: window.innerHeight - 600 };
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [scrollPosition, setScrollPosition] = useState(0);
   const messagesEndRef = useRef(null);
   const chatRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
   useEffect(() => {
     initConversation();
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    // Solo auto-scroll si no hay posición guardada (primera carga) o si el usuario está cerca del final
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      
+      if (scrollPosition === 0 || isNearBottom) {
+        scrollToBottom();
+      }
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -115,13 +128,16 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     const newY = e.clientY - dragStart.y;
     
     // Límites de la ventana
-    const maxX = window.innerWidth - 400;
-    const maxY = window.innerHeight - 100;
+    const maxX = window.innerWidth - (isOpen ? 400 : 80);
+    const maxY = window.innerHeight - (isOpen ? 100 : 80);
     
-    setPosition({
+    const newPosition = {
       x: Math.max(0, Math.min(newX, maxX)),
       y: Math.max(0, Math.min(newY, maxY))
-    });
+    };
+    
+    setPosition(newPosition);
+    localStorage.setItem('copiloto_position', JSON.stringify(newPosition));
   };
 
   const handleMouseUp = () => {
@@ -197,13 +213,35 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     );
   };
 
+  const handleToggleOpen = () => {
+    if (isOpen && messagesContainerRef.current) {
+      // Guardar posición del scroll antes de cerrar
+      setScrollPosition(messagesContainerRef.current.scrollTop);
+    } else {
+      // Restaurar posición del scroll al abrir
+      setTimeout(() => {
+        if (messagesContainerRef.current && scrollPosition > 0) {
+          messagesContainerRef.current.scrollTop = scrollPosition;
+        }
+      }, 100);
+    }
+    setIsOpen(!isOpen);
+  };
+
   // Bola flotante minimizada
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group"
-        title="Abrir Copiloto ERP"
+        onMouseDown={handleMouseDown}
+        onClick={handleToggleOpen}
+        style={{ 
+          position: 'fixed', 
+          top: `${position.y}px`, 
+          left: `${position.x}px`,
+          cursor: isDragging ? 'grabbing' : 'grab'
+        }}
+        className="z-50 h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+        title="Abrir Copiloto ERP - Arrastra para mover"
       >
         <MessageCircle className="w-8 h-8 text-white group-hover:animate-pulse" />
         <div className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full animate-pulse" />
@@ -249,7 +287,7 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsOpen(false)}
+            onClick={handleToggleOpen}
             className="text-white hover:bg-white/20 h-8 w-8"
             title="Minimizar"
           >
@@ -259,7 +297,10 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-slate-50 to-white">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-slate-50 to-white"
+      >
         {messages.map((msg, idx) => (
           <MessageBubble key={idx} message={msg} />
         ))}
