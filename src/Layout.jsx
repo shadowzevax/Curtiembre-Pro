@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { User } from "@/entities/User";
 import { Button } from "@/components/ui/button";
+import ChatBotFloating from "@/components/agent/ChatBotFloating";
 
 const menuItems = [
   {
@@ -545,7 +546,10 @@ export default function Layout({ children, currentPageName }) {
                 <div className="flex-1 overflow-auto">
                     {children}
                 </div>
-            </main>
-        </div>
-    );
-}
+                </main>
+
+                {/* Copiloto ERP - Chat Flotante Global */}
+                <ChatBotFloating agentName="copiloto_erp" />
+                </div>
+                );
+                }
