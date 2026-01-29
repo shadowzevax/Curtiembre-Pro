@@ -116,9 +116,17 @@ export default function ProcesoRecepcion() {
         estado: 'pendiente'
       });
     } else {
-      setCurrentItem(item);
+      setCurrentItem({
+        ...item,
+        sublotes: Array.isArray(item.sublotes) ? item.sublotes : [],
+        insumos_utilizados: Array.isArray(item.insumos_utilizados) ? item.insumos_utilizados : [],
+        servicios_maquinaria: Array.isArray(item.servicios_maquinaria) ? item.servicios_maquinaria : [],
+        servicios_mano_obra: Array.isArray(item.servicios_mano_obra) ? item.servicios_mano_obra : [],
+        otros_costos: Array.isArray(item.otros_costos) ? item.otros_costos : [],
+        otros_conceptos: Array.isArray(item.otros_conceptos) ? item.otros_conceptos : []
+      });
     }
-    setSublotes(item?.sublotes || []);
+    setSublotes(Array.isArray(item?.sublotes) ? item.sublotes : []);
     setShowModal(true);
   };
 
@@ -152,14 +160,15 @@ export default function ProcesoRecepcion() {
     }
 
     try {
+      // Asegurar que TODOS los arrays estén inicializados para evitar errores en producción
       const dataToSave = {
         ...currentItem,
-        sublotes: currentItem.dividir_lote ? (sublotes || []) : [],
-        insumos_utilizados: currentItem.insumos_utilizados || [],
-        servicios_maquinaria: currentItem.servicios_maquinaria || [],
-        servicios_mano_obra: currentItem.servicios_mano_obra || [],
-        otros_costos: currentItem.otros_costos || [],
-        otros_conceptos: currentItem.otros_conceptos || [],
+        sublotes: (currentItem.dividir_lote && Array.isArray(sublotes)) ? sublotes : [],
+        insumos_utilizados: Array.isArray(currentItem.insumos_utilizados) ? currentItem.insumos_utilizados : [],
+        servicios_maquinaria: Array.isArray(currentItem.servicios_maquinaria) ? currentItem.servicios_maquinaria : [],
+        servicios_mano_obra: Array.isArray(currentItem.servicios_mano_obra) ? currentItem.servicios_mano_obra : [],
+        otros_costos: Array.isArray(currentItem.otros_costos) ? currentItem.otros_costos : [],
+        otros_conceptos: Array.isArray(currentItem.otros_conceptos) ? currentItem.otros_conceptos : [],
         numero_proceso: currentItem.codigo_lote
       };
       
