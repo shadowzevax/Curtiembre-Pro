@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { ProcesoProduccion, Insumo, ProductoTerminado, Proveedor, OrdenCompra } from '@/entities/all';
+import { ProcesoProduccion, Insumo, ProductoTerminado, Proveedor, OrdenCompra, MovimientoInventario, InventarioEnProceso } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -203,8 +203,6 @@ export default function ProcesoRecepcion() {
       
       // AFECTAR INVENTARIO DE MATERIA PRIMA (restar cantidad de hojas)
       if (!isEditing && currentItem.cantidad_total_lote_hojas > 0 && currentItem.codigo_producto) {
-        const { MovimientoInventario, InventarioEnProceso } = await import('@/entities/all');
-        
         // Buscar el producto en materia prima por código
         const productosMP = await ProductoTerminado.filter({ 
           codigo: currentItem.codigo_producto, 
@@ -257,15 +255,13 @@ export default function ProcesoRecepcion() {
         }
       }
       
+      // Cerrar modal y mostrar mensaje de éxito
       setShowModal(false);
+      setCurrentItem(null);
+      
+      // Recargar datos inmediatamente y luego mostrar mensaje
+      await loadData();
       alert('Recepción guardada con éxito.');
-      // Recargar datos con un pequeño delay para asegurar que el backend procesó todo
-      setTimeout(() => {
-        loadData().catch(err => {
-          console.error('Error recargando datos:', err);
-          // No mostrar error al usuario, solo registrar en consola
-        });
-      }, 300);
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar la recepción: ' + error.message);
