@@ -106,6 +106,11 @@ export default function ProcesoRecepcion() {
         dividir_lote: false,
         num_sublotes: 0,
         sublotes: [],
+        insumos_utilizados: [],
+        servicios_maquinaria: [],
+        servicios_mano_obra: [],
+        otros_costos: [],
+        otros_conceptos: [],
         observaciones: '',
         nombre_curtidor: '',
         estado: 'pendiente'
@@ -149,7 +154,12 @@ export default function ProcesoRecepcion() {
     try {
       const dataToSave = {
         ...currentItem,
-        sublotes: currentItem.dividir_lote ? sublotes : [],
+        sublotes: currentItem.dividir_lote ? (sublotes || []) : [],
+        insumos_utilizados: currentItem.insumos_utilizados || [],
+        servicios_maquinaria: currentItem.servicios_maquinaria || [],
+        servicios_mano_obra: currentItem.servicios_mano_obra || [],
+        otros_costos: currentItem.otros_costos || [],
+        otros_conceptos: currentItem.otros_conceptos || [],
         numero_proceso: currentItem.codigo_lote
       };
       
