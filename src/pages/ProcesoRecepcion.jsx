@@ -258,8 +258,14 @@ export default function ProcesoRecepcion() {
       }
       
       setShowModal(false);
-      loadData();
       alert('Recepción guardada con éxito.');
+      // Recargar datos con un pequeño delay para asegurar que el backend procesó todo
+      setTimeout(() => {
+        loadData().catch(err => {
+          console.error('Error recargando datos:', err);
+          // No mostrar error al usuario, solo registrar en consola
+        });
+      }, 300);
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar la recepción: ' + error.message);
