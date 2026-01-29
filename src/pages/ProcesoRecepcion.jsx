@@ -47,22 +47,30 @@ export default function ProcesoRecepcion() {
         Proveedor.list(),
         OrdenCompra.list()
       ]);
-      setRecepciones(recepcionesData);
-      setInsumos(insumosData);
-      setProductos(productosData);
-      setProveedores(proveedoresData);
-      setOrdenesCompra(comprasData);
+      
+      // VALIDACIÓN CRÍTICA: Asegurar que todos los datos son arrays válidos
+      const recepcionesValidas = Array.isArray(recepcionesData) ? recepcionesData : [];
+      const insumosValidos = Array.isArray(insumosData) ? insumosData : [];
+      const productosValidos = Array.isArray(productosData) ? productosData : [];
+      const proveedoresValidos = Array.isArray(proveedoresData) ? proveedoresData : [];
+      const comprasValidas = Array.isArray(comprasData) ? comprasData : [];
+      
+      setRecepciones(recepcionesValidas);
+      setInsumos(insumosValidos);
+      setProductos(productosValidos);
+      setProveedores(proveedoresValidos);
+      setOrdenesCompra(comprasValidas);
       
       // Extraer códigos de lote únicos de compras
-      const lotes = comprasData
-        .filter(c => c.codigo_lote_inventario)
+      const lotes = comprasValidas
+        .filter(c => c && c.codigo_lote_inventario)
         .map(c => c.codigo_lote_inventario);
       setLotesCompras([...new Set(lotes)]);
       
       // Calcular el siguiente número de lote
-      if (recepcionesData.length > 0) {
-        const lotes = recepcionesData.map(r => {
-          const match = r.codigo_lote?.match(/L(\d+)/);
+      if (recepcionesValidas.length > 0) {
+        const lotes = recepcionesValidas.map(r => {
+          const match = r?.codigo_lote?.match(/L(\d+)/);
           return match ? parseInt(match[1]) : 0;
         });
         const maxLote = Math.max(...lotes, 0);
@@ -70,6 +78,13 @@ export default function ProcesoRecepcion() {
       }
     } catch (error) {
       console.error('Error loading data:', error);
+      // Inicializar con arrays vacíos en caso de error
+      setRecepciones([]);
+      setInsumos([]);
+      setProductos([]);
+      setProveedores([]);
+      setOrdenesCompra([]);
+      setLotesCompras([]);
     } finally {
       setLoading(false);
     }
@@ -82,9 +97,11 @@ export default function ProcesoRecepcion() {
     if (!item) {
       // Generar código LT2026-001
       const year = new Date().getFullYear();
-      const recepcionesDelAnio = recepciones.filter(r => r.codigo_lote?.startsWith(`LT${year}`));
+      // VALIDACIÓN CRÍTICA: Asegurar que recepciones es un array antes de usar filter
+      const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
+      const recepcionesDelAnio = recepcionesSeguras.filter(r => r && r.codigo_lote?.startsWith(`LT${year}`));
       const consecutivos = recepcionesDelAnio.map(r => {
-        const match = r.codigo_lote?.match(/LT\d{4}-(\d+)/);
+        const match = r?.codigo_lote?.match(/LT\d{4}-(\d+)/);
         return match ? parseInt(match[1]) : 0;
       });
       const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
@@ -152,7 +169,9 @@ export default function ProcesoRecepcion() {
     
     // Validar duplicado de código lote
     if (!isEditing) {
-        const exists = recepciones.some(r => r.codigo_lote === currentItem.codigo_lote);
+        // VALIDACIÓN CRÍTICA: Asegurar que recepciones es un array antes de usar some
+        const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
+        const exists = recepcionesSeguras.some(r => r && r.codigo_lote === currentItem.codigo_lote);
         if (exists) {
             alert('El CÓDIGO DE LOTE YA EXISTE. POR FAVOR, VERIFIQUE.');
             return;
@@ -192,8 +211,11 @@ export default function ProcesoRecepcion() {
           categoria: 'pieles' 
         });
         
-        if (productosMP.length > 0) {
-          const producto = productosMP[0];
+        // VALIDACIÓN CRÍTICA: Verificar que productosMP es un array válido
+        const productosMPValidos = Array.isArray(productosMP) ? productosMP : [];
+        
+        if (productosMPValidos.length > 0) {
+          const producto = productosMPValidos[0];
           
           // Crear movimiento de salida (negativo)
           await base44.entities.MovimientoInventario.create({
@@ -209,7 +231,9 @@ export default function ProcesoRecepcion() {
           
           // Actualizar stock en ProductoTerminado
           const movimientos = await MovimientoInventario.filter({ insumo_id: producto.id });
-          const nuevoStock = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0) - currentItem.cantidad_total_lote_hojas;
+          // VALIDACIÓN CRÍTICA: Asegurar que movimientos es un array antes de usar reduce
+          const movimientosValidos = Array.isArray(movimientos) ? movimientos : [];
+          const nuevoStock = movimientosValidos.reduce((sum, m) => sum + (parseFloat(m?.cantidad) || 0), 0) - currentItem.cantidad_total_lote_hojas;
           
           await ProductoTerminado.update(producto.id, {
             stock_actual: nuevoStock
@@ -265,14 +289,17 @@ export default function ProcesoRecepcion() {
         // Buscar todos los procesos relacionados con este lote
         const allProcesos = await ProcesoProduccion.filter({ codigo_lote: item.codigo_lote });
         
+        // VALIDACIÓN CRÍTICA: Asegurar que allProcesos es un array antes de usar filter
+        const procesosValidos = Array.isArray(allProcesos) ? allProcesos : [];
+        
         // Agrupar por etapa
         const history = {
-            recepcion: allProcesos.filter(p => p.tipo_proceso === 'recepcion'),
-            remojo: allProcesos.filter(p => p.tipo_proceso === 'limpieza' && p.seccion === 'remojo'),
-            pelambre: allProcesos.filter(p => p.tipo_proceso === 'limpieza' && p.seccion === 'pelambre'),
-            curtido: allProcesos.filter(p => p.tipo_proceso === 'curtido'),
-            recurtido: allProcesos.filter(p => p.tipo_proceso === 'recurtido'),
-            acabado: allProcesos.filter(p => p.tipo_proceso === 'acabado'),
+            recepcion: procesosValidos.filter(p => p && p.tipo_proceso === 'recepcion'),
+            remojo: procesosValidos.filter(p => p && p.tipo_proceso === 'limpieza' && p.seccion === 'remojo'),
+            pelambre: procesosValidos.filter(p => p && p.tipo_proceso === 'limpieza' && p.seccion === 'pelambre'),
+            curtido: procesosValidos.filter(p => p && p.tipo_proceso === 'curtido'),
+            recurtido: procesosValidos.filter(p => p && p.tipo_proceso === 'recurtido'),
+            acabado: procesosValidos.filter(p => p && p.tipo_proceso === 'acabado'),
         };
         
         setHistoryData(history);
