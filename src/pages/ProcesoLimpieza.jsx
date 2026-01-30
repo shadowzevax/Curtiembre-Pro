@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, ProductoTerminado } from '@/entities/all';
+import { ProcesoProduccion, Insumo, ProductoTerminado, MovimientoInventario } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -274,8 +274,6 @@ export default function ProcesoLimpieza() {
       
       // AFECTAR INVENTARIO DE INSUMOS Y QUÍMICOS (descontar insumos utilizados)
       if (!isEditing && dataToSave.insumos_utilizados && dataToSave.insumos_utilizados.length > 0) {
-        const { MovimientoInventario } = await import('@/entities/all');
-        
         for (const insumo of dataToSave.insumos_utilizados) {
           if (insumo.insumo_id && insumo.cantidad > 0) {
             // Buscar el insumo por ID
@@ -309,7 +307,8 @@ export default function ProcesoLimpieza() {
       }
       
       setShowModal(false);
-      loadData();
+      setCurrentItem(null);
+      await loadData();
       alert('Proceso de limpieza guardado con éxito.');
     } catch (error) {
       console.error('Error saving:', error);

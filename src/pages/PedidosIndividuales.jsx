@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Eye, Printer, Download, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
+import { Eye, Printer, Download, ChevronDown, ChevronUp, CheckSquare, Square, Edit, Trash2 } from 'lucide-react';
 import { TableRow, TableCell } from '@/components/ui/table';
 
 const formatDate = (dateString) => {
@@ -24,6 +24,8 @@ export default function PedidosIndividuales() {
   const [selectedForConsolidation, setSelectedForConsolidation] = useState([]);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPedido, setSelectedPedido] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPedido, setEditingPedido] = useState(null);
   
   const [filtros, setFiltros] = useState({
     marroquinero: '',
@@ -150,6 +152,41 @@ export default function PedidosIndividuales() {
     printWindow.print();
   };
 
+  const handleEdit = (pedido) => {
+    setEditingPedido({...pedido, items: pedido.items || []});
+    setShowEditModal(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Está seguro de eliminar este pedido?')) return;
+    try {
+      await PedidoMarroquinero.delete(id);
+      alert('Pedido eliminado correctamente.');
+      loadData();
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al eliminar el pedido: ' + error.message);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPedido) return;
+    try {
+      // Recalcular total_hojas
+      const totalHojas = editingPedido.items.reduce((sum, item) => sum + (item.total || 0), 0);
+      await PedidoMarroquinero.update(editingPedido.id, { ...editingPedido, total_hojas: totalHojas });
+      alert('Pedido actualizado correctamente.');
+      setShowEditModal(false);
+      setEditingPedido(null);
+      loadData();
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al actualizar: ' + error.message);
+    }
+  };
+
+  const placasOrdenadas = ['can', 'point', 'eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'opaco_mate', 'opaco', 'envejecido'];
+
   const handleExport = (pedido) => {
     // Extraer todas las placas
     const placasSet = new Set();
@@ -160,7 +197,7 @@ export default function PedidosIndividuales() {
         }
       });
     });
-    const placas = Array.from(placasSet).sort();
+    const placas = placasOrdenadas.filter(p => placasSet.has(p));
     
     // Encabezados CSV
     const headers = ['Color', ...placas.map(p => p.toUpperCase()), 'TOTAL'];
@@ -218,17 +255,23 @@ export default function PedidosIndividuales() {
         </TableCell>
         <TableCell>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setSelectedPedido(pedido); setShowDetailModal(true); }}>
+            <Button variant="outline" size="sm" onClick={() => { setSelectedPedido(pedido); setShowDetailModal(true); }} title="Ver">
               <Eye className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={() => handlePrint(pedido)}>
+            <Button variant="outline" size="sm" onClick={() => handleEdit(pedido)} title="Editar">
+              <Edit className="w-4 h-4" />
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => handleDelete(pedido.id)} title="Eliminar">
+              <Trash2 className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handlePrint(pedido)} title="Imprimir">
               <Printer className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport(pedido)}>
+            <Button variant="outline" size="sm" onClick={() => handleExport(pedido)} title="Exportar">
               <Download className="w-4 h-4" />
             </Button>
             {pedido.estado === 'pendiente' && (
-              <Button variant="outline" size="sm" onClick={() => toggleSelection(pedido.id)}>
+              <Button variant="outline" size="sm" onClick={() => toggleSelection(pedido.id)} title="Consolidar">
                 {selectedForConsolidation.includes(pedido.id) ? 
                   <CheckSquare className="w-4 h-4 text-green-600" /> : 
                   <Square className="w-4 h-4" />
@@ -355,66 +398,30 @@ export default function PedidosIndividuales() {
                       <thead className="bg-gray-100">
                         <tr>
                           <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
-                          {(() => {
-                            // Extraer TODAS las placas que existen en ANY item del pedido
-                            const placasSet = new Set();
-                            selectedPedido.items.forEach(item => {
-                              Object.keys(item).forEach(key => {
-                                if (key !== 'color' && key !== 'total') {
-                                  placasSet.add(key);
-                                }
-                              });
-                            });
-                            return Array.from(placasSet).sort().map(placa => (
-                              <th key={placa} className="border p-2 text-center">{placa.toUpperCase()}</th>
-                            ));
-                          })()}
+                          {placasOrdenadas.map(placa => (
+                            <th key={placa} className="border p-2 text-center">{placa.replace('_', ' ').toUpperCase()}</th>
+                          ))}
                           <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {selectedPedido.items.map((item, idx) => {
-                          // Extraer todas las placas disponibles
-                          const placasSet = new Set();
-                          selectedPedido.items.forEach(i => {
-                            Object.keys(i).forEach(key => {
-                              if (key !== 'color' && key !== 'total') {
-                                placasSet.add(key);
-                              }
-                            });
-                          });
-                          const placasArray = Array.from(placasSet).sort();
-                          
-                          return (
-                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                              <td className="border p-2 font-medium sticky left-0 bg-white z-10">{item.color}</td>
-                              {placasArray.map(placa => (
-                                <td key={placa} className="border p-2 text-center">
-                                  {item[placa] || 0}
-                                </td>
-                              ))}
-                              <td className="border p-2 text-center font-bold bg-yellow-50">{item.total}</td>
-                            </tr>
-                          );
-                        })}
+                       {selectedPedido.items.map((item, idx) => (
+                         <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                           <td className="border p-2 font-medium sticky left-0 bg-white z-10">{item.color}</td>
+                           {placasOrdenadas.map(placa => (
+                             <td key={placa} className="border p-2 text-center">
+                               {item[placa] || 0}
+                             </td>
+                           ))}
+                           <td className="border p-2 text-center font-bold bg-yellow-50">{item.total}</td>
+                         </tr>
+                       ))}
                         <tr className="bg-green-100 font-bold">
                           <td className="border p-2 sticky left-0 bg-green-100 z-10">TOTALES</td>
-                          {(() => {
-                            const placasSet = new Set();
-                            selectedPedido.items.forEach(item => {
-                              Object.keys(item).forEach(key => {
-                                if (key !== 'color' && key !== 'total') {
-                                  placasSet.add(key);
-                                }
-                              });
-                            });
-                            return Array.from(placasSet).sort().map(placa => {
-                              const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
-                              return (
-                                <td key={placa} className="border p-2 text-center">{total}</td>
-                              );
-                            });
-                          })()}
+                          {placasOrdenadas.map(placa => {
+                            const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
+                            return <td key={placa} className="border p-2 text-center">{total}</td>;
+                          })}
                           <td className="border p-2 text-center bg-yellow-200">{selectedPedido.total_hojas}</td>
                         </tr>
                       </tbody>
@@ -427,6 +434,79 @@ export default function PedidosIndividuales() {
           <div className="flex justify-end pt-4">
             <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Editar Pedido</DialogTitle></DialogHeader>
+          {editingPedido && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>No. Pedido</Label>
+                  <Input value={editingPedido.numero_pedido} readOnly className="bg-gray-100" />
+                </div>
+                <div>
+                  <Label>Fecha Solicitud</Label>
+                  <Input type="date" value={editingPedido.fecha_solicitud} onChange={e => setEditingPedido({...editingPedido, fecha_solicitud: e.target.value})} />
+                </div>
+                <div>
+                  <Label>Marroquinero</Label>
+                  <Input value={editingPedido.nombre_marroquinero} onChange={e => setEditingPedido({...editingPedido, nombre_marroquinero: e.target.value})} />
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-bold mb-2">Ítems del Pedido</h4>
+                <div className="border rounded-lg overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="border p-2">Color</th>
+                        {placasOrdenadas.map(placa => (
+                          <th key={placa} className="border p-2">{placa.replace('_', ' ').toUpperCase()}</th>
+                        ))}
+                        <th className="border p-2 bg-yellow-100">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editingPedido.items.map((item, idx) => {
+                        const rowTotal = placasOrdenadas.reduce((sum, placa) => sum + (item[placa] || 0), 0);
+                        return (
+                          <tr key={idx}>
+                            <td className="border p-2">
+                              <Input value={item.color} onChange={e => {
+                                const updated = [...editingPedido.items];
+                                updated[idx].color = e.target.value;
+                                setEditingPedido({...editingPedido, items: updated});
+                              }} className="w-full" />
+                            </td>
+                            {placasOrdenadas.map(placa => (
+                              <td key={placa} className="border p-2">
+                                <Input type="number" value={item[placa] || 0} onChange={e => {
+                                  const updated = [...editingPedido.items];
+                                  updated[idx][placa] = parseInt(e.target.value) || 0;
+                                  updated[idx].total = placasOrdenadas.reduce((sum, p) => sum + (updated[idx][p] || 0), 0);
+                                  setEditingPedido({...editingPedido, items: updated});
+                                }} className="w-16 text-center" />
+                              </td>
+                            ))}
+                            <td className="border p-2 text-center font-bold bg-yellow-50">{rowTotal}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancelar</Button>
+                <Button onClick={handleSaveEdit}>Guardar Cambios</Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

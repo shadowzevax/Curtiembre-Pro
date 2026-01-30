@@ -335,7 +335,7 @@ export default function ProcesoRecepcion() {
       <td>{item.codigo_producto || 'N/A'}</td>
       <td>{item.descripcion_producto || item.nombre_inventario || 'N/A'}</td>
       <td>{item.cantidad_total_lote_hojas || item.cantidad_total_lote || 0}</td>
-      <td>{item.cantidad_total_lote_pieles || 0}</td>
+      <td>{item.cantidad_total_lote_pieles || item.cantidad_pieles || 0}</td>
       <td>{item.peso_total} kg</td>
       <td><span className="capitalize">{item.estado}</span></td>
       <td>
