@@ -159,14 +159,8 @@ export default function ProcesoLimpieza() {
       }
     }
     
-    // Si cambia el % dosificación, recalcular cantidad automáticamente
-    if (field === 'dosificacion') {
-      const dosificacion = parseFloat(value) || 0;
-      const pesoActual = parseFloat(currentItem.peso_actual) || 0;
-      updated[index].cantidad = (pesoActual * dosificacion) / 100;
-    }
-    
-    // Calcular valor total = costo_unitario * cantidad + IVA
+    // Si cambia el % dosificación, NO auto-calcular, dejar que el usuario lo edite
+    // Solo calcular valor total con la cantidad que el usuario ingrese
     const cantidad = parseFloat(updated[index].cantidad) || 0;
     const costoUnitario = parseFloat(updated[index].costo_unitario) || 0;
     const iva = parseFloat(updated[index].iva) || 0;
@@ -215,14 +209,14 @@ export default function ProcesoLimpieza() {
       const cantidadPieles = parseFloat(prev.cantidad_pieles) || 0;
       const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
       
+      // NO recalcular cantidades automáticamente, solo recalcular valores totales con cantidades existentes
       const updatedInsumos = (prev.insumos_utilizados || []).map(item => {
-        const dosificacion = parseFloat(item.dosificacion) || 0;
-        const cantidad = (pesoActual * dosificacion) / 100;
+        const cantidad = parseFloat(item.cantidad) || 0;
         const costoUnitario = parseFloat(item.costo_unitario) || 0;
         const iva = parseFloat(item.iva) || 0;
         const subtotal = cantidad * costoUnitario;
         const valorTotal = subtotal + (subtotal * iva);
-        return { ...item, cantidad, valor_total: valorTotal };
+        return { ...item, valor_total: valorTotal };
       });
       
       const costoRemojo = updatedInsumos
@@ -412,7 +406,10 @@ export default function ProcesoLimpieza() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => handleCantidadPielesChange(e.target.value)} /></div>
+              <div><Label>Cantidad Hojas</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_pieles || ''} onChange={e => {
+                const val = e.target.value.replace(/[^0-9]/g, '');
+                handleCantidadPielesChange(val);
+              }} /></div>
               <div>
                 <Label>Sección *</Label>
                 <Select value={currentItem?.seccion || 'remojo'} onValueChange={v => setCurrentItem({...currentItem, seccion: v})}>
@@ -427,7 +424,10 @@ export default function ProcesoLimpieza() {
             <div className="grid grid-cols-4 gap-4">
               <div><Label>Fecha Inicio</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div><Label>Fecha Fin</Label><Input type="date" value={currentItem?.fecha_fin || ''} onChange={e => setCurrentItem({...currentItem, fecha_fin: e.target.value})} /></div>
-              <div><Label>Peso Actual (kg)</Label><Input type="number" step="0.01" value={currentItem?.peso_actual || ''} onChange={e => handlePesoActualChange(e.target.value)} /></div>
+              <div><Label>Peso Actual (kg)</Label><Input type="text" inputMode="decimal" value={currentItem?.peso_actual || ''} onChange={e => {
+                const val = e.target.value.replace(/[^0-9.]/g, '');
+                handlePesoActualChange(val);
+              }} /></div>
               <div><Label>Peso Promedio (kg/piel)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio || ''} readOnly className="bg-blue-50 font-medium" title="Auto-calculado: Peso Actual / Cantidad Pieles" /></div>
             </div>
 
@@ -466,8 +466,14 @@ export default function ProcesoLimpieza() {
                           </Select>
                         </td>
                         <td className="p-2"><Input value={item.producto} readOnly className="bg-gray-50" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" value={item.dosificacion} onChange={e => handleInsumoChange(index, 'dosificacion', e.target.value)} className="text-right" placeholder="%" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" title="Auto-calculado: Peso Actual * % Dosificación" /></td>
+                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.dosificacion} onChange={e => {
+                         const val = e.target.value.replace(/[^0-9.]/g, '');
+                         handleInsumoChange(index, 'dosificacion', val);
+                        }} className="text-right" placeholder="%" /></td>
+                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.cantidad} onChange={e => {
+                         const val = e.target.value.replace(/[^0-9.]/g, '');
+                         handleInsumoChange(index, 'cantidad', val);
+                        }} className="text-right" placeholder="Cantidad manual" /></td>
                         <td className="p-2"><Input type="number" step="0.01" value={item.costo_unitario} onChange={e => handleInsumoChange(index, 'costo_unitario', e.target.value)} className="text-right" /></td>
                         <td className="p-2">
                           <Select value={String(item.iva)} onValueChange={v => handleInsumoChange(index, 'iva', parseFloat(v))}>
