@@ -219,7 +219,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
       ['CODIGO LOTE', codigoLote],
       ['PROVEEDOR', loteData.proveedor_id || 'N/A'],
       ['NO. DOCUMENTO', loteData.no_documento || 'N/A'],
-      ['CANT. TOTAL PIELES', loteData.cantidad_pieles || 0],
+      ['CANT. TOTAL PIELES', loteData.cantidad_total_lote_pieles || loteData.cantidad_pieles || 0],
       ['CANT. TOTAL HOJAS', loteData.cantidad_total_lote_hojas || 0],
       [''],
       ['TOTAL COSTO PROCESO CUERO', totalCostoProceso],
@@ -227,7 +227,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
       ['SUBTOTAL SERVICIO DE MANO DE OBRA', subtotalManoObra],
       ['SUBTOTAL OTROS COSTOS', subtotalOtros],
       ['SUMAS TOTAL LOTE', sumasTotalLote],
-      ['COSTO POR PIEL PUESTA EN PASTO', sumasTotalLote / (loteData.cantidad_pieles || 1)],
+      ['COSTO POR PIEL PUESTA EN PASTO', sumasTotalLote / (loteData.cantidad_total_lote_pieles || loteData.cantidad_pieles || 1)],
       ['TOTAL GENERAL DEL LOTE', totalGeneral]
     ];
 
@@ -263,10 +263,10 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
                 <div><strong>PROVEEDOR:</strong> {loteData.proveedor_id || 'N/A'}</div>
                 <div><strong>NO. DOCUMENTO:</strong> {loteData.no_documento || 'N/A'}</div>
                 <div><strong>FECHA RECEPCIÓN:</strong> {loteData.fecha_inicio ? new Date(loteData.fecha_inicio).toLocaleDateString('es-CO') : 'N/A'}</div>
-                <div><strong>CANT. TOTAL PIELES:</strong> {loteData.cantidad_pieles || 0}</div>
+                <div><strong>CANT. TOTAL PIELES:</strong> {loteData.cantidad_total_lote_pieles || loteData.cantidad_pieles || 0}</div>
                 <div><strong>CANT. TOTAL HOJAS:</strong> {loteData.cantidad_total_lote_hojas || 0}</div>
                 <div><strong>PESO TOTAL (KG):</strong> {formatNumber(loteData.peso_total || 0)}</div>
-                <div><strong>PESO PROMEDIO PIEL:</strong> {formatNumber((loteData.peso_total || 0) / (loteData.cantidad_pieles || 1))}</div>
+                <div><strong>PESO PROMEDIO PIEL:</strong> {formatNumber((loteData.peso_total || 0) / (loteData.cantidad_total_lote_pieles || loteData.cantidad_pieles || 1))}</div>
               </div>
             </div>
 
@@ -469,17 +469,16 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
                     <td colSpan="2" className="border p-2 text-right">COSTO POR PIEL PUESTA EN PASTO</td>
                     <td className="border p-2">
                       <Input 
-                        type="number" 
-                        step="0.01" 
+                        type="text" 
                         className="h-7 text-xs text-center" 
-                        value={loteData?.cantidad_pieles || 0}
+                        value={loteData?.cantidad_total_lote_pieles || loteData?.cantidad_pieles || 0}
                         readOnly
                         title="Cantidad de pieles del lote"
                       />
                     </td>
                     <td className="border p-2 text-right font-bold">
-                      {loteData?.cantidad_pieles > 0 
-                        ? formatCurrency(sumasTotalLote / loteData.cantidad_pieles) 
+                      {(loteData?.cantidad_total_lote_pieles || loteData?.cantidad_pieles) > 0 
+                        ? formatCurrency(sumasTotalLote / (loteData.cantidad_total_lote_pieles || loteData.cantidad_pieles)) 
                         : formatCurrency(0)}
                     </td>
                     <td></td>
