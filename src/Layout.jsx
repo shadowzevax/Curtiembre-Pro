@@ -116,17 +116,18 @@ const menuItems = [
   },
   {
     title: "Inventarios",
-    icon: Package,
-    roles: ["admin", "operario"],
-    subItems: [
-      { title: "Catálogo de Productos", url: createPageUrl("CatalogoProductos"), icon: Package },
-      { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
-      { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
-      { title: "Inventarios en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },
-      { title: "Inventario de Productos Terminados", url: createPageUrl("InventarioProductos"), icon: Package },
-      { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package },
-      { title: "Traslado de Inventarios", url: createPageUrl("TrasladoInventario"), icon: Package }
-    ]
+      icon: Package,
+      roles: ["admin", "operario"],
+      subItems: [
+        { title: "Catálogo de Productos", url: createPageUrl("CatalogoProductos"), icon: Package },
+        { title: "Catálogo de Colores (Pintura)", url: createPageUrl("CatalogoColores"), icon: Package },
+        { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
+        { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
+        { title: "Inventarios en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },
+        { title: "Inventario de Productos Terminados", url: createPageUrl("InventarioProductos"), icon: Package },
+        { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package },
+        { title: "Traslado de Inventarios", url: createPageUrl("TrasladoInventario"), icon: Package }
+      ]
   },
   {
     title: "Contabilidad",

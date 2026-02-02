@@ -159,8 +159,14 @@ export default function ProcesoLimpieza() {
       }
     }
     
-    // Si cambia el % dosificación, NO auto-calcular, dejar que el usuario lo edite
-    // Solo calcular valor total con la cantidad que el usuario ingrese
+    // Si cambia el % dosificación, recalcular cantidad automáticamente
+    if (field === 'dosificacion') {
+      const dosificacion = parseFloat(value) || 0;
+      const pesoActual = parseFloat(currentItem.peso_actual) || 0;
+      updated[index].cantidad = (pesoActual * dosificacion) / 100;
+    }
+    
+    // Calcular valor total = costo_unitario * cantidad + IVA
     const cantidad = parseFloat(updated[index].cantidad) || 0;
     const costoUnitario = parseFloat(updated[index].costo_unitario) || 0;
     const iva = parseFloat(updated[index].iva) || 0;
@@ -209,14 +215,15 @@ export default function ProcesoLimpieza() {
       const cantidadPieles = parseFloat(prev.cantidad_pieles) || 0;
       const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
       
-      // NO recalcular cantidades automáticamente, solo recalcular valores totales con cantidades existentes
+      // Recalcular cantidades automáticamente basado en dosificación
       const updatedInsumos = (prev.insumos_utilizados || []).map(item => {
-        const cantidad = parseFloat(item.cantidad) || 0;
+        const dosificacion = parseFloat(item.dosificacion) || 0;
+        const cantidad = (pesoActual * dosificacion) / 100;
         const costoUnitario = parseFloat(item.costo_unitario) || 0;
         const iva = parseFloat(item.iva) || 0;
         const subtotal = cantidad * costoUnitario;
         const valorTotal = subtotal + (subtotal * iva);
-        return { ...item, valor_total: valorTotal };
+        return { ...item, cantidad, valor_total: valorTotal };
       });
       
       const costoRemojo = updatedInsumos
@@ -470,10 +477,7 @@ export default function ProcesoLimpieza() {
                          const val = e.target.value.replace(/[^0-9.]/g, '');
                          handleInsumoChange(index, 'dosificacion', val);
                         }} className="text-right" placeholder="%" /></td>
-                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.cantidad} onChange={e => {
-                         const val = e.target.value.replace(/[^0-9.]/g, '');
-                         handleInsumoChange(index, 'cantidad', val);
-                        }} className="text-right" placeholder="Cantidad manual" /></td>
+                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" title="Auto-calculado: Peso Actual * % Dosificación" /></td>
                         <td className="p-2"><Input type="number" step="0.01" value={item.costo_unitario} onChange={e => handleInsumoChange(index, 'costo_unitario', e.target.value)} className="text-right" /></td>
                         <td className="p-2">
                           <Select value={String(item.iva)} onValueChange={v => handleInsumoChange(index, 'iva', parseFloat(v))}>
