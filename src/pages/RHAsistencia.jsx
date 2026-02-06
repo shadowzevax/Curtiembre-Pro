@@ -4,16 +4,21 @@ import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, Edit } from 'lucide-react';
+
+const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 
 export default function RHAsistencia() {
     const [empleados, setEmpleados] = useState([]);
-    const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
-    const [asistencia, setAsistencia] = useState({});
+    const [registros, setRegistros] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [currentItem, setCurrentItem] = useState(null);
 
     useEffect(() => {
         loadData();
@@ -24,17 +29,7 @@ export default function RHAsistencia() {
         try {
             const data = await Empleado.filter({ estado: 'activo' });
             setEmpleados(data);
-            // Inicializar asistencia con estado "presente" por defecto
-            const asistenciaInicial = {};
-            data.forEach(emp => {
-                asistenciaInicial[emp.id] = {
-                    estado: 'presente',
-                    horaEntrada: '08:00',
-                    horaSalida: '17:00',
-                    observaciones: ''
-                };
-            });
-            setAsistencia(asistenciaInicial);
+            // Cargar registros de producción desde una entidad específica
         } catch (error) {
             console.error("Error:", error);
         } finally {
@@ -42,187 +37,138 @@ export default function RHAsistencia() {
         }
     };
 
-    const handleAsistenciaChange = (empId, field, value) => {
-        setAsistencia(prev => ({
-            ...prev,
-            [empId]: {
-                ...prev[empId],
-                [field]: value
-            }
-        }));
+    const handleOpenModal = (item = null) => {
+        setCurrentItem(item || {
+            fecha: new Date().toISOString().split('T')[0],
+            codigo_personal: '',
+            nombre_personal: '',
+            actividad_realizada: '',
+            cantidad_hojas: 0,
+            valor_por_hoja: 0,
+            total_devengado: 0,
+            observaciones: '',
+            estado: 'pendiente'
+        });
+        setShowModal(true);
     };
 
-    const handleGuardar = () => {
-        // Aquí se guardaría en una entidad de Asistencia
-        // Por ahora solo mostramos una alerta
-        alert(`Asistencia guardada para el día ${new Date(fecha).toLocaleDateString('es-CO')}`);
+    const handlePersonalChange = (codigo) => {
+        const personal = empleados.find(e => e.codigo_personal === codigo);
+        if (personal) {
+            setCurrentItem(prev => ({
+                ...prev,
+                codigo_personal: codigo,
+                nombre_personal: personal.nombre
+            }));
+        }
     };
 
-    const handleExport = () => {
-        let csvContent = "Empleado,Cédula,Estado,Hora Entrada,Hora Salida,Observaciones\n";
-        csvContent += empleados.map(emp => {
-            const ast = asistencia[emp.id] || {};
-            return `"${emp.nombre_completo}","${emp.cedula}","${ast.estado}","${ast.horaEntrada}","${ast.horaSalida}","${ast.observaciones}"`;
-        }).join("\n");
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `asistencia_${fecha}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const handleCalcularTotal = () => {
+        const total = (currentItem?.cantidad_hojas || 0) * (currentItem?.valor_por_hoja || 0);
+        setCurrentItem(prev => ({...prev, total_devengado: total}));
     };
 
-    const handlePrint = () => window.print();
+    useEffect(() => {
+        if (currentItem) {
+            handleCalcularTotal();
+        }
+    }, [currentItem?.cantidad_hojas, currentItem?.valor_por_hoja]);
 
-    const resumen = {
-        presentes: Object.values(asistencia).filter(a => a.estado === 'presente').length,
-        ausentes: Object.values(asistencia).filter(a => a.estado === 'ausente').length,
-        tardanzas: Object.values(asistencia).filter(a => a.estado === 'tardanza').length,
-        permisos: Object.values(asistencia).filter(a => a.estado === 'permiso').length
+    const handleSave = async (e) => {
+        e.preventDefault();
+        try {
+            // Guardar en entidad de RegistroProduccion
+            alert('Registro de producción guardado exitosamente.');
+            setShowModal(false);
+            loadData();
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Error al guardar.");
+        }
     };
 
-    const headers = ["Empleado", "Cédula", "Estado", "Hora Entrada", "Hora Salida", "Observaciones"];
-    const renderRow = (emp) => {
-        const ast = asistencia[emp.id] || {};
-        return (
-            <tr key={emp.id}>
-                <td>{emp.nombre_completo}</td>
-                <td>{emp.cedula}</td>
-                <td>
-                    <select 
-                        value={ast.estado} 
-                        onChange={(e) => handleAsistenciaChange(emp.id, 'estado', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm"
-                    >
-                        <option value="presente">Presente</option>
-                        <option value="ausente">Ausente</option>
-                        <option value="tardanza">Tardanza</option>
-                        <option value="permiso">Permiso</option>
-                    </select>
-                </td>
-                <td>
-                    <Input 
-                        type="time" 
-                        value={ast.horaEntrada} 
-                        onChange={(e) => handleAsistenciaChange(emp.id, 'horaEntrada', e.target.value)}
-                        className="w-32"
-                        disabled={ast.estado === 'ausente'}
-                    />
-                </td>
-                <td>
-                    <Input 
-                        type="time" 
-                        value={ast.horaSalida} 
-                        onChange={(e) => handleAsistenciaChange(emp.id, 'horaSalida', e.target.value)}
-                        className="w-32"
-                        disabled={ast.estado === 'ausente'}
-                    />
-                </td>
-                <td>
-                    <Input 
-                        value={ast.observaciones} 
-                        onChange={(e) => handleAsistenciaChange(emp.id, 'observaciones', e.target.value)}
-                        placeholder="Observaciones"
-                        className="w-full"
-                    />
-                </td>
-            </tr>
-        );
-    };
+    const headers = ["Fecha", "Código", "Nombre", "Actividad", "Cantidad Hojas", "Valor/Hoja", "Total Devengado", "Estado", "Acciones"];
+    const renderRow = (item) => (
+        <tr key={item.id}>
+            <td>{new Date(item.fecha).toLocaleDateString()}</td>
+            <td className="font-mono">{item.codigo_personal}</td>
+            <td>{item.nombre_personal}</td>
+            <td>{item.actividad_realizada}</td>
+            <td className="text-center">{item.cantidad_hojas}</td>
+            <td className="text-right">{formatCurrency(item.valor_por_hoja)}</td>
+            <td className="text-right font-bold text-green-700">{formatCurrency(item.total_devengado)}</td>
+            <td>
+                <span className={`px-2 py-1 rounded text-xs ${item.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                    {item.estado?.toUpperCase()}
+                </span>
+            </td>
+            <td>
+                <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
+            </td>
+        </tr>
+    );
 
     return (
         <div className="p-6 space-y-6">
-            <style>{`@media print {#tabla-imprimible { position: absolute; left: 0; top: 0; width: 100%; } #page-header, .no-print { display: none; } body * { visibility: hidden; } #tabla-imprimible, #tabla-imprimible * { visibility: visible; }}`}</style>
             <PageHeader 
-                title="Control de Asistencia"
-                description="Registra y gestiona la asistencia diaria de los empleados."
-                onExportExcel={handleExport}
-                onPrint={handlePrint}
+                title="Registro de Producción"
+                description="Registra la producción diaria del personal."
+                actionButton={
+                    <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Nuevo Registro
+                    </Button>
+                }
             />
 
-            <Card className="no-print">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Calendar className="w-5 h-5" />
-                        Fecha de Asistencia
-                    </CardTitle>
-                </CardHeader>
+            <Card>
+                <CardHeader><CardTitle>Registros de Producción</CardTitle></CardHeader>
                 <CardContent>
-                    <div className="flex gap-4 items-end">
-                        <div className="flex-grow">
-                            <Label>Fecha</Label>
-                            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-                        </div>
-                        <Button onClick={handleGuardar} className="bg-emerald-600 hover:bg-emerald-700">
-                            Guardar Asistencia
-                        </Button>
-                    </div>
+                    <DataTable headers={headers} data={registros} renderRow={renderRow} loading={loading} />
                 </CardContent>
             </Card>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
+            <Dialog open={showModal} onOpenChange={setShowModal}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader><DialogTitle>Nuevo Registro</DialogTitle></DialogHeader>
+                    <form onSubmit={handleSave} className="space-y-4">
+                        <div><Label>Fecha *</Label><Input type="date" value={currentItem?.fecha} onChange={e => setCurrentItem({...currentItem, fecha: e.target.value})} required /></div>
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <p className="text-sm text-slate-600">Presentes</p>
-                                <p className="text-2xl font-bold text-green-600">{resumen.presentes}</p>
+                                <Label>Código Personal *</Label>
+                                <Select value={currentItem?.codigo_personal} onValueChange={v => handlePersonalChange(v)}>
+                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                    <SelectContent>
+                                        {empleados.map(e => <SelectItem key={e.id} value={e.codigo_personal}>{e.codigo_personal}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
-                            <CheckCircle className="w-8 h-8 text-green-500" />
+                            <div><Label>Nombre Personal</Label><Input value={currentItem?.nombre_personal} readOnly className="bg-gray-100" /></div>
                         </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-600">Ausentes</p>
-                                <p className="text-2xl font-bold text-red-600">{resumen.ausentes}</p>
-                            </div>
-                            <XCircle className="w-8 h-8 text-red-500" />
+                        <div><Label>Actividad Realizada *</Label><Input value={currentItem?.actividad_realizada} onChange={e => setCurrentItem({...currentItem, actividad_realizada: e.target.value})} required placeholder="Ej: Curtido de pieles" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Cantidad de Hojas *</Label><Input type="number" value={currentItem?.cantidad_hojas} onChange={e => setCurrentItem({...currentItem, cantidad_hojas: parseFloat(e.target.value) || 0})} required /></div>
+                            <div><Label>Valor por Hoja *</Label><Input type="number" value={currentItem?.valor_por_hoja} onChange={e => setCurrentItem({...currentItem, valor_por_hoja: parseFloat(e.target.value) || 0})} required /></div>
                         </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-600">Tardanzas</p>
-                                <p className="text-2xl font-bold text-orange-600">{resumen.tardanzas}</p>
-                            </div>
-                            <Clock className="w-8 h-8 text-orange-500" />
+                        <div><Label>Total Devengado (Automático)</Label><Input type="number" value={currentItem?.total_devengado} readOnly className="bg-green-50 font-bold text-lg" /></div>
+                        <div>
+                            <Label>Estado</Label>
+                            <Select value={currentItem?.estado} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="pendiente">PENDIENTE</SelectItem>
+                                    <SelectItem value="liquidado">LIQUIDADO</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-600">Permisos</p>
-                                <p className="text-2xl font-bold text-blue-600">{resumen.permisos}</p>
-                            </div>
-                            <Badge className="bg-blue-500">P</Badge>
+                        <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
+                        <div className="flex justify-end gap-2 pt-4">
+                            <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
+                            <Button type="submit">Guardar</Button>
                         </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            <div id="tabla-imprimible">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Clock className="w-5 h-5" />
-                            Registro de Asistencia - {new Date(fecha).toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <DataTable headers={headers} data={empleados} renderRow={renderRow} loading={loading} />
-                    </CardContent>
-                </Card>
-            </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

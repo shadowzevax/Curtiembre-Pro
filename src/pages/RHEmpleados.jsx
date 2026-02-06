@@ -44,19 +44,27 @@ export default function RHEmpleados() {
     
     const handleOpenModal = (item = null) => {
         setIsEditing(!!item);
+        
+        let nextCodigo = 'PER-001';
+        if (!item && empleados.length > 0) {
+            const maxNum = Math.max(...empleados.map(e => {
+                const match = e.codigo_personal?.match(/PER-(\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            }));
+            nextCodigo = `PER-${String(maxNum + 1).padStart(3, '0')}`;
+        }
+        
         setCurrentItem(item || { 
-            nombre_completo: '', 
-            cedula: '', 
-            fecha_nacimiento: '',
-            direccion: '',
+            codigo_personal: nextCodigo,
+            nombre: '', 
+            identificacion: '', 
             telefono: '',
             email: '',
+            tipo_personal: 'operario',
             cargo: '', 
-            fecha_contratacion: new Date().toISOString().split('T')[0], 
-            salario: 0, 
+            direccion: '',
             estado: 'activo',
-            rut: '',
-            foto: ''
+            observaciones: ''
         });
         setShowModal(true);
     };
@@ -141,35 +149,15 @@ export default function RHEmpleados() {
     
     const handlePrint = () => window.print();
 
-    const headers = ["Foto", "Nombre", "Cédula", "Cargo", "Salario", "Fecha Nacimiento", "Estado", "RUT", "Acciones"];
+    const headers = ["Código", "Nombre", "Identificación", "Tipo Personal", "Cargo", "Estado", "Acciones"];
     const renderRow = (item) => (
         <tr key={item.id}>
-            <td>
-                {item.foto ? (
-                    <img src={item.foto} alt={item.nombre_completo} className="w-10 h-10 rounded-full object-cover" />
-                ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                        <ImageIcon className="w-5 h-5 text-gray-400" />
-                    </div>
-                )}
-            </td>
-            <td>{item.nombre_completo}</td>
-            <td>{item.cedula}</td>
+            <td className="font-mono font-bold">{item.codigo_personal}</td>
+            <td>{item.nombre}</td>
+            <td className="font-mono">{item.identificacion}</td>
+            <td className="capitalize">{item.tipo_personal}</td>
             <td>{item.cargo}</td>
-            <td>{formatCurrency(item.salario)}</td>
-            <td>{formatDate(item.fecha_nacimiento)}</td>
             <td><span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.estado === 'activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.estado}</span></td>
-            <td>
-                <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => handlePrintRut(item.rut)} 
-                    disabled={!item.rut}
-                    title={item.rut ? "Ver/Imprimir RUT" : "Sin RUT"}
-                >
-                    <FileText className={`w-4 h-4 ${item.rut ? 'text-blue-600' : 'text-gray-300'}`} />
-                </Button>
-            </td>
             <td>
                 <div className="flex space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
@@ -183,8 +171,8 @@ export default function RHEmpleados() {
         <div className="p-6">
             <style>{`@media print {#tabla-imprimible { position: absolute; left: 0; top: 0; width: 100%; } #page-header, .no-print { display: none; } body * { visibility: hidden; } #tabla-imprimible, #tabla-imprimible * { visibility: visible; }}`}</style>
             <PageHeader 
-                title="Gestión de Empleados"
-                description="Administra la información de los empleados de la empresa."
+                title="Personal"
+                description="Administra la información del personal de la empresa."
                 onExportExcel={handleExport}
                 onPrint={handlePrint}
                 actionButton={
@@ -202,94 +190,68 @@ export default function RHEmpleados() {
             <Dialog open={showModal} onOpenChange={setShowModal}>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Empleado</DialogTitle>
+                       <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Personal</DialogTitle>
                     </DialogHeader>
-                     <form onSubmit={handleSave} className="space-y-4 pt-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>Nombre Completo *</Label>
-                                <Input value={currentItem?.nombre_completo || ''} onChange={e => setCurrentItem({...currentItem, nombre_completo: e.target.value})} required/>
-                            </div>
-                            <div>
-                                <Label>Cédula *</Label>
-                                <Input value={currentItem?.cedula || ''} onChange={e => setCurrentItem({...currentItem, cedula: e.target.value})} required/>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>Fecha de Nacimiento</Label>
-                                <Input type="date" value={currentItem?.fecha_nacimiento || ''} onChange={e => setCurrentItem({...currentItem, fecha_nacimiento: e.target.value})} />
-                            </div>
-                            <div>
-                                <Label>Dirección</Label>
-                                <Input value={currentItem?.direccion || ''} onChange={e => setCurrentItem({...currentItem, direccion: e.target.value})} />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label>Teléfono/Celular</Label>
-                                <Input value={currentItem?.telefono || ''} onChange={e => setCurrentItem({...currentItem, telefono: e.target.value})} />
-                            </div>
-                            <div>
-                                <Label>Correo Electrónico</Label>
-                                <Input type="email" value={currentItem?.email || ''} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} />
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Máquinas o Proceso Asignados *</Label>
-                            <Input value={currentItem?.cargo || ''} onChange={e => setCurrentItem({...currentItem, cargo: e.target.value})} required placeholder="Ej: Máquina de Curtido, Proceso de Acabado"/>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                             <div>
-                                <Label>Fecha de Contratación *</Label>
-                                <Input type="date" value={currentItem?.fecha_contratacion || ''} onChange={e => setCurrentItem({...currentItem, fecha_contratacion: e.target.value})} required/>
-                            </div>
-                            <div>
-                                <Label>Salario *</Label>
-                                <Input type="number" value={currentItem?.salario || ''} onChange={e => setCurrentItem({...currentItem, salario: parseFloat(e.target.value) || 0})} required/>
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Estado</Label>
-                            <Select value={currentItem?.estado || 'activo'} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
-                                <SelectTrigger><SelectValue/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="activo">Activo</SelectItem>
-                                    <SelectItem value="inactivo">Inactivo</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label>RUT (Registro Único Tributario)</Label>
-                            <div className="flex gap-2 items-end">
-                                <div className="flex-grow">
-                                    {currentItem?.rut && (
-                                        <a href={currentItem.rut} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1">
-                                            <FileText className="w-4 h-4" />
-                                            Ver RUT actual
-                                        </a>
-                                    )}
-                                </div>
-                                <input type="file" ref={rutInputRef} onChange={(e) => handleFileChange(e, 'rut')} className="hidden" accept=".pdf,.jpg,.jpeg,.png"/>
-                                <Button type="button" variant="outline" size="sm" onClick={() => rutInputRef.current.click()} disabled={isUploadingRut}>
-                                    {isUploadingRut ? "Cargando..." : <><Upload className="w-4 h-4 mr-2"/>Cargar RUT</>}
-                                </Button>
-                            </div>
-                        </div>
-                        <div>
-                            <Label>Foto del Empleado</Label>
-                            <div className="flex gap-2 items-center">
-                                {currentItem?.foto && (
-                                    <img src={currentItem.foto} alt="Vista previa" className="w-20 h-20 rounded-full object-cover border-2 border-gray-200" />
-                                )}
-                                <div className="flex-grow">
-                                    <input type="file" ref={fotoInputRef} onChange={(e) => handleFileChange(e, 'foto')} className="hidden" accept="image/*"/>
-                                    <Button type="button" variant="outline" size="sm" onClick={() => fotoInputRef.current.click()} disabled={isUploadingFoto}>
-                                        {isUploadingFoto ? "Cargando..." : <><ImageIcon className="w-4 h-4 mr-2"/>Cargar Foto</>}
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
+                    <form onSubmit={handleSave} className="space-y-4 pt-4">
+                       <div>
+                           <Label>Código Personal</Label>
+                           <Input value={currentItem?.codigo_personal || ''} readOnly className="bg-gray-100 font-mono font-bold" />
+                       </div>
+                       <div className="grid grid-cols-2 gap-4">
+                           <div>
+                               <Label>Nombre Completo *</Label>
+                               <Input value={currentItem?.nombre || ''} onChange={e => setCurrentItem({...currentItem, nombre: e.target.value})} required/>
+                           </div>
+                           <div>
+                               <Label>Identificación *</Label>
+                               <Input value={currentItem?.identificacion || ''} onChange={e => setCurrentItem({...currentItem, identificacion: e.target.value})} required/>
+                           </div>
+                       </div>
+                       <div className="grid grid-cols-2 gap-4">
+                           <div>
+                               <Label>Teléfono</Label>
+                               <Input value={currentItem?.telefono || ''} onChange={e => setCurrentItem({...currentItem, telefono: e.target.value})} />
+                           </div>
+                           <div>
+                               <Label>Correo Electrónico</Label>
+                               <Input type="email" value={currentItem?.email || ''} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} />
+                           </div>
+                       </div>
+                       <div>
+                           <Label>Tipo de Personal *</Label>
+                           <Select value={currentItem?.tipo_personal || 'operario'} onValueChange={v => setCurrentItem({...currentItem, tipo_personal: v})}>
+                               <SelectTrigger><SelectValue/></SelectTrigger>
+                               <SelectContent>
+                                   <SelectItem value="operario">OPERARIO</SelectItem>
+                                   <SelectItem value="ayudante">AYUDANTE</SelectItem>
+                                   <SelectItem value="ocasional">OCASIONAL</SelectItem>
+                               </SelectContent>
+                           </Select>
+                       </div>
+                       <div>
+                           <Label>Cargo/Proceso Asignado</Label>
+                           <Input value={currentItem?.cargo || ''} onChange={e => setCurrentItem({...currentItem, cargo: e.target.value})} placeholder="Ej: Curtidor, Operario de Acabado"/>
+                       </div>
+                       <div>
+                           <Label>Dirección</Label>
+                           <Input value={currentItem?.direccion || ''} onChange={e => setCurrentItem({...currentItem, direccion: e.target.value})} />
+                       </div>
+                       <div className="grid grid-cols-2 gap-4">
+                           <div>
+                               <Label>Estado</Label>
+                               <Select value={currentItem?.estado || 'activo'} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
+                                   <SelectTrigger><SelectValue/></SelectTrigger>
+                                   <SelectContent>
+                                       <SelectItem value="activo">ACTIVO</SelectItem>
+                                       <SelectItem value="inactivo">INACTIVO</SelectItem>
+                                   </SelectContent>
+                               </Select>
+                           </div>
+                           <div>
+                               <Label>Observaciones</Label>
+                               <Input value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} />
+                           </div>
+                       </div>
                         <div className="flex justify-end gap-2 pt-4 border-t">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
                             <Button type="submit">Guardar</Button>
