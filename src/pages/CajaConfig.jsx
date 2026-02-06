@@ -37,13 +37,18 @@ export default function CajaConfig() {
 
     const handleOpenModal = (item = null) => {
         setIsEditing(!!item);
+        const nextCodigo = cajas.length > 0 ? `CAJ-${String(cajas.length + 1).padStart(3, '0')}` : 'CAJ-001';
         setCurrentItem(item || {
+            codigo_caja: nextCodigo,
             nombre: '',
-            tipo: 'principal',
+            tipo: 'general',
             responsable_id: '',
+            fecha_apertura: new Date().toISOString().split('T')[0],
+            saldo_inicial: 0,
             limite_monto: 0,
             saldo_actual: 0,
-            estado: 'activa'
+            estado: 'activa',
+            observaciones: ''
         });
         setShowModal(true);
     };
@@ -70,15 +75,16 @@ export default function CajaConfig() {
         } catch (e) { alert('Error al eliminar.'); }
     };
 
-    const headers = ["Nombre", "Tipo", "Responsable", "Límite", "Saldo Actual", "Estado", "Acciones"];
+    const headers = ["Código", "Nombre", "Tipo", "Responsable", "Saldo Inicial", "Saldo Actual", "Estado", "Acciones"];
     const renderRow = (c) => {
         const responsable = empleados.find(e => e.id === c.responsable_id);
         return (
             <tr key={c.id}>
+                <td className="font-mono font-bold">{c.codigo_caja}</td>
                 <td className="font-bold">{c.nombre}</td>
                 <td className="capitalize">{c.tipo}</td>
                 <td>{responsable?.nombre || 'N/A'}</td>
-                <td className="text-right">{formatCurrency(c.limite_monto)}</td>
+                <td className="text-right">{formatCurrency(c.saldo_inicial)}</td>
                 <td className="text-right font-bold text-emerald-700">{formatCurrency(c.saldo_actual)}</td>
                 <td><span className={`px-2 py-1 rounded-full text-xs ${c.estado === 'activa' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.estado}</span></td>
                 <td>
@@ -114,14 +120,15 @@ export default function CajaConfig() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Caja</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
-                        <div><Label>Nombre de la Caja *</Label><Input value={currentItem?.nombre} onChange={e => setCurrentItem({...currentItem, nombre: e.target.value})} required placeholder="Ej: Caja Principal, Caja Menor Pablo" /></div>
+                        <div><Label>Código de Caja</Label><Input value={currentItem?.codigo_caja} readOnly className="bg-gray-100 font-mono font-bold" /></div>
+                        <div><Label>Nombre de la Caja *</Label><Input value={currentItem?.nombre} onChange={e => setCurrentItem({...currentItem, nombre: e.target.value})} required placeholder="Ej: Caja General, Caja Menor Pablo" /></div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label>Tipo *</Label>
+                                <Label>Tipo de Caja *</Label>
                                 <Select value={currentItem?.tipo} onValueChange={v => setCurrentItem({...currentItem, tipo: v})}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="principal">PRINCIPAL</SelectItem>
+                                        <SelectItem value="general">GENERAL</SelectItem>
                                         <SelectItem value="menor">MENOR</SelectItem>
                                     </SelectContent>
                                 </Select>
@@ -137,6 +144,13 @@ export default function CajaConfig() {
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Fecha de Apertura</Label><Input type="date" value={currentItem?.fecha_apertura} onChange={e => setCurrentItem({...currentItem, fecha_apertura: e.target.value})} /></div>
+                            <div><Label>Saldo Inicial</Label><Input type="number" value={currentItem?.saldo_inicial} onChange={e => {
+                                const saldo = parseFloat(e.target.value) || 0;
+                                setCurrentItem({...currentItem, saldo_inicial: saldo, saldo_actual: isEditing ? currentItem.saldo_actual : saldo});
+                            }} /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
                             <div><Label>Límite de Monto (Caja Menor)</Label><Input type="number" value={currentItem?.limite_monto} onChange={e => setCurrentItem({...currentItem, limite_monto: parseFloat(e.target.value) || 0})} /></div>
                             <div>
                                 <Label>Estado</Label>
@@ -149,6 +163,7 @@ export default function CajaConfig() {
                                 </Select>
                             </div>
                         </div>
+                        <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
                             <Button type="submit">Guardar</Button>

@@ -45,9 +45,18 @@ export default function ServiciosProduccion() {
             codigo_lote: '',
             fecha_envio: '',
             fecha_entrega: '',
+            cantidad: 0,
+            unidad_medida: '',
             cantidad_hojas: 0,
             cantidad_pieles: 0,
+            costo_unitario: 0,
+            costo_total: 0,
             costo_servicio: 0,
+            proveedor_area: '',
+            responsable: '',
+            estado_servicio: 'en_proceso',
+            incluye_costo_lote: true,
+            documento_soporte: '',
             observaciones: ''
         });
         setShowModal(true);
@@ -83,7 +92,7 @@ export default function ServiciosProduccion() {
 
     return (
         <div className="p-6">
-            <PageHeader title="Servicios de Producción" description="Gestión de servicios externos de producción." actionButton={<Button onClick={() => handleOpenModal()}><Plus className="w-4 h-4 mr-2"/> Nuevo Servicio</Button>} />
+            <PageHeader title="Otros Costos de Producción" description="Gestión de servicios externos y otros costos de producción." actionButton={<Button onClick={() => handleOpenModal()}><Plus className="w-4 h-4 mr-2"/> Nuevo Servicio</Button>} />
             <Card>
                 <CardContent><DataTable headers={headers} data={servicios} renderRow={renderRow} /></CardContent>
             </Card>
@@ -99,8 +108,12 @@ export default function ServiciosProduccion() {
                                 <SelectContent>
                                     <SelectItem value="secado_llano">Secado al Llano</SelectItem>
                                     <SelectItem value="dividida">Dividida</SelectItem>
-                                    <SelectItem value="escurrida_rebajada">Escurrida y Rebajada</SelectItem>
+                                    <SelectItem value="escurrida">Escurrida</SelectItem>
+                                    <SelectItem value="rebajada">Rebajada</SelectItem>
                                     <SelectItem value="templado_cuero">Templado del Cuero</SelectItem>
+                                    <SelectItem value="medida">Medida</SelectItem>
+                                    <SelectItem value="esmerilado">Esmerilado</SelectItem>
+                                    <SelectItem value="abatanado">Abatanado</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -141,7 +154,58 @@ export default function ServiciosProduccion() {
                             </>
                         )}
                         
-                        <div><Label>Costo del Servicio</Label><Input type="number" value={formData.costo_servicio} onChange={e => setFormData({...formData, costo_servicio: parseFloat(e.target.value)})} /></div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div><Label>Cantidad</Label><Input type="number" value={formData.cantidad} onChange={e => {
+                                const cant = parseFloat(e.target.value) || 0;
+                                const costo_unit = parseFloat(formData.costo_unitario) || 0;
+                                setFormData({...formData, cantidad: cant, costo_total: cant * costo_unit});
+                            }} /></div>
+                            <div><Label>Unidad de Medida</Label><Select value={formData.unidad_medida} onValueChange={v => setFormData({...formData, unidad_medida: v})}>
+                                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="KG">KG</SelectItem>
+                                    <SelectItem value="UNIDAD">UNIDAD</SelectItem>
+                                    <SelectItem value="LITRO">LITRO</SelectItem>
+                                    <SelectItem value="METRO">METRO</SelectItem>
+                                    <SelectItem value="HOJA">HOJA</SelectItem>
+                                    <SelectItem value="PIEL">PIEL</SelectItem>
+                                </SelectContent>
+                            </Select></div>
+                            <div><Label>Costo Unitario</Label><Input type="number" value={formData.costo_unitario} onChange={e => {
+                                const costo_unit = parseFloat(e.target.value) || 0;
+                                const cant = parseFloat(formData.cantidad) || 0;
+                                setFormData({...formData, costo_unitario: costo_unit, costo_total: cant * costo_unit});
+                            }} /></div>
+                        </div>
+                        <div><Label>Costo Total</Label><Input type="number" value={formData.costo_total} readOnly className="bg-blue-50 font-bold" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Proveedor/Área Interna</Label><Input value={formData.proveedor_area} onChange={e => setFormData({...formData, proveedor_area: e.target.value})} /></div>
+                            <div><Label>Responsable</Label><Input value={formData.responsable} onChange={e => setFormData({...formData, responsable: e.target.value})} /></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Estado del Servicio</Label><Select value={formData.estado_servicio} onValueChange={v => setFormData({...formData, estado_servicio: v})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="en_proceso">EN PROCESO</SelectItem>
+                                    <SelectItem value="entregado">ENTREGADO</SelectItem>
+                                    <SelectItem value="cerrado">CERRADO</SelectItem>
+                                </SelectContent>
+                            </Select></div>
+                            <div><Label>Incluye en Costo del Lote</Label><Select value={formData.incluye_costo_lote ? 'si' : 'no'} onValueChange={v => setFormData({...formData, incluye_costo_lote: v === 'si'})}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="si">SÍ</SelectItem>
+                                    <SelectItem value="no">NO</SelectItem>
+                                </SelectContent>
+                            </Select></div>
+                        </div>
+                        <div><Label>Documento/Soporte</Label><Input type="file" onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                // Aquí se implementaría la subida del archivo usando la integración UploadFile
+                                alert('Funcionalidad de carga de archivos en desarrollo');
+                            }
+                        }} /></div>
                         <div><Label>Observaciones</Label><Textarea value={formData.observaciones} onChange={e => setFormData({...formData, observaciones: e.target.value})} /></div>
 
                         <div className="flex justify-end pt-4"><Button type="submit">Guardar</Button></div>
