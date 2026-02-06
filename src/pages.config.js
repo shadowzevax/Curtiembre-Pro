@@ -122,6 +122,8 @@ import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
 import MovimientosBancarios from './pages/MovimientosBancarios';
 import ReportesMovimientosCaja from './pages/ReportesMovimientosCaja';
+import TransferenciasBancarias from './pages/TransferenciasBancarias';
+import ReportesBancarios from './pages/ReportesBancarios';
 import __Layout from './Layout.jsx';
 
 
@@ -201,6 +203,8 @@ export const PAGES = {
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
     "MovimientosBancarios": MovimientosBancarios,
     "ReportesMovimientosCaja": ReportesMovimientosCaja,
+    "TransferenciasBancarias": TransferenciasBancarias,
+    "ReportesBancarios": ReportesBancarios,
 }
 
 export const pagesConfig = {

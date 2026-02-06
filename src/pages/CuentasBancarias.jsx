@@ -36,7 +36,9 @@ export default function CuentasBancarias() {
 
     const handleOpenModal = (item = null) => {
         setIsEditing(!!item);
+        const nextCodigo = `CTA-${String((cuentas.length || 0) + 1).padStart(3, '0')}`;
         setCurrentItem(item || {
+            codigo_cuenta: nextCodigo,
             tipo_cuenta: 'cuenta_corriente',
             banco: '',
             numero_cuenta: '',
