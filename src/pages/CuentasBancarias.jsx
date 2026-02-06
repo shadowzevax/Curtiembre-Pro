@@ -78,12 +78,13 @@ export default function CuentasBancarias() {
         }
     };
 
-    const headers = ['Banco', 'Tipo', 'No. Cuenta', 'Titular', 'Saldo', 'Estado', 'Acciones'];
+    const headers = ['Código', 'Banco', 'Tipo', 'No. Cuenta', 'Titular', 'Saldo', 'Estado', 'Acciones'];
     const renderRow = (item) => (
         <tr key={item.id}>
+            <td className="font-mono font-bold">{item.codigo_cuenta}</td>
             <td>{item.banco}</td>
             <td className="capitalize">{item.tipo_cuenta?.replace('_', ' ')}</td>
-            <td>{item.numero_cuenta}</td>
+            <td className="font-mono">{item.numero_cuenta}</td>
             <td>{item.titular}</td>
             <td className="text-right font-bold text-emerald-700">{formatCurrency(item.saldo_actual)}</td>
             <td><span className={`px-2 py-1 rounded-full text-xs ${item.estado === 'activa' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.estado}</span></td>
@@ -118,6 +119,7 @@ export default function CuentasBancarias() {
                 <DialogContent>
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Cuenta</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
+                        <div><Label>Código de Cuenta</Label><Input value={currentItem?.codigo_cuenta} readOnly className="bg-gray-100 font-mono font-bold" /></div>
                         <div><Label>Tipo de Cuenta *</Label><Select value={currentItem?.tipo_cuenta} onValueChange={v => setCurrentItem({...currentItem, tipo_cuenta: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cuenta_corriente">Cuenta Corriente</SelectItem><SelectItem value="cuenta_ahorros">Cuenta de Ahorros</SelectItem><SelectItem value="nequi">Nequi</SelectItem><SelectItem value="daviplata">Daviplata</SelectItem><SelectItem value="otra_billetera">Otra Billetera</SelectItem></SelectContent></Select></div>
                         <div><Label>Banco/Entidad *</Label><Input value={currentItem?.banco} onChange={e => setCurrentItem({...currentItem, banco: e.target.value})} required /></div>
                         <div><Label>No. Cuenta *</Label><Input value={currentItem?.numero_cuenta} onChange={e => setCurrentItem({...currentItem, numero_cuenta: e.target.value})} required /></div>
