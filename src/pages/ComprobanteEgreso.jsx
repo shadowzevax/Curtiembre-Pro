@@ -210,44 +210,43 @@ export default function ComprobanteEgreso() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Empresa</Label>
-                <Select value={currentItem?.empresa || 'MARROQUINERIA ARTECUEROS SAS'} onValueChange={v => setCurrentItem({ ...currentItem, empresa: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="MARROQUINERIA ARTECUEROS SAS">MARROQUINERIA ARTECUEROS SAS</SelectItem>
-                        <SelectItem value="ARTECUEROS">ARTECUEROS</SelectItem>
-                    </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label>Prefijo</Label>
                 <Input value={currentItem?.prefijo || ''} readOnly className="bg-gray-100" />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <Label>Fecha *</Label>
-                    <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({ ...currentItem, fecha: e.target.value })} required />
-                 </div>
-                 <div>
-                    <Label>CC/NIT</Label>
-                    <Input value={currentItem?.cc_nit || ''} onChange={e => setCurrentItem({ ...currentItem, cc_nit: e.target.value })} />
-                 </div>
+              <div>
+                <Label>Fecha *</Label>
+                <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({ ...currentItem, fecha: e.target.value })} required />
+              </div>
             </div>
             <div>
-              <Label>Pagado A (Proveedor)</Label>
+              <Label>Proveedor/Beneficiario</Label>
               <Select value={currentItem?.proveedor_cliente_id || ''} onValueChange={v => {
                   const prov = proveedores.find(p => p.id === v);
                   setCurrentItem({ 
                       ...currentItem, 
                       proveedor_cliente_id: v,
-                      cc_nit: prov ? (prov.numero_identificacion || prov.nit) : currentItem?.cc_nit
+                      cc_nit: prov ? (prov.numero_identificacion || prov.nit) : currentItem?.cc_nit,
+                      codigo_proveedor: prov ? prov.codigo : ''
                   });
               }}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar proveedor" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={null}>Sin proveedor</SelectItem>
-                  {proveedores.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                  {proveedores.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} - {p.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Por Valor De *</Label>
+              <Input type="number" value={currentItem?.por_valor_de || ''} onChange={e => setCurrentItem({ ...currentItem, por_valor_de: parseFloat(e.target.value) || 0 })} />
+            </div>
+            <div>
+              <Label>Medio de Pago *</Label>
+              <Select value={currentItem?.medio_pago || 'caja'} onValueChange={v => setCurrentItem({ ...currentItem, medio_pago: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="caja">CAJA</SelectItem>
+                  <SelectItem value="banco">BANCO</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -256,13 +255,22 @@ export default function ComprobanteEgreso() {
               <Input value={currentItem?.concepto || ''} onChange={e => setCurrentItem({ ...currentItem, concepto: e.target.value })} required placeholder="Ej: Pago de servicios públicos" />
             </div>
             <div>
-              <Label>Valor *</Label>
+              <Label>Estado de Cuenta</Label>
               <div className="flex gap-2 items-center">
                   <Button type="button" variant="outline" size="icon" title="Ver Estado de Cuenta (Pendientes)" onClick={loadPendingDocs}>
                       <FileSearch className="w-5 h-5 text-red-600" />
                   </Button>
-                  <Input type="number" value={currentItem?.valor || ''} onChange={e => setCurrentItem({ ...currentItem, valor: parseFloat(e.target.value) || 0 })} required />
+                  <Input type="number" value={currentItem?.valor || ''} onChange={e => setCurrentItem({ ...currentItem, valor: parseFloat(e.target.value) || 0 })} />
               </div>
+            </div>
+            <div>
+              <Label>Soporte</Label>
+              <Input type="file" onChange={async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  alert('Funcionalidad de carga de archivos en desarrollo');
+                }
+              }} />
             </div>
             <div>
               <Label>Observaciones</Label>

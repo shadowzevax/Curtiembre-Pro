@@ -48,7 +48,30 @@ export default function AdminTerceros() {
 
     const handleOpenModal = (item = null) => {
         setIsEditing(!!item);
+        
+        let nextCodigo = '';
+        if (!item) {
+            if (activeTab === 'proveedores') {
+                const maxNum = proveedores.length > 0 
+                    ? Math.max(...proveedores.map(p => {
+                        const match = p.codigo?.match(/PROV-(\d+)/);
+                        return match ? parseInt(match[1]) : 0;
+                    }))
+                    : 0;
+                nextCodigo = `PROV-${String(maxNum + 1).padStart(3, '0')}`;
+            } else {
+                const maxNum = clientes.length > 0 
+                    ? Math.max(...clientes.map(c => {
+                        const match = c.codigo?.match(/CLI-(\d+)/);
+                        return match ? parseInt(match[1]) : 0;
+                    }))
+                    : 0;
+                nextCodigo = `CLI-${String(maxNum + 1).padStart(3, '0')}`;
+            }
+        }
+        
         setCurrentItem(item || {
+            codigo: nextCodigo,
             tipo_tercero: activeTab === 'proveedores' ? 'proveedor' : 'cliente',
             tipo_persona: 'natural',
             tipo_identificacion: 'cedula',
@@ -160,6 +183,10 @@ export default function AdminTerceros() {
 
     const renderForm = () => (
         <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+            <div>
+                <Label>Código</Label>
+                <Input value={currentItem?.codigo || ''} readOnly className="bg-gray-100 font-mono font-bold" />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <Label>Tipo de Tercero *</Label>
@@ -302,13 +329,14 @@ export default function AdminTerceros() {
         );
     };
 
-    const commonHeaders = ["Nombre", "Nombre Comercial", "Tipo Tercero", "No. Identificación", "Teléfono", "Estado", "Acciones"];
+    const commonHeaders = ["Código", "Nombre", "Nombre Comercial", "Tipo Tercero", "No. Identificación", "Teléfono", "Estado", "Acciones"];
     const renderRow = (item) => (
         <tr key={item.id}>
+            <td className="font-mono font-bold">{item.codigo || 'N/A'}</td>
             <td>{item.nombre}</td>
             <td>{item.nombre_comercial}</td>
             <td><span className="capitalize">{item.tipo_tercero || (activeTab === 'proveedores' ? 'proveedor' : 'cliente')}</span></td>
-            <td>{item.numero_identificacion || item.nit}</td>
+            <td className="font-mono">{item.numero_identificacion || item.nit}</td>
             <td>{item.telefono}</td>
             <td><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td>
             <td>

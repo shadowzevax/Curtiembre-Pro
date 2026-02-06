@@ -213,29 +213,24 @@ export default function ReciboCaja() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Empresa</Label>
-                <Select value={currentItem?.empresa || 'MARROQUINERIA ARTECUEROS SAS'} onValueChange={v => setCurrentItem({ ...currentItem, empresa: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="MARROQUINERIA ARTECUEROS SAS">MARROQUINERIA ARTECUEROS SAS</SelectItem>
-                        <SelectItem value="ARTECUEROS">ARTECUEROS</SelectItem>
-                    </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label>Prefijo</Label>
                 <Input value={currentItem?.prefijo || ''} readOnly className="bg-gray-100" />
               </div>
+              <div>
+                <Label>Fecha *</Label>
+                <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({ ...currentItem, fecha: e.target.value })} required />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <Label>Fecha *</Label>
-                    <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({ ...currentItem, fecha: e.target.value })} required />
-                 </div>
-                 <div>
-                    <Label>CC/NIT</Label>
-                    <Input value={currentItem?.cc_nit || ''} onChange={e => setCurrentItem({ ...currentItem, cc_nit: e.target.value })} />
-                 </div>
+            <div>
+              <Label>Tipo de Ingreso</Label>
+              <Select value={currentItem?.tipo_ingreso || 'venta'} onValueChange={v => setCurrentItem({ ...currentItem, tipo_ingreso: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="venta">Venta</SelectItem>
+                  <SelectItem value="pago_credito">Pago Crédito</SelectItem>
+                  <SelectItem value="otro_ingreso">Otro Ingreso</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Cliente/Tercero</Label>
@@ -244,28 +239,52 @@ export default function ReciboCaja() {
                   setCurrentItem({ 
                       ...currentItem, 
                       proveedor_cliente_id: v,
-                      cc_nit: cliente ? (cliente.numero_identificacion || cliente.nit) : currentItem?.cc_nit
+                      cc_nit: cliente ? (cliente.numero_identificacion || cliente.nit) : currentItem?.cc_nit,
+                      codigo_tercero: cliente ? cliente.codigo : ''
                   });
               }}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar cliente o tercero" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={null}>Sin cliente</SelectItem>
-                  {clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                  {clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo} - {c.nombre}</SelectItem>)}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>Medio de Pago *</Label>
+              <Select value={currentItem?.medio_pago || 'efectivo'} onValueChange={v => setCurrentItem({ ...currentItem, medio_pago: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="efectivo">EFECTIVO</SelectItem>
+                  <SelectItem value="banco">BANCO</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Por Valor De *</Label>
+              <Input type="number" value={currentItem?.por_valor_de || ''} onChange={e => setCurrentItem({ ...currentItem, por_valor_de: parseFloat(e.target.value) || 0 })} />
             </div>
             <div>
               <Label>Concepto *</Label>
               <Input value={currentItem?.concepto || ''} onChange={e => setCurrentItem({ ...currentItem, concepto: e.target.value })} required placeholder="Ej: Pago por venta de productos" />
             </div>
             <div>
-              <Label>Valor *</Label>
+              <Label>Estado de Cuenta</Label>
               <div className="flex gap-2 items-center">
                   <Button type="button" variant="outline" size="icon" title="Ver Estado de Cuenta (Pendientes)" onClick={loadPendingDocs}>
                       <FileSearch className="w-5 h-5 text-blue-600" />
                   </Button>
-                  <Input type="number" value={currentItem?.valor || ''} onChange={e => setCurrentItem({ ...currentItem, valor: parseFloat(e.target.value) || 0 })} required />
+                  <Input type="number" value={currentItem?.valor || ''} onChange={e => setCurrentItem({ ...currentItem, valor: parseFloat(e.target.value) || 0 })} />
               </div>
+            </div>
+            <div>
+              <Label>Soporte</Label>
+              <Input type="file" onChange={async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  alert('Funcionalidad de carga de archivos en desarrollo');
+                }
+              }} />
             </div>
             <div>
               <Label>Observaciones</Label>
