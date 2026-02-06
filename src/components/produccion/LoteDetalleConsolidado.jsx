@@ -260,7 +260,7 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
             <div className="bg-blue-50 border-2 border-blue-300 rounded p-3">
               <div className="grid grid-cols-4 gap-2">
                 <div><strong>CODIGO LOTE:</strong> {codigoLote}</div>
-                <div><strong>PROVEEDOR:</strong> {loteData.proveedor_id || 'N/A'}</div>
+                <div><strong>PROVEEDOR:</strong> {loteData.nombre_proveedor || loteData.proveedor_id || 'N/A'}</div>
                 <div><strong>NO. DOCUMENTO:</strong> {loteData.no_documento || 'N/A'}</div>
                 <div><strong>FECHA RECEPCIÓN:</strong> {loteData.fecha_inicio ? new Date(loteData.fecha_inicio).toLocaleDateString('es-CO') : 'N/A'}</div>
                 <div><strong>CANT. TOTAL PIELES:</strong> {loteData.cantidad_total_lote_pieles || loteData.cantidad_pieles || 0}</div>
