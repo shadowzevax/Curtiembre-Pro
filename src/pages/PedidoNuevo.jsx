@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PedidoMarroquinero } from '@/entities/all';
+import { PedidoMarroquinero, ColorPintura } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,10 +49,21 @@ export default function PedidoNuevo() {
   const [nuevoColor, setNuevoColor] = useState('');
   const [nuevaPlaca, setNuevaPlaca] = useState('');
   const [currentPedido, setCurrentPedido] = useState(null);
+  const [coloresCatalogo, setColoresCatalogo] = useState([]);
 
   useEffect(() => {
     initNewPedido();
+    loadColoresCatalogo();
   }, []);
+
+  const loadColoresCatalogo = async () => {
+    try {
+      const colores = await ColorPintura.filter({ estado: 'activo' });
+      setColoresCatalogo(colores);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
 
   const initNewPedido = async () => {
     const pedidos = await PedidoMarroquinero.list();
@@ -77,6 +88,7 @@ export default function PedidoNuevo() {
     const newItem = {};
     PLACAS.forEach(placa => { newItem[placa.key] = 0; });
     placasCustom.forEach(placa => { newItem[placa.key] = 0; });
+    newItem.codigo_color = '';
     newItem.color = '';
     newItem.total = 0;
     
@@ -88,9 +100,21 @@ export default function PedidoNuevo() {
 
   const actualizarItem = (index, field, value) => {
     const items = [...currentPedido.items];
-    items[index][field] = field === 'color' ? value : (parseFloat(value) || 0);
     
-    if (field !== 'color') {
+    // Si cambia el color desde el catálogo, auto-completar código
+    if (field === 'color') {
+      const colorData = coloresCatalogo.find(c => c.nombre_color === value);
+      items[index].color = value;
+      items[index].codigo_color = colorData ? colorData.codigo_color : '';
+    } else if (field === 'codigo_color') {
+      const colorData = coloresCatalogo.find(c => c.codigo_color === value);
+      items[index].codigo_color = value;
+      items[index].color = colorData ? colorData.nombre_color : '';
+    } else {
+      items[index][field] = parseFloat(value) || 0;
+    }
+    
+    if (field !== 'color' && field !== 'codigo_color') {
       const allPlacas = [...PLACAS, ...placasCustom];
       items[index].total = allPlacas.reduce((sum, placa) => sum + (items[index][placa.key] || 0), 0);
     }
@@ -190,7 +214,8 @@ export default function PedidoNuevo() {
                 <table className="w-full text-xs border-collapse">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-2 sticky left-0 bg-gray-100 z-10 min-w-[150px]">COLOR</th>
+                      <th className="border p-2 sticky left-0 bg-gray-100 z-10 min-w-[120px]">CÓDIGO COLOR</th>
+                      <th className="border p-2 sticky left-[120px] bg-gray-100 z-10 min-w-[150px]">COLOR</th>
                       {todasLasPlacas.map(placa => <th key={placa.key} className="border p-2 min-w-[80px]">{placa.label}</th>)}
                       <th className="border p-2 bg-yellow-100 min-w-[100px]">TOTAL HOJAS</th>
                       <th className="border p-2 min-w-[60px]"></th>
@@ -200,10 +225,18 @@ export default function PedidoNuevo() {
                     {currentPedido.items.map((item, idx) => (
                       <tr key={idx}>
                         <td className="border p-1 sticky left-0 bg-white z-10">
+                          <Select value={item.codigo_color} onValueChange={v => actualizarItem(idx, 'codigo_color', v)}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Código" /></SelectTrigger>
+                            <SelectContent>
+                              {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.codigo_color}>{c.codigo_color}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border p-1 sticky left-[120px] bg-white z-10">
                           <Select value={item.color} onValueChange={v => actualizarItem(idx, 'color', v)}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                             <SelectContent>
-                              {todosLosColores.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                              {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.nombre_color}>{c.nombre_color}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </td>
@@ -225,7 +258,7 @@ export default function PedidoNuevo() {
                       </tr>
                     ))}
                     <tr className="bg-green-100 font-bold">
-                      <td className="border p-2 sticky left-0 bg-green-100 z-10">TOTAL</td>
+                      <td className="border p-2 sticky left-0 bg-green-100 z-10" colSpan="2">TOTAL</td>
                       {todasLasPlacas.map(placa => (
                         <td key={placa.key} className="border p-2 text-center">
                           {currentPedido.items.reduce((sum, item) => sum + (item[placa.key] || 0), 0)}

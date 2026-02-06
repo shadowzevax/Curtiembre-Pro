@@ -58,6 +58,7 @@ import CajaBancos from './pages/CajaBancos';
 import CajaConfig from './pages/CajaConfig';
 import CajaMovimientos from './pages/CajaMovimientos';
 import CajaTransferencias from './pages/CajaTransferencias';
+import CatalogoColores from './pages/CatalogoColores';
 import CatalogoProductos from './pages/CatalogoProductos';
 import CompraInsumos from './pages/CompraInsumos';
 import ComprobanteEgreso from './pages/ComprobanteEgreso';
@@ -119,7 +120,6 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import CatalogoColores from './pages/CatalogoColores';
 import __Layout from './Layout.jsx';
 
 
@@ -135,6 +135,7 @@ export const PAGES = {
     "CajaConfig": CajaConfig,
     "CajaMovimientos": CajaMovimientos,
     "CajaTransferencias": CajaTransferencias,
+    "CatalogoColores": CatalogoColores,
     "CatalogoProductos": CatalogoProductos,
     "CompraInsumos": CompraInsumos,
     "ComprobanteEgreso": ComprobanteEgreso,
@@ -196,7 +197,6 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "CatalogoColores": CatalogoColores,
 }
 
 export const pagesConfig = {

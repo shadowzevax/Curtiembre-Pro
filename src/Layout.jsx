@@ -45,7 +45,7 @@ const menuItems = [
       { title: "Curtido", url: createPageUrl("ProcesoCurtido"), icon: Settings },
       { title: "Recurtido", url: createPageUrl("ProcesoRecurtido"), icon: Settings },
       { title: "Acabado", url: createPageUrl("ProcesoAcabado"), icon: Settings },
-      { title: "Servicios de Producción", url: createPageUrl("ServiciosProduccion"), icon: Settings },
+      { title: "Otros Costos de Producción", url: createPageUrl("ServiciosProduccion"), icon: Settings },
       { title: "Pintura", url: createPageUrl("Pintura"), icon: Settings },
       { title: "Costos Indirectos", url: createPageUrl("CostosIndirectos"), icon: Settings }
     ]
@@ -87,8 +87,7 @@ const menuItems = [
     roles: ["admin", "contador"],
     subItems: [
       { title: "Recibo de Caja", url: createPageUrl("ReciboCaja"), icon: Calculator },
-      { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator },
-      { title: "Caja y Bancos", url: createPageUrl("CajaBancos"), icon: Calculator }
+      { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator }
     ]
   },
   {
@@ -97,11 +96,9 @@ const menuItems = [
     roles: ["admin", "contador"],
     subItems: [
       { title: "Cuentas Bancarias", url: createPageUrl("CuentasBancarias"), icon: Calculator },
-      { title: "Nequi/Billeteras Digitales", url: createPageUrl("BilleterasDigitales"), icon: Calculator },
-      { title: "Ingresos por Transferencias", url: createPageUrl("IngresosBancarios"), icon: Calculator },
-      { title: "Egresos Bancarios", url: createPageUrl("EgresosBancarios"), icon: Calculator },
-      { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator },
-      { title: "Reporte por Cuenta", url: createPageUrl("ReporteCuentas"), icon: Calculator }
+      { title: "Movimientos Bancarios", url: createPageUrl("MovimientosBancarios"), icon: Calculator },
+      { title: "Transferencias Internas", url: createPageUrl("TransferenciasBancarias"), icon: Calculator },
+      { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator }
     ]
   },
   {
@@ -110,7 +107,7 @@ const menuItems = [
     roles: ["admin", "contador"],
     subItems: [
       { title: "Movimientos de Caja", url: createPageUrl("CajaMovimientos"), icon: Calculator },
-      { title: "Transferencias", url: createPageUrl("CajaTransferencias"), icon: Calculator },
+      { title: "Transferencias entre Cajas", url: createPageUrl("CajaTransferencias"), icon: Calculator },
       { title: "Configuración Cajas", url: createPageUrl("CajaConfig"), icon: Calculator }
     ]
   },
@@ -156,7 +153,9 @@ const menuItems = [
       { title: "Reportes de Inventario", url: createPageUrl("ReportesInventario"), icon: TrendingUp },
       { title: "Reportes de Producción", url: createPageUrl("ReportesProduccion"), icon: TrendingUp },
       { title: "Reportes Financieros", url: createPageUrl("ReportesFinancieros"), icon: TrendingUp },
-      { title: "Reportes de Procesos", url: createPageUrl("ReportesProcesos"), icon: TrendingUp }
+      { title: "Reportes de Procesos", url: createPageUrl("ReportesProcesos"), icon: TrendingUp },
+      { title: "Reportes Bancarios", url: createPageUrl("ReportesBancarios"), icon: TrendingUp },
+      { title: "Reportes de Movimientos de Caja", url: createPageUrl("ReportesMovimientosCaja"), icon: TrendingUp }
     ]
   },
   {
@@ -176,9 +175,9 @@ const menuItems = [
     icon: Users,
     roles: ["admin"],
     subItems: [
-        { title: "Empleados", url: createPageUrl("RHEmpleados"), icon: Users },
-        { title: "Nómina", url: createPageUrl("RHNomina"), icon: Calculator },
-        { title: "Control de Asistencia", url: createPageUrl("RHAsistencia"), icon: Users }
+        { title: "Personal", url: createPageUrl("RHEmpleados"), icon: Users },
+        { title: "Liquidación de Mano de Obra", url: createPageUrl("RHNomina"), icon: Calculator },
+        { title: "Registro de Producción", url: createPageUrl("RHAsistencia"), icon: Users }
     ]
   },
   {
