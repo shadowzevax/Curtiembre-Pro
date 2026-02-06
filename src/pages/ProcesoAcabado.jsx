@@ -158,7 +158,13 @@ export default function ProcesoAcabado() {
 
   return (
     <div className="p-6">
-      <PageHeader title="Proceso de Acabado" description="Gestión de Abatanado, Planchado y Esmerilado." actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" /> Nuevo Acabado</Button>} />
+      <PageHeader 
+        title="Proceso de Acabado" 
+        description="Gestión de Abatanado, Planchado y Esmerilado." 
+        onExportExcel={() => alert('Exportar en desarrollo')}
+        onPrint={() => window.print()}
+        actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" /> Nuevo Acabado</Button>} 
+      />
       <Card><CardContent>{loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}</CardContent></Card>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>

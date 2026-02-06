@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MovimientoCaja, Caja, Cliente, Proveedor, Empleado } from '@/entities/all';
+import { MovimientoCaja, Caja } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,9 +15,6 @@ const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'curr
 export default function CajaMovimientos() {
     const [movimientos, setMovimientos] = useState([]);
     const [cajas, setCajas] = useState([]);
-    const [clientes, setClientes] = useState([]);
-    const [proveedores, setProveedores] = useState([]);
-    const [empleados, setEmpleados] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -26,18 +23,12 @@ export default function CajaMovimientos() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [movsData, cajasData, clientesData, provData, empData] = await Promise.all([
+            const [movsData, cajasData] = await Promise.all([
                 MovimientoCaja.list(),
-                Caja.list(),
-                Cliente.list(),
-                Proveedor.list(),
-                Empleado.list()
+                Caja.list()
             ]);
             setMovimientos(movsData);
             setCajas(cajasData);
-            setClientes(clientesData);
-            setProveedores(provData);
-            setEmpleados(empData);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     }, []);
@@ -146,7 +137,7 @@ export default function CajaMovimientos() {
                 <td>{new Date(m.fecha).toLocaleDateString()}</td>
                 <td className="font-mono">{m.codigo_caja || 'N/A'}</td>
                 <td>{m.nombre_caja || 'N/A'}</td>
-                <td className={m.tipo === 'entrada' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>{m.tipo.toUpperCase()}</td>
+                <td className={m.tipo === 'entrada' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>{m.tipo?.toUpperCase()}</td>
                 <td>{m.concepto}</td>
                 <td>{m.responsable || 'N/A'}</td>
                 <td className="text-right font-bold text-green-600">{formatCurrency(m.valor_entrada)}</td>

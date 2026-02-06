@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -117,7 +118,7 @@ export default function CajaConfig() {
             </Card>
 
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent>
+                <DialogContent className="max-w-2xl">
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Caja</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
                         <div><Label>Código de Caja</Label><Input value={currentItem?.codigo_caja} readOnly className="bg-gray-100 font-mono font-bold" /></div>

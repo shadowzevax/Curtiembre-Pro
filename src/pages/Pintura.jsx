@@ -9,8 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Eye, Printer, Download, Table as TableIcon, X } from 'lucide-react';
-import NumericInput from '../components/common/NumericInput';
+import { Plus, Edit, Trash2, Eye, Table as TableIcon, X } from 'lucide-react';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('es-CO') : 'N/A';
@@ -23,11 +22,11 @@ export default function Pintura() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showConsumosModal, setShowConsumosModal] = useState(false);
+  const [showEntregasModal, setShowEntregasModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [consumosActuales, setConsumosActuales] = useState([]);
+  const [entregasParciales, setEntregasParciales] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -55,7 +54,6 @@ export default function Pintura() {
     setIsEditing(!!item);
     
     if (!item) {
-      // Generar ID consecutivo PINT-0001-2026
       const year = new Date().getFullYear();
       const procesosDelAnio = procesos.filter(p => p.id_consecutivo?.includes(`-${year}`));
       const consecutivos = procesosDelAnio.map(p => {
@@ -68,15 +66,17 @@ export default function Pintura() {
       setCurrentItem({
         tipo_proceso: 'pintura',
         id_consecutivo: idConsecutivo,
-        fecha: new Date().toISOString().split('T')[0],
-        responsable: '',
+        fecha_entrega_pintor: new Date().toISOString().split('T')[0],
+        pintor_responsable: '',
         pedido_id: '',
         numero_pedido: '',
-        estado: 'borrador',
-        cantidad_entrada: 0,
+        estado_pedido_pintura: 'pendiente',
+        total_hojas_enviadas_pintura: 0,
+        hojas_pintadas_recibidas: 0,
+        hojas_pendientes_pintar: 0,
         codigo_lote: '',
         observaciones: '',
-        consumos: []
+        entregas_parciales: []
       });
     } else {
       setCurrentItem(item);
@@ -89,86 +89,71 @@ export default function Pintura() {
     setShowDetailModal(true);
   };
 
-  const handleOpenConsumos = (item) => {
+  const handleOpenEntregas = (item) => {
     setSelectedItem(item);
-    setConsumosActuales(item.consumos || []);
-    setShowConsumosModal(true);
+    setEntregasParciales(item.entregas_parciales || []);
+    setShowEntregasModal(true);
   };
 
-  const agregarConsumo = () => {
-    const year = new Date().getFullYear();
-    const nextNum = (consumosActuales.length || 0) + 1;
-    const idConsumo = `C-${String(nextNum).padStart(6, '0')}`;
-    
-    setConsumosActuales([...consumosActuales, {
-      id_consumo: idConsumo,
-      id_pintura: selectedItem?.id_consecutivo || '',
-      id_pedido: selectedItem?.numero_pedido || '',
-      clase_cuero: '',
-      codigo: '',
-      descripcion: '',
-      cantidad_utilizada: 0,
-      unidad_medida: '',
-      color: '',
+  const agregarEntrega = () => {
+    setEntregasParciales([...entregasParciales, {
+      fecha_entrega: new Date().toISOString().split('T')[0],
+      cantidad_hojas_pintadas: 0,
       observaciones: '',
-      estado: 'borrador'
+      confirmado: false
     }]);
   };
 
-  const handleConsumoChange = (index, field, value) => {
-    const updated = [...consumosActuales];
-    updated[index][field] = value;
-    
-    // Auto-cargar descripción y unidad desde catálogo
-    if (field === 'codigo') {
-      const insumo = insumos.find(i => i.codigo === value);
-      if (insumo) {
-        updated[index].descripcion = insumo.nombre || insumo.descripcion || '';
-        updated[index].unidad_medida = insumo.unidad_medida || 'KG';
-      }
-    }
-    
-    setConsumosActuales(updated);
+  const handleEntregaChange = (index, field, value) => {
+    const updated = [...entregasParciales];
+    updated[index][field] = field === 'cantidad_hojas_pintadas' ? (parseFloat(value) || 0) : value;
+    setEntregasParciales(updated);
   };
 
-  const guardarConsumos = async () => {
+  const confirmarEntrega = async (index) => {
+    const entrega = entregasParciales[index];
+    const totalRecibido = selectedItem.hojas_pintadas_recibidas || 0;
+    const totalEnviado = selectedItem.total_hojas_enviadas_pintura || 0;
+    const pendiente = totalEnviado - totalRecibido;
+
+    if (entrega.cantidad_hojas_pintadas > pendiente) {
+      alert(`Error: No puede registrar más de ${pendiente} hojas pendientes.`);
+      return;
+    }
+
+    const updated = [...entregasParciales];
+    updated[index].confirmado = true;
+    
+    const nuevasRecibidas = totalRecibido + entrega.cantidad_hojas_pintadas;
+    const nuevasPendientes = totalEnviado - nuevasRecibidas;
+    const nuevoEstado = nuevasPendientes === 0 ? 'terminado' : (nuevasRecibidas > 0 ? 'parcial' : 'pendiente');
+
     try {
       await ProcesoProduccion.update(selectedItem.id, {
-        consumos: consumosActuales
+        entregas_parciales: updated,
+        hojas_pintadas_recibidas: nuevasRecibidas,
+        hojas_pendientes_pintar: nuevasPendientes,
+        estado_pedido_pintura: nuevoEstado
       });
-      
-      // Si algún consumo está en estado finalizado, afectar inventario
-      for (const consumo of consumosActuales) {
-        if (consumo.estado === 'finalizado' && consumo.codigo && consumo.cantidad_utilizada > 0) {
-          const { MovimientoInventario } = await import('@/entities/all');
-          const insumoData = insumos.find(i => i.codigo === consumo.codigo);
-          
-          if (insumoData) {
-            await MovimientoInventario.create({
-              tipo_movimiento: 'salida',
-              insumo_id: insumoData.id,
-              cantidad: -(consumo.cantidad_utilizada),
-              costo_unitario: insumoData.costo_promedio || 0,
-              fecha_movimiento: new Date().toISOString().split('T')[0],
-              referencia: `PINTURA-${consumo.id_consumo}`,
-              observaciones: `Consumo en pintura - ${consumo.descripcion}`,
-              usuario_id: 'system'
-            });
-            
-            const movimientos = await MovimientoInventario.filter({ insumo_id: insumoData.id });
-            const nuevoStock = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0) - consumo.cantidad_utilizada;
-            
-            await Insumo.update(insumoData.id, { stock_actual: nuevoStock });
-          }
-        }
-      }
-      
-      setShowConsumosModal(false);
+
+      // Crear entrada en inventario de productos terminados
+      await ProductoTerminado.create({
+        codigo: `PT-${selectedItem.numero_pedido}-${Date.now()}`,
+        descripcion: `Cuero pintado - Pedido ${selectedItem.numero_pedido}`,
+        cantidad: entrega.cantidad_hojas_pintadas,
+        unidad_medida: 'HOJA',
+        pedido_id: selectedItem.pedido_id,
+        proceso_origen_id: selectedItem.id,
+        fecha_ingreso: entrega.fecha_entrega,
+        estado: 'disponible'
+      });
+
+      alert('Entrega confirmada y registrada en inventario.');
+      setShowEntregasModal(false);
       loadData();
-      alert('Consumos guardados exitosamente');
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al guardar consumos');
+      alert('Error al confirmar entrega.');
     }
   };
 
@@ -177,31 +162,14 @@ export default function Pintura() {
     try {
       const dataToSave = {
         ...currentItem,
-        numero_proceso: currentItem.id_consecutivo
+        numero_proceso: currentItem.id_consecutivo,
+        hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0)
       };
       
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
         await ProcesoProduccion.create(dataToSave);
-      }
-      
-      // Si está finalizado, afectar inventarios
-      if (dataToSave.estado === 'finalizado' && !isEditing) {
-        // Descontar crosta del inventario en proceso
-        const crostaItem = inventarioEnProceso.find(i => 
-          i.codigo_lote === dataToSave.codigo_lote && 
-          i.estado_proceso === 'crosta'
-        );
-        
-        if (crostaItem && crostaItem.cantidad_hojas >= dataToSave.cantidad_entrada) {
-          await InventarioEnProceso.update(crostaItem.id, {
-            cantidad_hojas: crostaItem.cantidad_hojas - dataToSave.cantidad_entrada
-          });
-        }
-        
-        // Aumentar inventario de productos terminados (si es necesario)
-        // Aquí se crearía el producto terminado pintado
       }
       
       setShowModal(false);
@@ -224,50 +192,35 @@ export default function Pintura() {
     }
   };
 
-  const handlePrint = (item) => {
-    const printWindow = window.open('', '', 'width=800,height=600');
-    printWindow.document.write(`
-      <html><head><title>Pintura ${item.id_consecutivo}</title></head>
-      <body><h2>Proceso de Pintura ${item.id_consecutivo}</h2>
-      <p><strong>Fecha:</strong> ${formatDate(item.fecha)}</p>
-      <p><strong>Pedido:</strong> ${item.numero_pedido}</p>
-      <p><strong>Cantidad Entrada:</strong> ${item.cantidad_entrada} hojas</p>
-      </body></html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
-  };
-
   const handleExport = () => alert('Función de exportar en desarrollo.');
 
-  const headers = ['ID Consecutivo', 'Fecha', 'Responsable', 'No. Pedido', 'Cant. Entrada', 'Estado', 'Acciones'];
+  const headers = ['ID', 'Fecha Entrega', 'Pintor', 'No. Pedido', 'Total Enviadas', 'Hojas Pintadas', 'Pendientes', 'Estado', 'Acciones'];
   
   const renderRow = (item) => (
     <tr key={item.id}>
       <td className="font-mono font-bold">{item.id_consecutivo}</td>
-      <td>{formatDate(item.fecha)}</td>
-      <td>{item.responsable || 'N/A'}</td>
+      <td>{formatDate(item.fecha_entrega_pintor)}</td>
+      <td>{item.pintor_responsable || 'N/A'}</td>
       <td className="font-mono">{item.numero_pedido || 'N/A'}</td>
-      <td className="text-center font-bold">{item.cantidad_entrada}</td>
+      <td className="text-center font-bold">{item.total_hojas_enviadas_pintura || 0}</td>
+      <td className="text-center font-bold text-green-600">{item.hojas_pintadas_recibidas || 0}</td>
+      <td className="text-center font-bold text-orange-600">{item.hojas_pendientes_pintar || 0}</td>
       <td>
         <span className={`px-2 py-1 rounded text-xs font-medium ${
-          item.estado === 'borrador' ? 'bg-gray-100 text-gray-700' :
-          item.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' :
+          item.estado_pedido_pintura === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
+          item.estado_pedido_pintura === 'parcial' ? 'bg-blue-100 text-blue-700' :
           'bg-green-100 text-green-700'
         }`}>
-          {item.estado?.toUpperCase()}
+          {item.estado_pedido_pintura?.toUpperCase() || 'PENDIENTE'}
         </span>
       </td>
       <td>
         <div className="flex space-x-2">
+          <Button variant="outline" size="sm" onClick={() => handleOpenEntregas(item)} title="Entregas Parciales">
+            <TableIcon className="w-4 h-4 text-purple-600" />
+          </Button>
           <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)} title="Ver Detalle">
             <Eye className="w-4 h-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handlePrint(item)} title="Imprimir">
-            <Printer className="w-4 h-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleOpenConsumos(item)} title="Insumos/Consumos">
-            <TableIcon className="w-4 h-4 text-purple-600" />
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} title="Editar">
             <Edit className="w-4 h-4" />
@@ -314,15 +267,15 @@ export default function Pintura() {
                 <Input value={currentItem?.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold" />
               </div>
               <div>
-                <Label>Fecha *</Label>
-                <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({...currentItem, fecha: e.target.value})} required />
+                <Label>Fecha de Entrega al Pintor *</Label>
+                <Input type="date" value={currentItem?.fecha_entrega_pintor || ''} onChange={e => setCurrentItem({...currentItem, fecha_entrega_pintor: e.target.value})} required />
               </div>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Responsable</Label>
-                <Input value={currentItem?.responsable || ''} onChange={e => setCurrentItem({...currentItem, responsable: e.target.value})} />
+                <Label>Pintor/Responsable</Label>
+                <Input value={currentItem?.pintor_responsable || ''} onChange={e => setCurrentItem({...currentItem, pintor_responsable: e.target.value})} />
               </div>
               <div>
                 <Label>No. ID del Pedido</Label>
@@ -340,42 +293,46 @@ export default function Pintura() {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label>Estado *</Label>
-                <Select value={currentItem?.estado || 'borrador'} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
+                <Label>Estado del Pedido en Pintura *</Label>
+                <Select value={currentItem?.estado_pedido_pintura || 'pendiente'} onValueChange={v => setCurrentItem({...currentItem, estado_pedido_pintura: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="borrador">Borrador</SelectItem>
-                    <SelectItem value="en_proceso">En Proceso</SelectItem>
-                    <SelectItem value="finalizado">Finalizado</SelectItem>
+                    <SelectItem value="pendiente">PENDIENTE</SelectItem>
+                    <SelectItem value="parcial">PARCIAL</SelectItem>
+                    <SelectItem value="terminado">TERMINADO</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Cantidad Entrada (Crosta disponible)</Label>
+                <Label>Total de Hojas Enviadas a Pintura</Label>
+                <Input type="number" value={currentItem?.total_hojas_enviadas_pintura || ''} onChange={e => {
+                  const total = parseFloat(e.target.value) || 0;
+                  const recibidas = currentItem?.hojas_pintadas_recibidas || 0;
+                  setCurrentItem({...currentItem, total_hojas_enviadas_pintura: total, hojas_pendientes_pintar: total - recibidas});
+                }} />
+              </div>
+              <div>
+                <Label>Código Lote Crosta (opcional)</Label>
                 <Select value={currentItem?.codigo_lote || ''} onValueChange={v => {
-                  const item = inventarioEnProceso.find(i => i.codigo_lote === v);
-                  setCurrentItem({
-                    ...currentItem, 
-                    codigo_lote: v,
-                    cantidad_entrada: item?.cantidad_hojas || 0
-                  });
+                  setCurrentItem({...currentItem, codigo_lote: v});
                 }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar lote crosta" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar lote" /></SelectTrigger>
                   <SelectContent>
                     {inventarioEnProceso.map(inv => (
                       <SelectItem key={inv.id} value={inv.codigo_lote}>
-                        {inv.codigo_lote} - {inv.cantidad_hojas} hojas disponibles
+                        {inv.codigo_lote} - {inv.cantidad_hojas} hojas
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            
-            <div className="bg-blue-50 p-3 rounded">
-              <p className="text-sm font-semibold">Cantidad de entrada seleccionada: <span className="text-blue-700 text-lg">{currentItem?.cantidad_entrada || 0} hojas</span></p>
+
+            <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded">
+              <div><Label>Hojas Pintadas Recibidas</Label><Input type="number" value={currentItem?.hojas_pintadas_recibidas || 0} readOnly className="bg-white font-bold" /></div>
+              <div><Label>Hojas Pendientes por Pintar</Label><Input type="number" value={currentItem?.hojas_pendientes_pintar || 0} readOnly className="bg-orange-50 font-bold text-orange-700" /></div>
             </div>
             
             <div>
@@ -391,115 +348,97 @@ export default function Pintura() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Detalle de Pintura</DialogTitle></DialogHeader>
-          {selectedItem && (
-            <div className="space-y-3 text-sm">
-              <p><span className="font-semibold">ID Consecutivo:</span> <span className="font-mono">{selectedItem.id_consecutivo}</span></p>
-              <p><span className="font-semibold">Fecha:</span> {formatDate(selectedItem.fecha)}</p>
-              <p><span className="font-semibold">Responsable:</span> {selectedItem.responsable || 'N/A'}</p>
-              <p><span className="font-semibold">Pedido:</span> <span className="font-mono">{selectedItem.numero_pedido || 'N/A'}</span></p>
-              <p><span className="font-semibold">Cantidad Entrada:</span> {selectedItem.cantidad_entrada} hojas</p>
-              <p><span className="font-semibold">Estado:</span> <span className="capitalize">{selectedItem.estado}</span></p>
-              {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
-            </div>
-          )}
-          <div className="flex justify-end pt-4">
-            <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showConsumosModal} onOpenChange={setShowConsumosModal}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={showEntregasModal} onOpenChange={setShowEntregasModal}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Registro de Insumos/Consumos - {selectedItem?.id_consecutivo}</DialogTitle>
+            <DialogTitle>Control de Entregas Parciales - {selectedItem?.id_consecutivo}</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
+            <div className="bg-blue-50 p-4 rounded grid grid-cols-3 gap-4 text-sm">
+              <div><span className="font-semibold">Total Enviadas:</span> {selectedItem?.total_hojas_enviadas_pintura || 0} hojas</div>
+              <div><span className="font-semibold text-green-600">Recibidas:</span> {selectedItem?.hojas_pintadas_recibidas || 0} hojas</div>
+              <div><span className="font-semibold text-orange-600">Pendientes:</span> {selectedItem?.hojas_pendientes_pintar || 0} hojas</div>
+            </div>
+
             <div className="flex justify-end">
-              <Button onClick={agregarConsumo} size="sm">
+              <Button onClick={agregarEntrega} size="sm">
                 <Plus className="w-4 h-4 mr-2" />
-                Agregar Consumo
+                Agregar Entrega
               </Button>
             </div>
             
             <div className="border rounded-lg overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-sm">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="p-2 text-left">ID Consumo</th>
-                    <th className="p-2 text-left">Clase Cuero</th>
-                    <th className="p-2 text-left">Código</th>
-                    <th className="p-2 text-left">Descripción</th>
-                    <th className="p-2 text-right">Cant. Utilizada</th>
-                    <th className="p-2 text-left">UM</th>
-                    <th className="p-2 text-left">Color</th>
-                    <th className="p-2 text-left">Estado</th>
+                    <th className="p-2 text-left">Fecha Entrega</th>
+                    <th className="p-2 text-right">Cantidad Hojas Pintadas</th>
+                    <th className="p-2 text-left">Observaciones</th>
+                    <th className="p-2 text-center">Estado</th>
                     <th className="p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {consumosActuales.map((consumo, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="p-1"><Input value={consumo.id_consumo} readOnly className="h-7 text-xs bg-gray-50 font-mono" /></td>
-                      <td className="p-1">
-                        <Select value={consumo.clase_cuero} onValueChange={v => handleConsumoChange(idx, 'clase_cuero', v)}>
-                          <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="napa">NAPA</SelectItem>
-                            <SelectItem value="napa_mate">NAPA MATE</SelectItem>
-                            <SelectItem value="opaco">OPACO</SelectItem>
-                            <SelectItem value="envejecido">ENVEJECIDO</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  {entregasParciales.map((entrega, idx) => (
+                    <tr key={idx} className={`border-t ${entrega.confirmado ? 'bg-green-50' : ''}`}>
+                      <td className="p-2">
+                        <Input type="date" value={entrega.fecha_entrega} onChange={e => handleEntregaChange(idx, 'fecha_entrega', e.target.value)} disabled={entrega.confirmado} className="h-8 text-sm" />
                       </td>
-                      <td className="p-1">
-                        <Select value={consumo.codigo} onValueChange={v => handleConsumoChange(idx, 'codigo', v)}>
-                          <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Código" /></SelectTrigger>
-                          <SelectContent>
-                            {insumos.map(ins => (
-                              <SelectItem key={ins.id} value={ins.codigo}>{ins.codigo}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <td className="p-2">
+                        <Input type="number" value={entrega.cantidad_hojas_pintadas} onChange={e => handleEntregaChange(idx, 'cantidad_hojas_pintadas', e.target.value)} disabled={entrega.confirmado} className="h-8 text-sm text-right" />
                       </td>
-                      <td className="p-1"><Input value={consumo.descripcion} readOnly className="h-7 text-xs bg-gray-50" /></td>
-                      <td className="p-1"><NumericInput step="0.01" value={consumo.cantidad_utilizada || 0} onChange={v => handleConsumoChange(idx, 'cantidad_utilizada', v)} className="h-7 text-xs text-right" /></td>
-                      <td className="p-1"><Input value={consumo.unidad_medida} readOnly className="h-7 text-xs bg-gray-50" /></td>
-                      <td className="p-1"><Input value={consumo.color} onChange={e => handleConsumoChange(idx, 'color', e.target.value)} className="h-7 text-xs" /></td>
-                      <td className="p-1">
-                        <Select value={consumo.estado || 'borrador'} onValueChange={v => handleConsumoChange(idx, 'estado', v)}>
-                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="borrador">Borrador</SelectItem>
-                            <SelectItem value="en_proceso">En Proceso</SelectItem>
-                            <SelectItem value="finalizado">Finalizado</SelectItem>
-                          </SelectContent>
-                        </Select>
+                      <td className="p-2">
+                        <Input value={entrega.observaciones} onChange={e => handleEntregaChange(idx, 'observaciones', e.target.value)} disabled={entrega.confirmado} className="h-8 text-sm" />
                       </td>
-                      <td className="p-1">
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setConsumosActuales(consumosActuales.filter((_, i) => i !== idx))}>
-                          <X className="w-3 h-3 text-red-500" />
-                        </Button>
+                      <td className="p-2 text-center">
+                        {entrega.confirmado ? (
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">CONFIRMADO</span>
+                        ) : (
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs">PENDIENTE</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-center">
+                        {!entrega.confirmado && (
+                          <div className="flex gap-1 justify-center">
+                            <Button size="sm" onClick={() => confirmarEntrega(idx)}>Confirmar</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEntregasParciales(entregasParciales.filter((_, i) => i !== idx))}>
+                              <X className="w-3 h-3 text-red-500" />
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            
-            <div className="bg-yellow-50 p-3 rounded text-sm">
-              <p className="font-semibold mb-1">⚠️ Impacto en Inventario:</p>
-              <p className="text-xs">• Estado <strong>Borrador/En Proceso:</strong> Solo registro, no descuenta inventario</p>
-              <p className="text-xs">• Estado <strong>Finalizado:</strong> Descuenta "Inventario de Insumos y Químicos" + "Inventario en Proceso" (crosta)</p>
-            </div>
           </div>
           
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowConsumosModal(false)}>Cancelar</Button>
-            <Button onClick={guardarConsumos}>Guardar Consumos</Button>
+            <Button variant="outline" onClick={() => setShowEntregasModal(false)}>Cerrar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Detalle de Pintura</DialogTitle></DialogHeader>
+          {selectedItem && (
+            <div className="space-y-3 text-sm">
+              <p><span className="font-semibold">ID Consecutivo:</span> <span className="font-mono">{selectedItem.id_consecutivo}</span></p>
+              <p><span className="font-semibold">Fecha Entrega Pintor:</span> {formatDate(selectedItem.fecha_entrega_pintor)}</p>
+              <p><span className="font-semibold">Pintor/Responsable:</span> {selectedItem.pintor_responsable || 'N/A'}</p>
+              <p><span className="font-semibold">Pedido:</span> <span className="font-mono">{selectedItem.numero_pedido || 'N/A'}</span></p>
+              <p><span className="font-semibold">Total Enviadas:</span> {selectedItem.total_hojas_enviadas_pintura} hojas</p>
+              <p><span className="font-semibold">Hojas Pintadas:</span> {selectedItem.hojas_pintadas_recibidas} hojas</p>
+              <p><span className="font-semibold">Pendientes:</span> {selectedItem.hojas_pendientes_pintar} hojas</p>
+              <p><span className="font-semibold">Estado:</span> <span className="capitalize font-bold">{selectedItem.estado_pedido_pintura}</span></p>
+              {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
+            </div>
+          )}
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
           </div>
         </DialogContent>
       </Dialog>
