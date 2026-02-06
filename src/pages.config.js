@@ -120,6 +120,8 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
+import MovimientosBancarios from './pages/MovimientosBancarios';
+import ReportesMovimientosCaja from './pages/ReportesMovimientosCaja';
 import __Layout from './Layout.jsx';
 
 
@@ -197,6 +199,8 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
+    "MovimientosBancarios": MovimientosBancarios,
+    "ReportesMovimientosCaja": ReportesMovimientosCaja,
 }
 
 export const pagesConfig = {
