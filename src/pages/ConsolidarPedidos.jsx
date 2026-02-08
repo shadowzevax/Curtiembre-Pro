@@ -73,12 +73,16 @@ export default function ConsolidarPedidos() {
       });
     });
 
-    // Calcular totales por fila
+    // Calcular totales por fila (solo sumando valores numéricos)
     Object.keys(consolidado).forEach(color => {
-      consolidado[color].total = Object.keys(consolidado[color]).reduce(
-        (sum, placa) => sum + (consolidado[color][placa] || 0), 
-        0
-      );
+      let total = 0;
+      Object.keys(consolidado[color]).forEach(key => {
+        const valor = consolidado[color][key];
+        if (typeof valor === 'number') {
+          total += valor;
+        }
+      });
+      consolidado[color].total = total;
     });
 
     setPreviewData({
@@ -270,13 +274,13 @@ export default function ConsolidarPedidos() {
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
-                      {previewData.placas.map(placa => (
-                        <th key={placa} className="border p-2 text-center">{placa.toUpperCase()}</th>
-                      ))}
-                      <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
-                    </tr>
+                   <tr>
+                     <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
+                     {previewData.placas.map(placa => (
+                       <th key={placa} className="border p-2 text-center">{placa.replace('_', ' ').toUpperCase()}</th>
+                     ))}
+                     <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
+                   </tr>
                   </thead>
                   <tbody>
                     {Object.keys(previewData.colores).map((color, idx) => (

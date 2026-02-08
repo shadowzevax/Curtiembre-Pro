@@ -88,6 +88,7 @@ import InventarioProductos from './pages/InventarioProductos';
 import LibroDiario from './pages/LibroDiario';
 import LibroDiarioNuevo from './pages/LibroDiarioNuevo';
 import LibroMayor from './pages/LibroMayor';
+import MovimientosBancarios from './pages/MovimientosBancarios';
 import PedidoNuevo from './pages/PedidoNuevo';
 import PedidosIndividuales from './pages/PedidosIndividuales';
 import Pintura from './pages/Pintura';
@@ -107,23 +108,22 @@ import RHNomina from './pages/RHNomina';
 import RecetasPintura from './pages/RecetasPintura';
 import ReciboCaja from './pages/ReciboCaja';
 import ReporteCuentas from './pages/ReporteCuentas';
+import ReportesBancarios from './pages/ReportesBancarios';
 import ReportesCompras from './pages/ReportesCompras';
 import ReportesFinancieros from './pages/ReportesFinancieros';
 import ReportesInventario from './pages/ReportesInventario';
+import ReportesMovimientosCaja from './pages/ReportesMovimientosCaja';
 import ReportesProcesos from './pages/ReportesProcesos';
 import ReportesProduccion from './pages/ReportesProduccion';
 import ReportesVentas from './pages/ReportesVentas';
 import RolesPermisos from './pages/RolesPermisos';
 import ServiciosProduccion from './pages/ServiciosProduccion';
+import TransferenciasBancarias from './pages/TransferenciasBancarias';
 import TrasladoInventario from './pages/TrasladoInventario';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import MovimientosBancarios from './pages/MovimientosBancarios';
-import ReportesMovimientosCaja from './pages/ReportesMovimientosCaja';
-import TransferenciasBancarias from './pages/TransferenciasBancarias';
-import ReportesBancarios from './pages/ReportesBancarios';
 import __Layout from './Layout.jsx';
 
 
@@ -169,6 +169,7 @@ export const PAGES = {
     "LibroDiario": LibroDiario,
     "LibroDiarioNuevo": LibroDiarioNuevo,
     "LibroMayor": LibroMayor,
+    "MovimientosBancarios": MovimientosBancarios,
     "PedidoNuevo": PedidoNuevo,
     "PedidosIndividuales": PedidosIndividuales,
     "Pintura": Pintura,
@@ -188,23 +189,22 @@ export const PAGES = {
     "RecetasPintura": RecetasPintura,
     "ReciboCaja": ReciboCaja,
     "ReporteCuentas": ReporteCuentas,
+    "ReportesBancarios": ReportesBancarios,
     "ReportesCompras": ReportesCompras,
     "ReportesFinancieros": ReportesFinancieros,
     "ReportesInventario": ReportesInventario,
+    "ReportesMovimientosCaja": ReportesMovimientosCaja,
     "ReportesProcesos": ReportesProcesos,
     "ReportesProduccion": ReportesProduccion,
     "ReportesVentas": ReportesVentas,
     "RolesPermisos": RolesPermisos,
     "ServiciosProduccion": ServiciosProduccion,
+    "TransferenciasBancarias": TransferenciasBancarias,
     "TrasladoInventario": TrasladoInventario,
     "UsuariosSistema": UsuariosSistema,
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "MovimientosBancarios": MovimientosBancarios,
-    "ReportesMovimientosCaja": ReportesMovimientosCaja,
-    "TransferenciasBancarias": TransferenciasBancarias,
-    "ReportesBancarios": ReportesBancarios,
 }
 
 export const pagesConfig = {

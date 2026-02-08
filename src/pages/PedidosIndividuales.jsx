@@ -185,7 +185,7 @@ export default function PedidosIndividuales() {
     }
   };
 
-  const placasOrdenadas = ['can', 'point', 'eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'opaco_mate', 'opaco', 'envejecido'];
+  const placasOrdenadas = ['can', 'point', 'eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'poro_fino', 'opaco', 'opaco_mate', 'envejecido'];
 
   const handleExport = (pedido) => {
     // Extraer todas las placas
@@ -396,18 +396,20 @@ export default function PedidosIndividuales() {
                   <div className="border rounded-lg overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-gray-100">
-                        <tr>
-                          <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
-                          {placasOrdenadas.map(placa => (
-                            <th key={placa} className="border p-2 text-center">{placa.replace('_', ' ').toUpperCase()}</th>
-                          ))}
-                          <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
-                        </tr>
+                       <tr>
+                         <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">CÓDIGO COLOR</th>
+                         <th className="border p-2 text-left">COLOR</th>
+                         {placasOrdenadas.map(placa => (
+                           <th key={placa} className="border p-2 text-center">{placa.replace('_', ' ').toUpperCase()}</th>
+                         ))}
+                         <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
+                       </tr>
                       </thead>
                       <tbody>
                        {selectedPedido.items.map((item, idx) => (
                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                           <td className="border p-2 font-medium sticky left-0 bg-white z-10">{item.color}</td>
+                           <td className="border p-2 font-mono font-bold sticky left-0 bg-white z-10">{item.codigo_color || 'N/A'}</td>
+                           <td className="border p-2 font-medium">{item.color}</td>
                            {placasOrdenadas.map(placa => (
                              <td key={placa} className="border p-2 text-center">
                                {item[placa] || 0}
@@ -417,7 +419,7 @@ export default function PedidosIndividuales() {
                          </tr>
                        ))}
                         <tr className="bg-green-100 font-bold">
-                          <td className="border p-2 sticky left-0 bg-green-100 z-10">TOTALES</td>
+                          <td className="border p-2 sticky left-0 bg-green-100 z-10" colSpan="2">TOTALES</td>
                           {placasOrdenadas.map(placa => {
                             const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
                             return <td key={placa} className="border p-2 text-center">{total}</td>;

@@ -19,6 +19,8 @@ export default function Pintura() {
   const [insumos, setInsumos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
+  const [inventarioInsumos, setInventarioInsumos] = useState([]);
+  const [unidadesMedida, setUnidadesMedida] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -27,6 +29,7 @@ export default function Pintura() {
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [entregasParciales, setEntregasParciales] = useState([]);
+  const [consumosItems, setConsumosItems] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
