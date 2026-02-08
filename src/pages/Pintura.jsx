@@ -34,16 +34,24 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, pedidosData, inventarioData] = await Promise.all([
+      const [procesosData, insumosData, pedidosData, inventarioData, UnidadMedidaModule, InventarioModule] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
         Insumo.list(),
         PedidoMarroquinero.list(),
-        InventarioEnProceso.filter({ estado_proceso: 'crosta' })
+        InventarioEnProceso.filter({ estado_proceso: 'crosta' }),
+        import('@/entities/all').then(m => m.UnidadMedida),
+        import('@/entities/all').then(m => m.DocumentoInventario)
+      ]);
+      const [unidadesData, inventarioInsumosData] = await Promise.all([
+        UnidadMedidaModule.list(),
+        InventarioModule.filter({ categoria: 'insumos_quimicos' })
       ]);
       setProcesos(procesosData);
       setInsumos(insumosData);
       setPedidos(pedidosData);
       setInventarioEnProceso(inventarioData);
+      setUnidadesMedida(unidadesData);
+      setInventarioInsumos(inventarioInsumosData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -79,10 +87,13 @@ export default function Pintura() {
         hojas_pendientes_pintar: 0,
         codigo_lote: '',
         observaciones: '',
-        entregas_parciales: []
+        entregas_parciales: [],
+        consumos: []
       });
+      setConsumosItems([]);
     } else {
       setCurrentItem(item);
+      setConsumosItems(item.consumos || []);
     }
     setShowModal(true);
   };
@@ -160,19 +171,111 @@ export default function Pintura() {
     }
   };
 
+  const agregarConsumo = () => {
+    setConsumosItems([...consumosItems, {
+      insumo_id: '',
+      codigo: '',
+      producto: '',
+      tipo_producto: '',
+      unidad_medida: '',
+      cantidad_consumida: 0,
+      lote_producto: '',
+      observacion: ''
+    }]);
+  };
+
+  const handleConsumoChange = (index, field, value) => {
+    const updated = [...consumosItems];
+    updated[index][field] = value;
+
+    if (field === 'insumo_id') {
+      const insumo = insumos.find(i => i.id === value);
+      if (insumo) {
+        updated[index].codigo = insumo.codigo || '';
+        updated[index].producto = insumo.producto || '';
+        updated[index].tipo_producto = insumo.categoria || '';
+        updated[index].unidad_medida = insumo.unidad_medida || '';
+      }
+    }
+
+    setConsumosItems(updated);
+  };
+
+  const eliminarConsumo = (index) => {
+    setConsumosItems(consumosItems.filter((_, i) => i !== index));
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
+    
+    // Validar consumos
+    for (const consumo of consumosItems) {
+      if (!consumo.insumo_id || !consumo.producto) {
+        alert('Error: Todos los productos deben ser seleccionados. No se permiten items vacíos.');
+        return;
+      }
+      
+      if (consumo.cantidad_consumida <= 0) {
+        alert('Error: La cantidad consumida debe ser mayor a cero.');
+        return;
+      }
+
+      if (!consumo.lote_producto) {
+        alert('Error: Debe seleccionar un lote para cada producto.');
+        return;
+      }
+
+      // Validar stock disponible
+      const inventario = inventarioInsumos.find(inv => 
+        inv.codigo === consumo.codigo && inv.lote === consumo.lote_producto
+      );
+      
+      if (!inventario || inventario.cantidad < consumo.cantidad_consumida) {
+        alert(`Stock insuficiente para el producto: ${consumo.producto}. Stock disponible: ${inventario?.cantidad || 0}`);
+        return;
+      }
+
+      // Validar duplicados
+      const duplicados = consumosItems.filter(c => c.insumo_id === consumo.insumo_id && c.lote_producto === consumo.lote_producto);
+      if (duplicados.length > 1) {
+        if (!confirm(`El producto "${consumo.producto}" con lote "${consumo.lote_producto}" ya fue registrado. ¿Desea sumar las cantidades automáticamente?`)) {
+          return;
+        }
+        // Consolidar duplicados
+        const indexPrimero = consumosItems.findIndex(c => c.insumo_id === consumo.insumo_id && c.lote_producto === consumo.lote_producto);
+        const cantidadTotal = duplicados.reduce((sum, d) => sum + d.cantidad_consumida, 0);
+        const consolidados = consumosItems.filter(c => !(c.insumo_id === consumo.insumo_id && c.lote_producto === consumo.lote_producto));
+        consolidados.splice(indexPrimero, 0, {...duplicados[0], cantidad_consumida: cantidadTotal});
+        setConsumosItems(consolidados);
+        return;
+      }
+    }
+
     try {
       const dataToSave = {
         ...currentItem,
         numero_proceso: currentItem.id_consecutivo,
-        hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0)
+        hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0),
+        consumos: consumosItems
       };
       
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
-        await ProcesoProduccion.create(dataToSave);
+        const created = await ProcesoProduccion.create(dataToSave);
+        
+        // Descontar inventario
+        for (const consumo of consumosItems) {
+          const inventario = inventarioInsumos.find(inv => 
+            inv.codigo === consumo.codigo && inv.lote === consumo.lote_producto
+          );
+          if (inventario) {
+            const DocumentoInventario = (await import('@/entities/all')).DocumentoInventario;
+            await DocumentoInventario.update(inventario.id, {
+              cantidad: inventario.cantidad - consumo.cantidad_consumida
+            });
+          }
+        }
       }
       
       setShowModal(false);
@@ -343,7 +446,93 @@ export default function Pintura() {
               <Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} />
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t">
+            {/* TABLA DE ITEMS DE CONSUMO */}
+            <div className="border-t pt-4 mt-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-lg">Items de Consumo de Productos</h3>
+                <Button type="button" onClick={agregarConsumo} size="sm" variant="outline">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Producto
+                </Button>
+              </div>
+              
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border p-2">PRODUCTO</th>
+                      <th className="border p-2">TIPO DE PRODUCTO</th>
+                      <th className="border p-2">UNIDAD</th>
+                      <th className="border p-2">CANTIDAD CONSUMIDA</th>
+                      <th className="border p-2">LOTE DEL PRODUCTO</th>
+                      <th className="border p-2">OBSERVACIÓN</th>
+                      <th className="border p-2 w-16"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {consumosItems.map((consumo, idx) => {
+                      const inventarioLotes = inventarioInsumos.filter(inv => inv.codigo === consumo.codigo);
+                      return (
+                        <tr key={idx} className="border-t">
+                          <td className="border p-2">
+                            <Select value={consumo.insumo_id} onValueChange={v => handleConsumoChange(idx, 'insumo_id', v)}>
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Seleccionar *" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {insumos.map(ins => (
+                                  <SelectItem key={ins.id} value={ins.id}>{ins.codigo} - {ins.producto}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="border p-2">
+                            <Input value={consumo.tipo_producto} readOnly className="bg-gray-50 h-8 text-xs" />
+                          </td>
+                          <td className="border p-2">
+                            <Input value={consumo.unidad_medida} readOnly className="bg-gray-50 h-8 text-xs" />
+                          </td>
+                          <td className="border p-2">
+                            <Input 
+                              type="number" 
+                              value={consumo.cantidad_consumida} 
+                              onChange={e => handleConsumoChange(idx, 'cantidad_consumida', parseFloat(e.target.value) || 0)} 
+                              className="h-8 text-xs text-right" 
+                              min="0.01"
+                              step="0.01"
+                            />
+                          </td>
+                          <td className="border p-2">
+                            <Select value={consumo.lote_producto} onValueChange={v => handleConsumoChange(idx, 'lote_producto', v)}>
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Lote *" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {inventarioLotes.map(inv => (
+                                  <SelectItem key={inv.id} value={inv.lote}>
+                                    {inv.lote} (Stock: {inv.cantidad})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="border p-2">
+                            <Input value={consumo.observacion} onChange={e => handleConsumoChange(idx, 'observacion', e.target.value)} className="h-8 text-xs" />
+                          </td>
+                          <td className="border p-2 text-center">
+                            <Button type="button" variant="ghost" size="sm" onClick={() => eliminarConsumo(idx)}>
+                              <X className="w-4 h-4 text-red-500" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t mt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
               <Button type="submit">Guardar</Button>
             </div>

@@ -464,39 +464,47 @@ export default function PedidosIndividuales() {
                 <div className="border rounded-lg overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-gray-100">
-                      <tr>
-                        <th className="border p-2">Color</th>
-                        {placasOrdenadas.map(placa => (
-                          <th key={placa} className="border p-2">{placa.replace('_', ' ').toUpperCase()}</th>
-                        ))}
-                        <th className="border p-2 bg-yellow-100">TOTAL</th>
-                      </tr>
+                     <tr>
+                       <th className="border p-2">Código Color</th>
+                       <th className="border p-2">Color</th>
+                       {placasOrdenadas.map(placa => (
+                         <th key={placa} className="border p-2">{placa.replace('_', ' ').toUpperCase()}</th>
+                       ))}
+                       <th className="border p-2 bg-yellow-100">TOTAL</th>
+                     </tr>
                     </thead>
                     <tbody>
                       {editingPedido.items.map((item, idx) => {
-                        const rowTotal = placasOrdenadas.reduce((sum, placa) => sum + (item[placa] || 0), 0);
-                        return (
-                          <tr key={idx}>
-                            <td className="border p-2">
-                              <Input value={item.color} onChange={e => {
-                                const updated = [...editingPedido.items];
-                                updated[idx].color = e.target.value;
-                                setEditingPedido({...editingPedido, items: updated});
-                              }} className="w-full" />
-                            </td>
-                            {placasOrdenadas.map(placa => (
-                              <td key={placa} className="border p-2">
-                                <Input type="number" value={item[placa] || 0} onChange={e => {
-                                  const updated = [...editingPedido.items];
-                                  updated[idx][placa] = parseInt(e.target.value) || 0;
-                                  updated[idx].total = placasOrdenadas.reduce((sum, p) => sum + (updated[idx][p] || 0), 0);
-                                  setEditingPedido({...editingPedido, items: updated});
-                                }} className="w-16 text-center" />
-                              </td>
-                            ))}
-                            <td className="border p-2 text-center font-bold bg-yellow-50">{rowTotal}</td>
-                          </tr>
-                        );
+                       const rowTotal = placasOrdenadas.reduce((sum, placa) => sum + (item[placa] || 0), 0);
+                       return (
+                         <tr key={idx}>
+                           <td className="border p-2">
+                             <Input value={item.codigo_color || ''} onChange={e => {
+                               const updated = [...editingPedido.items];
+                               updated[idx].codigo_color = e.target.value;
+                               setEditingPedido({...editingPedido, items: updated});
+                             }} className="w-full h-7 text-xs" placeholder="Código" />
+                           </td>
+                           <td className="border p-2">
+                             <Input value={item.color} onChange={e => {
+                               const updated = [...editingPedido.items];
+                               updated[idx].color = e.target.value;
+                               setEditingPedido({...editingPedido, items: updated});
+                             }} className="w-full h-7 text-xs" />
+                           </td>
+                           {placasOrdenadas.map(placa => (
+                             <td key={placa} className="border p-2">
+                               <Input type="number" value={item[placa] || 0} onChange={e => {
+                                 const updated = [...editingPedido.items];
+                                 updated[idx][placa] = parseInt(e.target.value) || 0;
+                                 updated[idx].total = placasOrdenadas.reduce((sum, p) => sum + (updated[idx][p] || 0), 0);
+                                 setEditingPedido({...editingPedido, items: updated});
+                               }} className="w-16 text-center h-7 text-xs" />
+                             </td>
+                           ))}
+                           <td className="border p-2 text-center font-bold bg-yellow-50">{rowTotal}</td>
+                         </tr>
+                       );
                       })}
                     </tbody>
                   </table>
