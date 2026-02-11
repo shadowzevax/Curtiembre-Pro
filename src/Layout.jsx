@@ -87,7 +87,9 @@ const menuItems = [
     roles: ["admin", "contador"],
     subItems: [
       { title: "Recibo de Caja", url: createPageUrl("ReciboCaja"), icon: Calculator },
-      { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator }
+      { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator },
+      { title: "Cuentas por Pagar", url: createPageUrl("CuentasPorPagar"), icon: Calculator },
+      { title: "Cuentas por Cobrar", url: createPageUrl("CuentasPorCobrar"), icon: Calculator }
     ]
   },
   {
