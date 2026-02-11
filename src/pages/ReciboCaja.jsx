@@ -72,10 +72,66 @@ export default function ReciboCaja() {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
+      const valorCobro = parseFloat(currentItem.valor) || 0;
+
       if (isEditing) {
         await CuentaContable.update(currentItem.id, currentItem);
       } else {
         const nuevoRecibo = await CuentaContable.create(currentItem);
+        
+        // Afectar Caja o Bancos
+        if (currentItem.medio_pago === 'efectivo') {
+          const { Caja, MovimientoCaja } = await import('@/entities/all');
+          const cajasData = await Caja.filter({ nombre: 'CAJA GENERAL' });
+          if (cajasData && cajasData.length > 0) {
+            const caja = cajasData[0];
+            const nuevoSaldo = (caja.saldo_actual || 0) + valorCobro;
+            await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
+            await MovimientoCaja.create({
+              caja_id: caja.id,
+              codigo_caja: caja.codigo_caja,
+              nombre_caja: caja.nombre,
+              fecha: currentItem.fecha,
+              tipo: 'entrada',
+              concepto: `Recibo de Caja: ${currentItem.concepto}`,
+              responsable: currentItem.proveedor_cliente_id ? clientes.find(c => c.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
+              valor_entrada: valorCobro,
+              saldo: nuevoSaldo,
+              documento_soporte: currentItem.prefijo
+            });
+          }
+        }
+
+        // Actualizar cuenta por cobrar si hay venta asociada
+        const { CuentaPorCobrar, OrdenVenta } = await import('@/entities/all');
+        const ventasPendientes = await OrdenVenta.filter({ saldo_pendiente: { $gt: 0 } });
+        const ventaPendiente = ventasPendientes.find(v => v.cliente_id === currentItem.proveedor_cliente_id);
+        
+        if (ventaPendiente) {
+          const cuentas = await CuentaPorCobrar.filter({ documento_origen_id: ventaPendiente.id });
+          if (cuentas && cuentas.length > 0) {
+            const cta = cuentas[0];
+            const nuevoValorCobrado = (cta.valor_cobrado || 0) + valorCobro;
+            const nuevoSaldoPendiente = (cta.valor_total || 0) - nuevoValorCobrado;
+            const nuevoEstado = nuevoSaldoPendiente === 0 ? 'pagada' : (nuevoValorCobrado > 0 ? 'parcial' : 'pendiente');
+            
+            const historial = cta.historial_cobros || [];
+            historial.push({
+              fecha_cobro: currentItem.fecha,
+              valor_cobro: valorCobro,
+              forma_cobro: currentItem.medio_pago,
+              referencia: currentItem.prefijo,
+              recibo_caja_id: nuevoRecibo.id
+            });
+
+            await CuentaPorCobrar.update(cta.id, {
+              valor_cobrado: nuevoValorCobrado,
+              saldo_pendiente: nuevoSaldoPendiente,
+              estado: nuevoEstado,
+              historial_cobros: historial
+            });
+          }
+        }
         
         // Registro en Libro Diario
         try {
@@ -84,14 +140,14 @@ export default function ReciboCaja() {
                  tipo_movimiento: 'ingreso',
                  tipo_tercero: 'cliente',
                  tipo_documento_soporte: 'recibo_caja',
-                 numero_documento: currentItem.prefijo, // Using prefijo as number
+                 numero_documento: currentItem.prefijo,
                  tercero_id: currentItem.proveedor_cliente_id,
                  tercero_nombre: clientes.find(c => c.id === currentItem.proveedor_cliente_id)?.nombre || '',
-                 cuenta_afectada: 'Caja Principal',
+                 cuenta_afectada: currentItem.medio_pago === 'efectivo' ? 'Caja' : 'Banco',
                  descripcion: currentItem.concepto,
                  valor_ingreso: currentItem.valor,
                  valor_egreso: 0,
-                 medio_pago: 'efectivo',
+                 medio_pago: currentItem.medio_pago,
                  origen_modulo: 'tesoreria_recibo',
                  referencia_origen_id: nuevoRecibo.id
             });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CuentaContable, Proveedor, OrdenCompra, MovimientoLibroDiario } from '@/entities/all';
+import { CuentaContable, Proveedor, OrdenCompra, MovimientoLibroDiario, CuentaPorPagar, Caja, MovimientoCaja, CuentaBancaria, MovimientoBancario } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,9 @@ const formatDate = (dateString) => {
 export default function ComprobanteEgreso() {
   const [egresos, setEgresos] = useState([]);
   const [proveedores, setProveedores] = useState([]);
+  const [cuentasPorPagar, setCuentasPorPagar] = useState([]);
+  const [cajas, setCajas] = useState([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -27,7 +30,6 @@ export default function ComprobanteEgreso() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showPendingModal, setShowPendingModal] = useState(false);
-  const [pendingDocs, setPendingDocs] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -36,12 +38,18 @@ export default function ComprobanteEgreso() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cuentasData, proveedoresData] = await Promise.all([
+      const [cuentasData, proveedoresData, cuentasPagarData, cajasData, bancosData] = await Promise.all([
         CuentaContable.filter({ tipo_cuenta: 'gastos' }),
-        Proveedor.list()
+        Proveedor.list(),
+        CuentaPorPagar.list(),
+        Caja.list(),
+        CuentaBancaria.list()
       ]);
       setEgresos(cuentasData);
       setProveedores(proveedoresData);
+      setCuentasPorPagar(cuentasPagarData);
+      setCajas(cajasData);
+      setCuentasBancarias(bancosData);
     } catch (error) {
       console.error("Error:", error);
     } finally {
@@ -60,18 +68,20 @@ export default function ComprobanteEgreso() {
       cc_nit: '',
       concepto: '',
       valor: 0,
-      proveedor_cliente_id: '', // Pagado A
+      proveedor_cliente_id: '',
       referencia: '',
-      observaciones: ''
+      observaciones: '',
+      medio_pago: 'caja',
+      cuenta_destino_id: '',
+      cuenta_destino_nombre: '',
+      cuenta_por_pagar_id: ''
     });
     setShowModal(true);
   };
 
   const loadPendingDocs = async () => {
       try {
-          const compras = await OrdenCompra.filter({ saldo_pendiente: { $gt: 0 } });
-          const filtered = compras.filter(c => c.saldo_pendiente > 0);
-          setPendingDocs(filtered);
+          const filtered = cuentasPorPagar.filter(c => c.saldo_pendiente > 0);
           setShowPendingModal(true);
       } catch (e) {
           console.error(e);
@@ -81,10 +91,78 @@ export default function ComprobanteEgreso() {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
+      const valorPago = parseFloat(currentItem.valor) || 0;
+
       if (isEditing) {
         await CuentaContable.update(currentItem.id, currentItem);
       } else {
         const nuevoEgreso = await CuentaContable.create(currentItem);
+
+        // Afectar Caja o Bancos
+        if (currentItem.medio_pago === 'caja' && currentItem.cuenta_destino_id) {
+          const caja = await Caja.filter({ id: currentItem.cuenta_destino_id });
+          if (caja && caja.length > 0) {
+            const cajaData = caja[0];
+            const nuevoSaldo = (cajaData.saldo_actual || 0) - valorPago;
+            await Caja.update(cajaData.id, { saldo_actual: nuevoSaldo });
+            await MovimientoCaja.create({
+              caja_id: cajaData.id,
+              codigo_caja: cajaData.codigo_caja,
+              nombre_caja: cajaData.nombre,
+              fecha: currentItem.fecha,
+              tipo: 'salida',
+              concepto: `Comprobante de Egreso: ${currentItem.concepto}`,
+              responsable: currentItem.proveedor_cliente_id ? proveedores.find(p => p.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
+              valor_salida: valorPago,
+              saldo: nuevoSaldo,
+              documento_soporte: currentItem.prefijo
+            });
+          }
+        } else if (currentItem.medio_pago === 'banco' && currentItem.cuenta_destino_id) {
+          const cuenta = await CuentaBancaria.filter({ id: currentItem.cuenta_destino_id });
+          if (cuenta && cuenta.length > 0) {
+            const cuentaData = cuenta[0];
+            const nuevoSaldo = (cuentaData.saldo_actual || 0) - valorPago;
+            await CuentaBancaria.update(cuentaData.id, { saldo_actual: nuevoSaldo });
+            await MovimientoBancario.create({
+              cuenta_id: cuentaData.id,
+              fecha: currentItem.fecha,
+              tipo_movimiento: 'egreso',
+              concepto: `Comprobante de Egreso: ${currentItem.concepto}`,
+              tercero_nombre: currentItem.proveedor_cliente_id ? proveedores.find(p => p.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
+              valor_salida: valorPago,
+              saldo: nuevoSaldo,
+              referencia: currentItem.prefijo
+            });
+          }
+        }
+
+        // Actualizar cuenta por pagar
+        if (currentItem.cuenta_por_pagar_id) {
+          const cuenta = await CuentaPorPagar.filter({ id: currentItem.cuenta_por_pagar_id });
+          if (cuenta && cuenta.length > 0) {
+            const cta = cuenta[0];
+            const nuevoValorPagado = (cta.valor_pagado || 0) + valorPago;
+            const nuevoSaldoPendiente = (cta.valor_total || 0) - nuevoValorPagado;
+            const nuevoEstado = nuevoSaldoPendiente === 0 ? 'pagada' : (nuevoValorPagado > 0 ? 'parcial' : 'pendiente');
+            
+            const historial = cta.historial_pagos || [];
+            historial.push({
+              fecha_pago: currentItem.fecha,
+              valor_pago: valorPago,
+              forma_pago: currentItem.medio_pago,
+              referencia: currentItem.prefijo,
+              comprobante_egreso_id: nuevoEgreso.id
+            });
+
+            await CuentaPorPagar.update(cta.id, {
+              valor_pagado: nuevoValorPagado,
+              saldo_pendiente: nuevoSaldoPendiente,
+              estado: nuevoEstado,
+              historial_pagos: historial
+            });
+          }
+        }
 
         // Registro en Libro Diario
         try {
@@ -92,20 +170,21 @@ export default function ComprobanteEgreso() {
                  fecha: currentItem.fecha,
                  tipo_movimiento: 'egreso',
                  tipo_tercero: 'proveedor',
-                 tipo_documento_soporte: 'comprobante_interno', // Egreso
+                 tipo_documento_soporte: 'comprobante_interno',
                  numero_documento: currentItem.prefijo,
                  tercero_id: currentItem.proveedor_cliente_id,
                  tercero_nombre: proveedores.find(p => p.id === currentItem.proveedor_cliente_id)?.nombre || '',
-                 cuenta_afectada: 'Caja Principal',
+                 cuenta_afectada: currentItem.medio_pago === 'caja' ? 'Caja' : 'Banco',
                  descripcion: currentItem.concepto,
                  valor_ingreso: 0,
                  valor_egreso: currentItem.valor,
-                 medio_pago: 'efectivo',
+                 medio_pago: currentItem.medio_pago,
                  origen_modulo: 'tesoreria_egreso',
                  referencia_origen_id: nuevoEgreso.id
             });
         } catch(e) { console.error("Error diario", e); }
       }
+      
       setShowModal(false);
       loadData();
       alert("Comprobante de egreso guardado con éxito.");
@@ -203,7 +282,7 @@ export default function ComprobanteEgreso() {
       </div>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Comprobante de Egreso</DialogTitle>
           </DialogHeader>
@@ -218,6 +297,7 @@ export default function ComprobanteEgreso() {
                 <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({ ...currentItem, fecha: e.target.value })} required />
               </div>
             </div>
+            
             <div>
               <Label>Proveedor/Beneficiario</Label>
               <Select value={currentItem?.proveedor_cliente_id || ''} onValueChange={v => {
@@ -225,8 +305,7 @@ export default function ComprobanteEgreso() {
                   setCurrentItem({ 
                       ...currentItem, 
                       proveedor_cliente_id: v,
-                      cc_nit: prov ? (prov.numero_identificacion || prov.nit) : currentItem?.cc_nit,
-                      codigo_proveedor: prov ? prov.codigo : ''
+                      cc_nit: prov ? (prov.numero_identificacion || prov.nit) : currentItem?.cc_nit
                   });
               }}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar proveedor" /></SelectTrigger>
@@ -236,13 +315,45 @@ export default function ComprobanteEgreso() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div>
+              <Label>Estado de Cuenta (Seleccionar para Pagar)</Label>
+              <div className="flex gap-2">
+                <Select value={currentItem?.cuenta_por_pagar_id || ''} onValueChange={v => {
+                  const cta = cuentasPorPagar.find(c => c.id === v);
+                  if (cta) {
+                    setCurrentItem({
+                      ...currentItem,
+                      cuenta_por_pagar_id: v,
+                      valor: cta.saldo_pendiente,
+                      proveedor_cliente_id: cta.proveedor_id,
+                      concepto: `Pago ${cta.tipo_documento} ${cta.numero_documento}`
+                    });
+                  } else {
+                    setCurrentItem({...currentItem, cuenta_por_pagar_id: ''});
+                  }
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>Ninguna</SelectItem>
+                    {cuentasPorPagar.filter(c => c.saldo_pendiente > 0).map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.tipo_documento} {c.numero_documento} - {c.proveedor_nombre} - Saldo: {formatCurrency(c.saldo_pendiente)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div>
               <Label>Por Valor De *</Label>
-              <Input type="number" value={currentItem?.por_valor_de || ''} onChange={e => setCurrentItem({ ...currentItem, por_valor_de: parseFloat(e.target.value) || 0 })} />
+              <Input type="number" step="0.01" value={currentItem?.valor || ''} onChange={e => setCurrentItem({ ...currentItem, valor: parseFloat(e.target.value) || 0 })} required />
             </div>
+
             <div>
               <Label>Medio de Pago *</Label>
-              <Select value={currentItem?.medio_pago || 'caja'} onValueChange={v => setCurrentItem({ ...currentItem, medio_pago: v })}>
+              <Select value={currentItem?.medio_pago || 'caja'} onValueChange={v => setCurrentItem({ ...currentItem, medio_pago: v, cuenta_destino_id: '', cuenta_destino_nombre: '' })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="caja">CAJA</SelectItem>
@@ -250,28 +361,45 @@ export default function ComprobanteEgreso() {
                 </SelectContent>
               </Select>
             </div>
+
+            {currentItem?.medio_pago === 'caja' && (
+              <div>
+                <Label>Seleccionar Caja *</Label>
+                <Select value={currentItem?.cuenta_destino_nombre || ''} onValueChange={v => {
+                  const caja = cajas.find(c => c.nombre === v);
+                  setCurrentItem({...currentItem, cuenta_destino_nombre: v, cuenta_destino_id: caja?.id || ''});
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CAJA GENERAL">CAJA GENERAL</SelectItem>
+                    <SelectItem value="CAJA MENOR">CAJA MENOR</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {currentItem?.medio_pago === 'banco' && (
+              <div>
+                <Label>Cuenta Bancaria *</Label>
+                <Select value={currentItem?.cuenta_destino_id || ''} onValueChange={v => {
+                  const cuenta = cuentasBancarias.find(c => c.id === v);
+                  setCurrentItem({...currentItem, cuenta_destino_id: v, cuenta_destino_nombre: cuenta ? `${cuenta.banco} - ${cuenta.numero_cuenta}` : ''});
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent>
+                    {cuentasBancarias.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.banco} - {c.numero_cuenta}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <Label>Concepto *</Label>
               <Input value={currentItem?.concepto || ''} onChange={e => setCurrentItem({ ...currentItem, concepto: e.target.value })} required placeholder="Ej: Pago de servicios públicos" />
             </div>
-            <div>
-              <Label>Estado de Cuenta</Label>
-              <div className="flex gap-2 items-center">
-                  <Button type="button" variant="outline" size="icon" title="Ver Estado de Cuenta (Pendientes)" onClick={loadPendingDocs}>
-                      <FileSearch className="w-5 h-5 text-red-600" />
-                  </Button>
-                  <Input type="number" value={currentItem?.valor || ''} onChange={e => setCurrentItem({ ...currentItem, valor: parseFloat(e.target.value) || 0 })} />
-              </div>
-            </div>
-            <div>
-              <Label>Soporte</Label>
-              <Input type="file" onChange={async (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  alert('Funcionalidad de carga de archivos en desarrollo');
-                }
-              }} />
-            </div>
+            
             <div>
               <Label>Observaciones</Label>
               <Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({ ...currentItem, observaciones: e.target.value })} rows={3} />
@@ -281,49 +409,6 @@ export default function ComprobanteEgreso() {
               <Button type="submit">Guardar</Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showPendingModal} onOpenChange={setShowPendingModal}>
-        <DialogContent className="max-w-3xl">
-            <DialogHeader><DialogTitle>Estado de Cuenta (Cuentas por Pagar)</DialogTitle></DialogHeader>
-            <div className="max-h-[60vh] overflow-y-auto">
-                <table className="w-full text-sm border">
-                    <thead className="bg-gray-100">
-                        <tr>
-                            <th className="p-2">Documento</th>
-                            <th className="p-2">Fecha</th>
-                            <th className="p-2">Proveedor</th>
-                            <th className="p-2 text-right">Saldo Pendiente</th>
-                            <th className="p-2"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {pendingDocs.map(doc => (
-                            <tr key={doc.id} className="border-t">
-                                <td className="p-2">{doc.prefijo_documento}-{doc.numero_documento}</td>
-                                <td className="p-2">{new Date(doc.fecha_orden).toLocaleDateString()}</td>
-                                <td className="p-2">{proveedores.find(p => p.id === doc.proveedor_id)?.nombre || 'N/A'}</td>
-                                <td className="p-2 text-right font-bold text-red-600">{formatCurrency(doc.saldo_pendiente)}</td>
-                                <td className="p-2">
-                                    <Button size="sm" onClick={() => {
-                                        setCurrentItem(prev => ({
-                                            ...prev,
-                                            valor: doc.saldo_pendiente,
-                                            observaciones: `Pago de ${doc.prefijo_documento}-${doc.numero_documento}. ${prev.observaciones}`,
-                                            proveedor_cliente_id: doc.proveedor_id,
-                                            cc_nit: doc.cc_nit_proveedor
-                                        }));
-                                        setShowPendingModal(false);
-                                    }}>Seleccionar</Button>
-                                </td>
-                            </tr>
-                        ))}
-                        {pendingDocs.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-gray-500">No hay documentos pendientes de pago.</td></tr>}
-                    </tbody>
-                </table>
-            </div>
-            <div className="flex justify-end"><Button onClick={() => setShowPendingModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 

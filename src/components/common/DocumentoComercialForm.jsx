@@ -1166,14 +1166,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                     <Select value={formData.forma_pago} onValueChange={v => handleInputChange('forma_pago', v)}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="efectivo">Efectivo</SelectItem>
-                                            <SelectItem value="transferencia">Transferencia</SelectItem>
-                                            <SelectItem value="nequi">Nequi</SelectItem>
-                                            <SelectItem value="daviplata">Daviplata</SelectItem>
-                                            <SelectItem value="consignacion">Consignación</SelectItem>
-                                            <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                                            <SelectItem value="cheque">Cheque</SelectItem>
-                                            <SelectItem value="otro">Otro</SelectItem>
+                                            <SelectItem value="efectivo">EFECTIVO</SelectItem>
+                                            <SelectItem value="banco">BANCO</SelectItem>
                                         </SelectContent>
                                     </Select>
                                  </div>
@@ -1185,12 +1179,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                              <div>
                                  {formData.forma_pago === 'efectivo' ? (
                                      <div>
-                                         <Label className="font-bold">Caja *</Label>
+                                         <Label className="font-bold">Caja * (Obligatorio para Efectivo)</Label>
                                          <Select value={formData.cuenta_destino_nombre} onValueChange={v => {
                                              handleInputChange('cuenta_destino_nombre', v);
                                              const caja = cajas.find(c => c.nombre === v);
                                              if (caja) handleInputChange('cuenta_destino_id', caja.id);
-                                         }}>
+                                         }} required>
                                              <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                                              <SelectContent>
                                                  <SelectItem value="CAJA GENERAL">CAJA GENERAL</SelectItem>
@@ -1198,14 +1192,14 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                              </SelectContent>
                                          </Select>
                                      </div>
-                                 ) : (
+                                 ) : formData.forma_pago === 'banco' ? (
                                      <div>
-                                         <Label className="font-bold">Cuenta Destino *</Label>
+                                         <Label className="font-bold">Cuenta Bancaria *</Label>
                                          <Select value={formData.cuenta_destino_id} onValueChange={v => {
                                              const cuenta = cuentasBancarias.find(c => c.id === v);
                                              handleInputChange('cuenta_destino_id', v);
                                              handleInputChange('cuenta_destino_nombre', cuenta ? `${cuenta.banco} - ${cuenta.numero_cuenta}` : '');
-                                         }}>
+                                         }} required>
                                              <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                                              <SelectContent>
                                                  {cuentasBancarias.map(c => (
@@ -1216,7 +1210,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                              </SelectContent>
                                          </Select>
                                      </div>
-                                 )}
+                                 ) : null}
                              </div>
                          )}
 

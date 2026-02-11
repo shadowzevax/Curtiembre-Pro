@@ -121,12 +121,6 @@ export default function VentaProductos() {
         try {
             let finalOrderData = {...orderData};
             
-            // Limpiar campos según selección
-            if(finalOrderData.forma_pago === 'contado') {
-                finalOrderData.monto_credito = 0;
-                finalOrderData.saldo_pendiente = 0;
-                finalOrderData.monto_efectivo = finalOrderData.total;
-            }
             if (!editingOrder) {
                 const docType = orderData.tipo_documento;
                 const prefix = docType === 'cuenta_cobro' ? 4000 : (docType === 'remision' ? 5000 : 0);
@@ -137,11 +131,37 @@ export default function VentaProductos() {
                 }
             }
 
+            let savedOrder;
             if (editingOrder) {
                 await OrdenVenta.update(editingOrder.id, finalOrderData);
+                savedOrder = { id: editingOrder.id };
             } else {
-                await OrdenVenta.create(finalOrderData);
+                savedOrder = await OrdenVenta.create(finalOrderData);
+                
+                // Si es CRÉDITO, generar cuenta por cobrar
+                if (finalOrderData.condicion_pago === 'credito' && finalOrderData.saldo_pendiente > 0) {
+                    const { CuentaPorCobrar } = await import('@/entities/all');
+                    const cliente = clientes.find(c => c.id === finalOrderData.cliente_id);
+                    await CuentaPorCobrar.create({
+                        id_cuenta: `CPC-${Date.now()}`,
+                        cliente_id: finalOrderData.cliente_id,
+                        cliente_nombre: cliente?.nombre || '',
+                        cliente_nit: cliente?.numero_identificacion || '',
+                        tipo_documento: finalOrderData.tipo_documento,
+                        numero_documento: finalOrderData.numero_documento,
+                        documento_origen_id: savedOrder.id,
+                        modulo_origen: 'ventas',
+                        fecha_documento: finalOrderData.fecha_orden,
+                        fecha_vencimiento: finalOrderData.fecha_vencimiento,
+                        valor_total: finalOrderData.total,
+                        valor_cobrado: 0,
+                        saldo_pendiente: finalOrderData.total,
+                        estado: 'pendiente',
+                        historial_cobros: []
+                    });
+                }
             }
+            
             setShowForm(false);
             setEditingOrder(null);
             loadData();

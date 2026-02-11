@@ -75,6 +75,8 @@ import CostosOtrosCostos from './pages/CostosOtrosCostos';
 import CostosServicioManoObra from './pages/CostosServicioManoObra';
 import CostosServicioMaquinaria from './pages/CostosServicioMaquinaria';
 import CuentasBancarias from './pages/CuentasBancarias';
+import CuentasPorCobrar from './pages/CuentasPorCobrar';
+import CuentasPorPagar from './pages/CuentasPorPagar';
 import Dashboard from './pages/Dashboard';
 import EgresosBancarios from './pages/EgresosBancarios';
 import GestionPedidos from './pages/GestionPedidos';
@@ -124,8 +126,6 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import CuentasPorPagar from './pages/CuentasPorPagar';
-import CuentasPorCobrar from './pages/CuentasPorCobrar';
 import __Layout from './Layout.jsx';
 
 
@@ -158,6 +158,8 @@ export const PAGES = {
     "CostosServicioManoObra": CostosServicioManoObra,
     "CostosServicioMaquinaria": CostosServicioMaquinaria,
     "CuentasBancarias": CuentasBancarias,
+    "CuentasPorCobrar": CuentasPorCobrar,
+    "CuentasPorPagar": CuentasPorPagar,
     "Dashboard": Dashboard,
     "EgresosBancarios": EgresosBancarios,
     "GestionPedidos": GestionPedidos,
@@ -207,8 +209,6 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "CuentasPorPagar": CuentasPorPagar,
-    "CuentasPorCobrar": CuentasPorCobrar,
 }
 
 export const pagesConfig = {
