@@ -83,12 +83,16 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
   useEffect(() => {
     const initialFormState = {
-        prefijo: tipoDocumento === 'compra' ? 'CH' : '',
+        prefijo: tipoDocumento === 'compra' ? 'CH' : (tipoDocumento === 'venta' ? 'FV' : ''),
         tipo_item: tipoDocumento === 'compra' ? 'materia_prima' : '',
         tipo_documento_proveedor: tipoDocumento === 'compra' ? 'FE' : '',
+        tipo_documento_venta: tipoDocumento === 'venta' ? 'FE' : '',
         tipo_documento: "factura_electronica",
         prefijo_documento: tipoDocumento === 'compra' ? 'FC' : 'FV',
         numero_documento: '',
+        numero_id: '',
+        codigo_proveedor: '',
+        codigo_cliente: '',
         [`${tipoItem === 'insumo' || tipoItem === 'piel' || tipoItem === 'hoja' || tipoItem === 'otra' ? 'proveedor' : 'cliente'}_id`]: '',
         tercero_personalizado: '',
         cc_nit_proveedor: '',
@@ -122,6 +126,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         valor_pagado: 0,
         saldo_pendiente: 0,
         empresa: 'ARTECUEROS',
+        estado_documento: 'pendiente',
       };
 
     if (documento) {
@@ -177,20 +182,23 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           }
       }
       
-      if (field === 'proveedor_id' || field === 'cliente_id') {
+      if (field === 'proveedor_id') {
           const selectedTercero = terceros.find(t => t.id === value);
-          const nitField = tipoDocumento === 'compra' ? 'cc_nit_proveedor' : 'cc_nit_cliente';
-          const dirField = 'direccion_cliente';
-          const telField = 'telefono_cliente';
-          
           setFormData(prev => ({
               ...prev,
-              [field]: value,
-              [nitField]: selectedTercero ? selectedTercero.nit : '',
-              ...(tipoDocumento === 'venta' && {
-                  [dirField]: selectedTercero ? selectedTercero.direccion : '',
-                  [telField]: selectedTercero ? selectedTercero.telefono : ''
-              })
+              proveedor_id: value,
+              codigo_proveedor: selectedTercero ? selectedTercero.codigo : '',
+              cc_nit_proveedor: selectedTercero ? (selectedTercero.numero_identificacion || selectedTercero.nit) : ''
+          }));
+      } else if (field === 'cliente_id') {
+          const selectedTercero = terceros.find(t => t.id === value);
+          setFormData(prev => ({
+              ...prev,
+              cliente_id: value,
+              codigo_cliente: selectedTercero ? selectedTercero.codigo : '',
+              cc_nit_cliente: selectedTercero ? (selectedTercero.numero_identificacion || selectedTercero.nit) : '',
+              direccion_cliente: selectedTercero ? selectedTercero.direccion : '',
+              telefono_cliente: selectedTercero ? selectedTercero.telefono : ''
           }));
       } else {
           setFormData(prev => ({ ...prev, [field]: value }));
@@ -399,6 +407,25 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
              finalData.numero_id = `${finalData.prefijo}-${year}-${String(nextConsecutivo).padStart(4, '0')}`;
         } catch (e) {
             console.error("Error generando numero_id", e);
+            const year = new Date().getFullYear();
+            finalData.numero_id = `${finalData.prefijo}-${year}-0001`;
+        }
+    }
+
+    // Generar número_id único para ventas
+    if (tipoDocumento === 'venta' && !documento && finalData.prefijo) {
+        try {
+             const year = new Date().getFullYear();
+             const allVentas = await OrdenVenta.list();
+             const ventasConPrefijo = allVentas.filter(v => v.numero_id?.startsWith(`${finalData.prefijo}-${year}`));
+             const consecutivos = ventasConPrefijo.map(v => {
+               const match = v.numero_id?.match(/-\d{4}-(\d+)/);
+               return match ? parseInt(match[1]) : 0;
+             });
+             const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
+             finalData.numero_id = `${finalData.prefijo}-${year}-${String(nextConsecutivo).padStart(4, '0')}`;
+        } catch (e) {
+            console.error("Error generando numero_id ventas", e);
             const year = new Date().getFullYear();
             finalData.numero_id = `${finalData.prefijo}-${year}-0001`;
         }
@@ -860,21 +887,19 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           <div className="overflow-y-auto pr-6 space-y-4 flex-grow">
             {/* Encabezado */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                {tipoDocumento === 'compra' && (
-                  <div>
-                    <Label>No. ID</Label>
-                    <Input 
-                      value={formData.numero_id || 'Auto-generado'} 
-                      readOnly 
-                      className="bg-gray-100 font-semibold text-emerald-700"
-                      title="ID único de compra autogenerado basado en PREFIJO"
-                    />
-                  </div>
-                )}
+                <div>
+                  <Label>No. ID {tipoDocumento === 'venta' ? '(Autogenerado)' : ''}</Label>
+                  <Input 
+                    value={formData.numero_id || 'Auto-generado'} 
+                    readOnly 
+                    className="bg-gray-100 font-semibold text-emerald-700"
+                    title="ID único autogenerado basado en PREFIJO"
+                  />
+                </div>
                 
-                {tipoDocumento === 'compra' && (
-                  <div>
-                    <Label>Prefijo *</Label>
+                <div>
+                  <Label>Prefijo *</Label>
+                  {tipoDocumento === 'compra' ? (
                     <Select value={formData.prefijo} onValueChange={v => handleInputChange('prefijo', v)}>
                       <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                       <SelectContent>
@@ -885,8 +910,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                         <SelectItem value="CV">CV - Compras Varias</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                )}
+                  ) : (
+                    <Select value={formData.prefijo} onValueChange={v => handleInputChange('prefijo', v)}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FV">FV - Factura de Venta</SelectItem>
+                        <SelectItem value="CC">CC - Cuenta de Cobro</SelectItem>
+                        <SelectItem value="REM">REM - Remisión</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
                 
                 {tipoDocumento === 'compra' && (
                   <div>
@@ -920,10 +954,22 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                   </div>
                 )}
                 
-                <div><Label>No. Documento Proveedor</Label><Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Número del proveedor" /></div>
+                {tipoDocumento === 'compra' && <div><Label>No. Documento Proveedor</Label><Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Número del proveedor" /></div>}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {tipoDocumento === 'compra' && (
+                  <div>
+                    <Label>Código Proveedor</Label>
+                    <Input value={formData.codigo_proveedor || ''} readOnly className="bg-gray-100" />
+                  </div>
+                )}
+                {tipoDocumento === 'venta' && (
+                  <div>
+                    <Label>Código Cliente</Label>
+                    <Input value={formData.codigo_cliente || ''} readOnly className="bg-gray-100" />
+                  </div>
+                )}
                 <div><Label>{terceroLabel}</Label>
                     {!terceroPersonalizado ? (
                     <Select value={formData[terceroIdField]} onValueChange={v => v === 'personalizado' ? setTerceroPersonalizado(true) : handleInputChange(terceroIdField, v)}>
@@ -933,6 +979,28 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                     ) : (<div className="flex gap-2"><Input placeholder={`Escriba nombre de ${terceroLabel}`} value={formData.tercero_personalizado} onChange={e => handleInputChange('tercero_personalizado', e.target.value)}/><Button type="button" variant="outline" size="sm" onClick={() => setTerceroPersonalizado(false)}>Cancelar</Button></div>)}
                 </div>
                 <div><Label>CC/NIT</Label><Input value={formData[nitField]} onChange={e => handleInputChange(nitField, e.target.value)} /></div>
+                {tipoDocumento === 'venta' && (
+                  <div>
+                    <Label>Tipo de Documento *</Label>
+                    <Select value={formData.tipo_documento_venta || 'FE'} onValueChange={v => handleInputChange('tipo_documento_venta', v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FE">FE - Factura Electrónica</SelectItem>
+                        <SelectItem value="CC">CC - Cuenta de Cobro</SelectItem>
+                        <SelectItem value="VSD">VSD - Venta Sin Documento</SelectItem>
+                        <SelectItem value="NC">NC - Nota Crédito</SelectItem>
+                        <SelectItem value="ND">ND - Nota Débito</SelectItem>
+                        <SelectItem value="REM">REM - Remisión</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {tipoDocumento === 'venta' && (
+                  <div>
+                    <Label>No. de Documento</Label>
+                    <Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Número de documento" />
+                  </div>
+                )}
                 {tipoDocumento === 'compra' && tipoItem === 'pieles' && (
                   <div><Label>Código Lote de Piel</Label><Input value={formData.codigo_lote_piel || ''} onChange={e => handleInputChange('codigo_lote_piel', e.target.value)} placeholder="Ej: LOTE-001" /></div>
                 )}
@@ -1247,6 +1315,21 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                      </div>
 
                      <div><Label>Observaciones</Label><Textarea value={formData.observaciones} onChange={e => handleInputChange('observaciones', e.target.value)} rows={4}/></div>
+                     
+                     {tipoDocumento === 'compra' && (
+                       <div>
+                         <Label className="font-bold">Estado del Documento *</Label>
+                         <Select value={formData.estado_documento || 'pendiente'} onValueChange={v => handleInputChange('estado_documento', v)}>
+                           <SelectTrigger><SelectValue /></SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="pendiente">PENDIENTE</SelectItem>
+                             <SelectItem value="pagado">PAGADO</SelectItem>
+                             <SelectItem value="parcial">PARCIAL</SelectItem>
+                             <SelectItem value="anulado">ANULADO</SelectItem>
+                           </SelectContent>
+                         </Select>
+                       </div>
+                     )}
                     <div><Label>Soportes</Label>
                         <div className="border p-2 rounded-lg space-y-2">
                             <div className="flex flex-wrap gap-2">
