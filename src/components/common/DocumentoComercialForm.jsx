@@ -633,6 +633,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         }
     }
 
+    // Actualizar estado del documento según condición de pago en compras
+    if (tipoDocumento === 'compra') {
+        if (finalData.condicion_pago === 'contado' && finalData.valor_pagado === finalData.total) {
+            finalData.estado_documento = 'pagado';
+        } else if (finalData.condicion_pago === 'credito') {
+            finalData.estado_documento = 'pendiente';
+        } else if (finalData.condicion_pago === 'mixto' && finalData.valor_pagado > 0) {
+            finalData.estado_documento = 'parcial';
+        }
+    }
+
     // AUTOMATIZACIÓN: Generar Recibo de Caja o Comprobante de Egreso si es contado
     if ((finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') && finalData.valor_pagado > 0) {
         try {
@@ -702,19 +713,39 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
                 // Actualizar saldo de caja o cuenta bancaria (restar)
                 if (finalData.forma_pago === 'efectivo' && finalData.cuenta_destino_id) {
-                    const { Caja } = await import('@/entities/all');
-                    const caja = await Caja.get(finalData.cuenta_destino_id);
-                    if (caja) {
-                        await Caja.update(caja.id, {
-                            saldo_actual: (caja.saldo_actual || 0) - finalData.valor_pagado
+                    const { Caja, MovimientoCaja } = await import('@/entities/all');
+                    const cajasData = await Caja.filter({ id: finalData.cuenta_destino_id });
+                    if (cajasData && cajasData.length > 0) {
+                        const caja = cajasData[0];
+                        const nuevoSaldo = (caja.saldo_actual || 0) - finalData.valor_pagado;
+                        await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
+                        await MovimientoCaja.create({
+                            caja_id: caja.id,
+                            codigo_caja: caja.codigo_caja,
+                            nombre_caja: caja.nombre,
+                            fecha: finalData.fecha_orden,
+                            tipo: 'salida',
+                            concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
+                            responsable: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
+                            valor_salida: finalData.valor_pagado,
+                            saldo: nuevoSaldo
                         });
                     }
-                } else if (finalData.forma_pago !== 'efectivo' && finalData.cuenta_destino_id) {
-                    const { CuentaBancaria } = await import('@/entities/all');
-                    const cuenta = await CuentaBancaria.get(finalData.cuenta_destino_id);
-                    if (cuenta) {
-                        await CuentaBancaria.update(cuenta.id, {
-                            saldo_actual: (cuenta.saldo_actual || 0) - finalData.valor_pagado
+                } else if (finalData.forma_pago === 'banco' && finalData.cuenta_destino_id) {
+                    const { CuentaBancaria, MovimientoBancario } = await import('@/entities/all');
+                    const cuentasData = await CuentaBancaria.filter({ id: finalData.cuenta_destino_id });
+                    if (cuentasData && cuentasData.length > 0) {
+                        const cuenta = cuentasData[0];
+                        const nuevoSaldo = (cuenta.saldo_actual || 0) - finalData.valor_pagado;
+                        await CuentaBancaria.update(cuenta.id, { saldo_actual: nuevoSaldo });
+                        await MovimientoBancario.create({
+                            cuenta_id: cuenta.id,
+                            fecha: finalData.fecha_orden,
+                            tipo_movimiento: 'egreso',
+                            concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
+                            tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
+                            valor_salida: finalData.valor_pagado,
+                            saldo: nuevoSaldo
                         });
                     }
                 }
@@ -723,6 +754,34 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
             }
         } catch (e) {
             console.error('Error generando documento automático:', e);
+        }
+    }
+
+    // GENERAR CUENTA POR PAGAR si es compra a crédito
+    if (tipoDocumento === 'compra' && finalData.condicion_pago === 'credito' && finalData.saldo_pendiente > 0) {
+        try {
+            const { CuentaPorPagar } = await import('@/entities/all');
+            const proveedor = terceros.find(p => p.id === finalData.proveedor_id);
+            await CuentaPorPagar.create({
+                id_cuenta: `CPP-${Date.now()}`,
+                proveedor_id: finalData.proveedor_id,
+                proveedor_nombre: proveedor?.nombre || '',
+                proveedor_nit: proveedor?.numero_identificacion || '',
+                tipo_documento: finalData.tipo_documento_proveedor,
+                numero_documento: finalData.numero_documento,
+                documento_origen_id: orderId,
+                modulo_origen: 'compras',
+                fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
+                fecha_vencimiento: finalData.fecha_vencimiento,
+                valor_total: finalData.total,
+                valor_pagado: 0,
+                saldo_pendiente: finalData.total,
+                estado: 'pendiente',
+                historial_pagos: []
+            });
+            console.log('✅ Cuenta por Pagar generada automáticamente');
+        } catch (e) {
+            console.error('Error generando cuenta por pagar:', e);
         }
     }
 

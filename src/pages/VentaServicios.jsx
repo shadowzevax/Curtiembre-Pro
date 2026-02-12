@@ -118,22 +118,37 @@ export default function VentaServicios() {
     const handleSubmit = async (orderData) => {
         setLoading(true);
         try {
-            let finalOrderData = {...orderData};
-            if (!editingOrder) {
-                const docType = orderData.tipo_documento;
-                const prefix = docType === 'cuenta_cobro' ? 4000 : (docType === 'remision' ? 5000 : 0);
-                if (prefix > 0) {
-                    const lastOrder = await OrdenVenta.filter({ tipo_documento: docType }, '-numero_documento', 1);
-                    const lastNumber = lastOrder.length > 0 ? parseInt(lastOrder[0].numero_documento, 10) : prefix - 1;
-                    finalOrderData.numero_documento = Math.max(prefix, lastNumber + 1).toString();
+            let savedOrder;
+            if (editingOrder) {
+                await OrdenVenta.update(editingOrder.id, orderData);
+                savedOrder = { id: editingOrder.id };
+            } else {
+                savedOrder = await OrdenVenta.create(orderData);
+                
+                // Si es CRÉDITO, generar cuenta por cobrar
+                if (orderData.condicion_pago === 'credito' && orderData.saldo_pendiente > 0) {
+                    const { CuentaPorCobrar } = await import('@/entities/all');
+                    const cliente = clientes.find(c => c.id === orderData.cliente_id);
+                    await CuentaPorCobrar.create({
+                        id_cuenta: `CPC-${Date.now()}`,
+                        cliente_id: orderData.cliente_id,
+                        cliente_nombre: cliente?.nombre || '',
+                        cliente_nit: cliente?.numero_identificacion || '',
+                        tipo_documento: orderData.tipo_documento_venta || orderData.tipo_documento,
+                        numero_documento: orderData.numero_documento,
+                        documento_origen_id: savedOrder.id,
+                        modulo_origen: 'ventas',
+                        fecha_documento: orderData.fecha_orden,
+                        fecha_vencimiento: orderData.fecha_vencimiento,
+                        valor_total: orderData.total,
+                        valor_cobrado: 0,
+                        saldo_pendiente: orderData.total,
+                        estado: 'pendiente',
+                        historial_cobros: []
+                    });
                 }
             }
-
-            if (editingOrder) {
-                await OrdenVenta.update(editingOrder.id, finalOrderData);
-            } else {
-                await OrdenVenta.create(finalOrderData);
-            }
+            
             setShowForm(false);
             setEditingOrder(null);
             loadData();

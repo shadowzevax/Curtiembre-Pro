@@ -119,47 +119,30 @@ export default function VentaProductos() {
     const handleSubmit = async (orderData) => {
         setLoading(true);
         try {
-            let finalOrderData = {...orderData};
+            const savedOrder = await onSubmit(orderData);
+            const orderId = savedOrder?.id || editingOrder?.id;
             
-            if (!editingOrder) {
-                const docType = orderData.tipo_documento;
-                const prefix = docType === 'cuenta_cobro' ? 4000 : (docType === 'remision' ? 5000 : 0);
-                if (prefix > 0) {
-                    const lastOrder = await OrdenVenta.filter({ tipo_documento: docType }, '-numero_documento', 1);
-                    const lastNumber = lastOrder.length > 0 ? parseInt(lastOrder[0].numero_documento, 10) : prefix - 1;
-                    finalOrderData.numero_documento = Math.max(prefix, lastNumber + 1).toString();
-                }
-            }
-
-            let savedOrder;
-            if (editingOrder) {
-                await OrdenVenta.update(editingOrder.id, finalOrderData);
-                savedOrder = { id: editingOrder.id };
-            } else {
-                savedOrder = await OrdenVenta.create(finalOrderData);
-                
-                // Si es CRÉDITO, generar cuenta por cobrar
-                if (finalOrderData.condicion_pago === 'credito' && finalOrderData.saldo_pendiente > 0) {
-                    const { CuentaPorCobrar } = await import('@/entities/all');
-                    const cliente = clientes.find(c => c.id === finalOrderData.cliente_id);
-                    await CuentaPorCobrar.create({
-                        id_cuenta: `CPC-${Date.now()}`,
-                        cliente_id: finalOrderData.cliente_id,
-                        cliente_nombre: cliente?.nombre || '',
-                        cliente_nit: cliente?.numero_identificacion || '',
-                        tipo_documento: finalOrderData.tipo_documento,
-                        numero_documento: finalOrderData.numero_documento,
-                        documento_origen_id: savedOrder.id,
-                        modulo_origen: 'ventas',
-                        fecha_documento: finalOrderData.fecha_orden,
-                        fecha_vencimiento: finalOrderData.fecha_vencimiento,
-                        valor_total: finalOrderData.total,
-                        valor_cobrado: 0,
-                        saldo_pendiente: finalOrderData.total,
-                        estado: 'pendiente',
-                        historial_cobros: []
-                    });
-                }
+            // Si es CRÉDITO, generar cuenta por cobrar
+            if (!editingOrder && orderData.condicion_pago === 'credito' && orderData.saldo_pendiente > 0) {
+                const { CuentaPorCobrar } = await import('@/entities/all');
+                const cliente = clientes.find(c => c.id === orderData.cliente_id);
+                await CuentaPorCobrar.create({
+                    id_cuenta: `CPC-${Date.now()}`,
+                    cliente_id: orderData.cliente_id,
+                    cliente_nombre: cliente?.nombre || '',
+                    cliente_nit: cliente?.numero_identificacion || '',
+                    tipo_documento: orderData.tipo_documento_venta || orderData.tipo_documento,
+                    numero_documento: orderData.numero_documento,
+                    documento_origen_id: orderId,
+                    modulo_origen: 'ventas',
+                    fecha_documento: orderData.fecha_orden,
+                    fecha_vencimiento: orderData.fecha_vencimiento,
+                    valor_total: orderData.total,
+                    valor_cobrado: 0,
+                    saldo_pendiente: orderData.total,
+                    estado: 'pendiente',
+                    historial_cobros: []
+                });
             }
             
             setShowForm(false);
@@ -287,7 +270,14 @@ export default function VentaProductos() {
                 <DocumentoComercialForm
                     open={showForm}
                     onOpenChange={setShowForm}
-                    onSubmit={handleSubmit}
+                    onSubmit={async (orderData) => {
+                        if (editingOrder) {
+                            await OrdenVenta.update(editingOrder.id, orderData);
+                            return { id: editingOrder.id };
+                        } else {
+                            return await OrdenVenta.create(orderData);
+                        }
+                    }}
                     documento={editingOrder}
                     terceros={clientes}
                     itemsCatalogo={productos}
