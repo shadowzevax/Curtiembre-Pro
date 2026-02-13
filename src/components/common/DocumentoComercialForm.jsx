@@ -437,9 +437,19 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         finalData.codigo_lote_inventario = `LOTE-${Date.now()}`;
     }
 
+    // Validación antes de guardar
+    if (tipoDocumento === 'compra' && !finalData.fecha_emision_documento) {
+        alert('Error: La fecha de emisión del documento es obligatoria.');
+        return;
+    }
+
     // Guardar la orden primero
-    const savedOrder = await onSubmit(finalData);
-    const orderId = savedOrder?.id || finalData.id;
+    try {
+        const savedOrder = await onSubmit(finalData);
+        const orderId = savedOrder?.id || finalData.id;
+        
+        // Mensaje de éxito
+        alert('✅ GUARDADO EXITOSAMENTE');
 
     // REVERTIR MOVIMIENTOS ANTIGUOS SI ES EDICIÓN
     if (documento && tipoDocumento === 'compra' && finalData.afecta_inventario) {
@@ -848,9 +858,15 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         });
 
         console.log('✅ Asiento contable generado automáticamente');
-    } catch (e) {
+        } catch (e) {
         console.error('Error generando asiento contable:', e);
-    }
+        }
+
+        } catch (error) {
+        console.error('Error al guardar:', error);
+        alert(`Error al guardar: ${error.message}`);
+        return;
+        }
 
     // Lógica de actualización de Inventario para VENTAS (Salidas)
     if (tipoDocumento === 'venta') {
@@ -1145,7 +1161,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                 </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div><Label>Fecha Emisión Documento</Label><Input type="date" value={formData.fecha_emision_documento || formData.fecha_orden} onChange={e => handleInputChange('fecha_emision_documento', e.target.value)} required /></div>
+                <div><Label>Fecha Emisión Documento *</Label><Input type="date" value={formData.fecha_emision_documento || formData.fecha_orden} onChange={e => handleInputChange('fecha_emision_documento', e.target.value)} required /></div>
                 {tipoDocumento === 'compra' && (
                   <div><Label>Fecha de Recepción Conforme</Label><Input type="date" value={formData.fecha_recepcion_conforme || ''} onChange={e => handleInputChange('fecha_recepcion_conforme', e.target.value)} /></div>
                 )}

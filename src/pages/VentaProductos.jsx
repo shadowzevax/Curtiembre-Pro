@@ -145,12 +145,13 @@ export default function VentaProductos() {
                 });
             }
             
+            alert('✅ GUARDADO EXITOSAMENTE');
             setShowForm(false);
             setEditingOrder(null);
             loadData();
         } catch (error) {
             console.error("Error saving order:", error);
-            alert("Error al guardar la orden.");
+            alert("Error al guardar la orden: " + error.message);
         } finally {
             setLoading(false);
         }

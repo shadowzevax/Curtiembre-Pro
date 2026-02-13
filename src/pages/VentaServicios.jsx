@@ -149,12 +149,13 @@ export default function VentaServicios() {
                 }
             }
             
+            alert('✅ GUARDADO EXITOSAMENTE');
             setShowForm(false);
             setEditingOrder(null);
             loadData();
         } catch (error) {
             console.error("Error saving order:", error);
-            alert(`Error: ${error.message}`);
+            alert(`Error al guardar: ${error.message}`);
         } finally {
             setLoading(false);
         }
