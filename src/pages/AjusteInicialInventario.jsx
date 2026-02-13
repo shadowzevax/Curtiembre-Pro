@@ -18,7 +18,7 @@ const formatDate = (dateString) => {
   return new Date(date.getTime() + date.getTimezoneOffset() * 60000).toLocaleDateString('es-CO');
 };
 
-export default function AjusteInicialInventario() {
+export default function AjusteInicialInventarioPage() {
     const [ajustes, setAjustes] = useState([]);
     const [productos, setProductos] = useState([]);
     const [loading, setLoading] = useState(true);
