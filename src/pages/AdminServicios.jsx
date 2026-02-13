@@ -42,11 +42,12 @@ export default function AdminServicios() {
             codigo: '', 
             nombre: '', 
             descripcion: '', 
-            categoria_servicio: '',
-            es_servicio_interno: true,
+            categoria: '',
+            tipo_servicio: 'ambos',
+            afecta_produccion: false,
             precio_base: 0, 
-            unidad: 'fijo',
-            observaciones: ''
+            unidad_medida: '',
+            estado: 'activo'
         });
         setShowModal(true);
     };
@@ -104,15 +105,15 @@ export default function AdminServicios() {
     const handleExport = () => alert("Función de exportar en desarrollo.");
     const handlePrint = () => window.print();
 
-    const headers = ["Código", "Nombre", "Categoría", "Tipo", "Precio Base", "Unidad", "Acciones"];
+    const headers = ["Código", "Nombre", "Categoría", "Tipo Servicio", "Precio Base", "Estado", "Acciones"];
     const renderRow = (item) => (
         <tr key={item.id}>
-            <td>{item.codigo || 'N/A'}</td>
+            <td className="font-mono">{item.codigo || 'N/A'}</td>
             <td>{item.nombre}</td>
-            <td>{item.categoria_servicio || 'N/A'}</td>
-            <td>{item.es_servicio_interno ? '🏢 Interno' : '🌐 Externo'}</td>
+            <td>{item.categoria || 'N/A'}</td>
+            <td><span className="text-xs">{item.tipo_servicio?.replace('_', ' ').toUpperCase()}</span></td>
             <td>{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(item.precio_base || 0)}</td>
-            <td>{item.unidad}</td>
+            <td><span className={`px-2 py-1 rounded text-xs ${item.estado === 'activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.estado?.toUpperCase()}</span></td>
             <td>
                 <div className="flex space-x-2">
                     <Button variant="ghost" size="icon" onClick={() => handleOpenDetailModal(item)}><Eye className="w-4 h-4" /></Button>
@@ -165,40 +166,54 @@ export default function AdminServicios() {
                             <Label htmlFor="descripcion">Descripción</Label>
                             <Input id="descripcion" value={currentItem?.descripcion || ''} onChange={(e) => setCurrentItem({ ...currentItem, descripcion: e.target.value })} />
                         </div>
-                        <div>
-                            <Label htmlFor="categoria">Categoría del Servicio</Label>
-                            <Input id="categoria" value={currentItem?.categoria_servicio || ''} onChange={(e) => setCurrentItem({ ...currentItem, categoria_servicio: e.target.value })} placeholder="Ej: Consultoría, Mantenimiento, etc." />
-                        </div>
-                        <div>
-                            <Label htmlFor="tipo_servicio">¿Es Servicio Interno o Externo?</Label>
-                            <Select value={currentItem?.es_servicio_interno ? 'interno' : 'externo'} onValueChange={(value) => setCurrentItem({ ...currentItem, es_servicio_interno: value === 'interno' })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="interno">Interno</SelectItem>
-                                    <SelectItem value="externo">Externo</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label htmlFor="precio_base">Precio Base *</Label>
-                                <Input id="precio_base" type="number" value={currentItem?.precio_base || ''} onChange={(e) => setCurrentItem({ ...currentItem, precio_base: e.target.value })} required />
+                                <Label htmlFor="categoria">Categoría del Servicio</Label>
+                                <Input id="categoria" value={currentItem?.categoria || ''} onChange={(e) => setCurrentItem({ ...currentItem, categoria: e.target.value })} placeholder="Ej: Consultoría, Mantenimiento, etc." />
                             </div>
                             <div>
-                                <Label htmlFor="unidad">Unidad</Label>
-                                <Select value={currentItem?.unidad || 'fijo'} onValueChange={(value) => setCurrentItem({ ...currentItem, unidad: value })}>
+                                <Label htmlFor="tipo_servicio">Tipo de Servicio *</Label>
+                                <Select value={currentItem?.tipo_servicio || 'ambos'} onValueChange={(value) => setCurrentItem({ ...currentItem, tipo_servicio: value })}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="hora">Hora</SelectItem>
-                                        <SelectItem value="unidad">Unidad</SelectItem>
-                                        <SelectItem value="fijo">Fijo</SelectItem>
+                                        <SelectItem value="servicio_venta">Servicio de Venta</SelectItem>
+                                        <SelectItem value="servicio_compra">Servicio de Compra</SelectItem>
+                                        <SelectItem value="ambos">Ambos</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>
-                        <div>
-                            <Label htmlFor="observaciones">Observaciones</Label>
-                            <Textarea id="observaciones" value={currentItem?.observaciones || ''} onChange={(e) => setCurrentItem({ ...currentItem, observaciones: e.target.value })} rows={3} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="afecta_produccion">Afecta Producción</Label>
+                                <Select value={currentItem?.afecta_produccion ? 'si' : 'no'} onValueChange={(value) => setCurrentItem({ ...currentItem, afecta_produccion: value === 'si' })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="si">Sí</SelectItem>
+                                        <SelectItem value="no">No</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="precio_base">Precio Base *</Label>
+                                <Input id="precio_base" type="number" value={currentItem?.precio_base || ''} onChange={(e) => setCurrentItem({ ...currentItem, precio_base: e.target.value })} required />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="unidad_medida">Unidad de Medida</Label>
+                                <Input id="unidad_medida" value={currentItem?.unidad_medida || ''} onChange={(e) => setCurrentItem({ ...currentItem, unidad_medida: e.target.value })} placeholder="Ej: hora, unidad, etc." />
+                            </div>
+                            <div>
+                                <Label htmlFor="estado">Estado</Label>
+                                <Select value={currentItem?.estado || 'activo'} onValueChange={(value) => setCurrentItem({ ...currentItem, estado: value })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="activo">Activo</SelectItem>
+                                        <SelectItem value="inactivo">Inactivo</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>

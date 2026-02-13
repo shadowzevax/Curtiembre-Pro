@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Proveedor, Cliente } from '@/entities/all';
+import { Tercero } from '@/entities/all';
 import { UploadFile } from '@/integrations/Core';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,7 @@ import DataTable from '../components/common/DataTable';
 import PageHeader from '../components/common/PageHeader';
 
 export default function AdminTerceros() {
-    const [proveedores, setProveedores] = useState([]);
-    const [clientes, setClientes] = useState([]);
+    const [terceros, setTerceros] = useState([]);
     const [activeTab, setActiveTab] = useState('proveedores');
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -24,6 +23,7 @@ export default function AdminTerceros() {
     const [selectedItem, setSelectedItem] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [isUploading, setIsUploading] = useState(false);
+    const [filtroTipo, setFiltroTipo] = useState('todos');
     const fileInputRef = useRef(null);
 
     useEffect(() => {
@@ -33,12 +33,8 @@ export default function AdminTerceros() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [provData, cliData] = await Promise.all([
-                Proveedor.list(),
-                Cliente.list()
-            ]);
-            setProveedores(provData);
-            setClientes(cliData);
+            const data = await Tercero.list();
+            setTerceros(data);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
@@ -51,27 +47,19 @@ export default function AdminTerceros() {
         
         let nextCodigo = '';
         if (!item) {
-            if (activeTab === 'proveedores') {
-                const maxNum = proveedores.length > 0 
-                    ? Math.max(...proveedores.map(p => {
-                        const match = p.codigo?.match(/PROV-(\d+)/);
-                        return match ? parseInt(match[1]) : 0;
-                    }))
-                    : 0;
-                nextCodigo = `PROV-${String(maxNum + 1).padStart(3, '0')}`;
-            } else {
-                const maxNum = clientes.length > 0 
-                    ? Math.max(...clientes.map(c => {
-                        const match = c.codigo?.match(/CLI-(\d+)/);
-                        return match ? parseInt(match[1]) : 0;
-                    }))
-                    : 0;
-                nextCodigo = `CLI-${String(maxNum + 1).padStart(3, '0')}`;
-            }
+            const maxNum = terceros.length > 0 
+                ? Math.max(...terceros.map(t => {
+                    const match = t.codigo?.match(/TER-(\d+)/);
+                    return match ? parseInt(match[1]) : 0;
+                }))
+                : 0;
+            nextCodigo = `TER-${String(maxNum + 1).padStart(3, '0')}`;
         }
         
         setCurrentItem(item || {
             codigo: nextCodigo,
+            es_cliente: activeTab === 'clientes',
+            es_proveedor: activeTab === 'proveedores',
             tipo_tercero: activeTab === 'proveedores' ? 'proveedor' : 'cliente',
             tipo_persona: 'natural',
             tipo_identificacion: 'cedula',
@@ -85,8 +73,9 @@ export default function AdminTerceros() {
             direccion: '',
             telefono: '',
             email: '',
-            tipo: activeTab === 'proveedores' ? 'insumos' : 'productos',
             activo: true,
+            fecha_creacion: new Date().toISOString().split('T')[0],
+            regimen_tributario: 'regimen_ordinario',
             rut: ''
         });
         setShowModal(true);
@@ -114,17 +103,15 @@ export default function AdminTerceros() {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        const Entity = activeTab === 'proveedores' ? Proveedor : Cliente;
-        const allItems = activeTab === 'proveedores' ? [...proveedores] : [...clientes];
         
-        // Validar duplicados por número de identificación únicamente
-        const isDuplicateId = allItems.some(item => 
+        // Validar duplicados por número de identificación
+        const isDuplicateId = terceros.some(item => 
             (item.numero_identificacion || item.nit) === (currentItem.numero_identificacion || currentItem.nit) &&
             (!isEditing || item.id !== currentItem.id)
         );
 
         if (isDuplicateId) {
-            alert('PROVEEDOR O CLIENTE YA EXISTE REVISE');
+            alert('TERCERO YA EXISTE CON ESTE NÚMERO DE IDENTIFICACIÓN');
             return;
         }
 
@@ -135,13 +122,13 @@ export default function AdminTerceros() {
             };
             
             if (isEditing) {
-                await Entity.update(currentItem.id, dataToSave);
+                await Tercero.update(currentItem.id, dataToSave);
             } else {
-                await Entity.create(dataToSave);
+                await Tercero.create(dataToSave);
             }
             setShowModal(false);
             loadData();
-            alert("Tercero guardado con éxito.");
+            alert("✅ Tercero guardado con éxito.");
         } catch (error) {
             console.error("Error saving item:", error);
             alert("Error al guardar el tercero.");
@@ -150,9 +137,8 @@ export default function AdminTerceros() {
 
     const handleDelete = async (id) => {
         if (!window.confirm('¿Está seguro de que desea eliminar este tercero? Esta acción no se puede deshacer.')) return;
-        const Entity = activeTab === 'proveedores' ? Proveedor : Cliente;
         try {
-            await Entity.delete(id);
+            await Tercero.delete(id);
             loadData();
             alert("Tercero eliminado con éxito.");
         } catch (error) {
@@ -161,18 +147,25 @@ export default function AdminTerceros() {
         }
     };
 
+    const getFilteredData = () => {
+        if (filtroTipo === 'todos') return terceros;
+        if (filtroTipo === 'clientes') return terceros.filter(t => t.es_cliente);
+        if (filtroTipo === 'proveedores') return terceros.filter(t => t.es_proveedor);
+        return terceros;
+    };
+    
     const handleExport = () => {
-        const dataToExport = activeTab === 'proveedores' ? proveedores : clientes;
-        let csvContent = "ID,Nombre,Nombre Comercial,Tipo Tercero,Número ID,Telefono,Email,Tipo,Activo\n";
+        const dataToExport = getFilteredData();
+        let csvContent = "Código,Nombre,Nombre Comercial,Tipo Tercero,Número ID,Teléfono,Email,Es Cliente,Es Proveedor,Activo,Fecha Creación,Régimen Tributario\n";
         csvContent += dataToExport.map(item =>
-            `${item.id || ''},"${item.nombre || ''}","${item.nombre_comercial || ''}","${item.tipo_tercero || ''}","${item.numero_identificacion || item.nit || ''}","${item.telefono || ''}","${item.email || ''}","${item.tipo || ''}","${item.activo ? 'Sí' : 'No'}"`
+            `${item.codigo || ''},"${item.nombre || ''}","${item.nombre_comercial || ''}","${item.tipo_tercero || ''}","${item.numero_identificacion || item.nit || ''}","${item.telefono || ''}","${item.email || ''}","${item.es_cliente ? 'Sí' : 'No'}","${item.es_proveedor ? 'Sí' : 'No'}","${item.activo ? 'Sí' : 'No'}","${item.fecha_creacion || ''}","${item.regimen_tributario || ''}"`
         ).join("\n");
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", `${activeTab}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute("download", `terceros_${new Date().toISOString().slice(0, 10)}.csv`);
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -234,8 +227,28 @@ export default function AdminTerceros() {
                     <Input value={currentItem?.nombre || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre: e.target.value })} required />
                 </div>
                 <div>
-                    <Label>Nombre o Razón Comercial</Label>
+                    <Label>Nombre Comercial</Label>
                     <Input value={currentItem?.nombre_comercial || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre_comercial: e.target.value })} />
+                </div>
+                <div>
+                    <Label>Es Cliente</Label>
+                    <Select value={currentItem?.es_cliente ? 'si' : 'no'} onValueChange={(value) => setCurrentItem({ ...currentItem, es_cliente: value === 'si' })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="si">Sí</SelectItem>
+                            <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div>
+                    <Label>Es Proveedor</Label>
+                    <Select value={currentItem?.es_proveedor ? 'si' : 'no'} onValueChange={(value) => setCurrentItem({ ...currentItem, es_proveedor: value === 'si' })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="si">Sí</SelectItem>
+                            <SelectItem value="no">No</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
                 <div>
                     <Label>País</Label>
@@ -260,26 +273,8 @@ export default function AdminTerceros() {
                     <Input type="tel" value={currentItem?.telefono || ''} onChange={(e) => setCurrentItem({ ...currentItem, telefono: e.target.value })} />
                 </div>
                 <div>
-                    <Label>Tipo *</Label>
-                    <Select value={currentItem?.tipo || ''} onValueChange={(value) => setCurrentItem({ ...currentItem, tipo: value })} required>
-                        <SelectTrigger><SelectValue placeholder="Seleccione un tipo" /></SelectTrigger>
-                        <SelectContent>
-                            {activeTab === 'proveedores' ? (
-                                <>
-                                    <SelectItem value="insumos">Insumos</SelectItem>
-                                    <SelectItem value="pieles">Pieles</SelectItem>
-                                    <SelectItem value="hojas">Hojas</SelectItem>
-                                    <SelectItem value="servicios">Servicios</SelectItem>
-                                </>
-                            ) : (
-                                <>
-                                    <SelectItem value="productos">Productos</SelectItem>
-                                    <SelectItem value="servicios">Servicios</SelectItem>
-                                    <SelectItem value="ambos">Ambos</SelectItem>
-                                </>
-                            )}
-                        </SelectContent>
-                    </Select>
+                    <Label>Correo Electrónico</Label>
+                    <Input type="email" value={currentItem?.email || ''} onChange={(e) => setCurrentItem({ ...currentItem, email: e.target.value })} />
                 </div>
                 <div>
                     <Label>Estado</Label>
@@ -292,8 +287,19 @@ export default function AdminTerceros() {
                     </Select>
                 </div>
                 <div>
-                    <Label>Correo Electrónico</Label>
-                    <Input type="email" value={currentItem?.email || ''} onChange={(e) => setCurrentItem({ ...currentItem, email: e.target.value })} />
+                    <Label>Fecha de Creación</Label>
+                    <Input type="date" value={currentItem?.fecha_creacion || ''} onChange={(e) => setCurrentItem({ ...currentItem, fecha_creacion: e.target.value })} />
+                </div>
+                <div>
+                    <Label>Régimen Tributario</Label>
+                    <Select value={currentItem?.regimen_tributario || 'regimen_ordinario'} onValueChange={(value) => setCurrentItem({ ...currentItem, regimen_tributario: value })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="regimen_ordinario">Régimen Ordinario (o Común)</SelectItem>
+                            <SelectItem value="regimen_simple">Régimen Simple de Tributación</SelectItem>
+                            <SelectItem value="regimen_especial">Régimen Tributario Especial</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
             <div>
@@ -320,24 +326,38 @@ export default function AdminTerceros() {
         </form>
     );
 
-    const filteredData = (data) => {
-        if (!searchTerm) return data;
-        return data.filter(item => 
-            (item.numero_identificacion || item.nit || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.nombre_comercial || '').toLowerCase().includes(searchTerm.toLowerCase())
-        );
+    const filteredData = () => {
+        let data = getFilteredData();
+        
+        // Filtrar por tab activo
+        if (activeTab === 'proveedores') {
+            data = data.filter(t => t.es_proveedor);
+        } else if (activeTab === 'clientes') {
+            data = data.filter(t => t.es_cliente);
+        }
+        
+        // Filtrar por búsqueda
+        if (searchTerm) {
+            data = data.filter(item => 
+                (item.numero_identificacion || item.nit || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (item.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (item.nombre_comercial || '').toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+        
+        return data;
     };
 
-    const commonHeaders = ["Código", "Nombre", "Nombre Comercial", "Tipo Tercero", "No. Identificación", "Teléfono", "Estado", "Acciones"];
+    const commonHeaders = ["Código", "Nombre", "Nombre Comercial", "No. Identificación", "Teléfono", "Cliente", "Proveedor", "Estado", "Acciones"];
     const renderRow = (item) => (
         <tr key={item.id}>
             <td className="font-mono font-bold">{item.codigo || 'N/A'}</td>
             <td>{item.nombre}</td>
-            <td>{item.nombre_comercial}</td>
-            <td><span className="capitalize">{item.tipo_tercero || (activeTab === 'proveedores' ? 'proveedor' : 'cliente')}</span></td>
+            <td>{item.nombre_comercial || '-'}</td>
             <td className="font-mono">{item.numero_identificacion || item.nit}</td>
             <td>{item.telefono}</td>
+            <td><span className={`px-2 py-1 rounded text-xs ${item.es_cliente ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{item.es_cliente ? 'Sí' : 'No'}</span></td>
+            <td><span className={`px-2 py-1 rounded text-xs ${item.es_proveedor ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>{item.es_proveedor ? 'Sí' : 'No'}</span></td>
             <td><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${item.activo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.activo ? 'Activo' : 'Inactivo'}</span></td>
             <td>
                 <div className="flex space-x-2">
@@ -349,10 +369,10 @@ export default function AdminTerceros() {
         </tr>
     );
 
-    const renderTable = (data, isProveedorTab) => (
+    const renderTable = () => (
         <Card>
             <CardHeader>
-                <CardTitle>Lista de {isProveedorTab ? 'Proveedores' : 'Clientes'}</CardTitle>
+                <CardTitle>Lista de Terceros</CardTitle>
                 <div className="flex gap-2 mt-4">
                     <div className="relative flex-grow">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -363,10 +383,20 @@ export default function AdminTerceros() {
                             className="pl-10"
                         />
                     </div>
+                    <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                        <SelectTrigger className="w-48">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="todos">Todos</SelectItem>
+                            <SelectItem value="clientes">Solo Clientes</SelectItem>
+                            <SelectItem value="proveedores">Solo Proveedores</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
             </CardHeader>
             <CardContent>
-                <DataTable headers={commonHeaders} data={filteredData(data)} renderRow={renderRow} />
+                <DataTable headers={commonHeaders} data={filteredData()} renderRow={renderRow} />
             </CardContent>
         </Card>
     );
@@ -392,15 +422,19 @@ export default function AdminTerceros() {
                 }
             />
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="todos" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Todos</TabsTrigger>
                     <TabsTrigger value="proveedores" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Proveedores</TabsTrigger>
                     <TabsTrigger value="clientes" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">Clientes</TabsTrigger>
                 </TabsList>
+                <TabsContent value="todos">
+                    {renderTable()}
+                </TabsContent>
                 <TabsContent value="proveedores">
-                    {renderTable(proveedores, true)}
+                    {renderTable()}
                 </TabsContent>
                 <TabsContent value="clientes">
-                    {renderTable(clientes, false)}
+                    {renderTable()}
                 </TabsContent>
             </Tabs>
 

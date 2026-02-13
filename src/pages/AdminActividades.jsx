@@ -35,7 +35,13 @@ export default function AdminActividades() {
 
     const handleOpenModal = (item = null) => {
         setIsEditing(!!item);
-        setCurrentItem(item || { nombre: '', proceso_asociado: 'general', unidad_produccion: '', costo_plantilla: 0, descripcion: '' });
+        setCurrentItem(item || { 
+            codigo_actividad: '', 
+            nombre: '', 
+            tipo: 'produccion', 
+            descripcion: '', 
+            estado: 'activa' 
+        });
         setShowModal(true);
     };
 
@@ -73,12 +79,13 @@ export default function AdminActividades() {
 
     const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
 
-    const headers = ["Nombre", "Proceso Asociado", "Costo Plantilla", "Acciones"];
+    const headers = ["Código Actividad", "Nombre", "Tipo", "Estado", "Acciones"];
     const renderRow = (item) => (
         <tr key={item.id}>
+            <td className="font-mono font-bold">{item.codigo_actividad || 'N/A'}</td>
             <td>{item.nombre}</td>
-            <td className="capitalize">{item.proceso_asociado}</td>
-            <td>{formatCurrency(item.costo_plantilla)}</td>
+            <td className="capitalize">{item.tipo?.replace('_', ' ')}</td>
+            <td><span className={`px-2 py-1 rounded text-xs ${item.estado === 'activa' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{item.estado?.toUpperCase()}</span></td>
             <td>
                 <div className="flex space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
@@ -116,31 +123,39 @@ export default function AdminActividades() {
                         <DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Actividad</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4 pt-4">
-                        <div>
-                            <Label htmlFor="nombre">Nombre de la Actividad *</Label>
-                            <Input id="nombre" value={currentItem?.nombre || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre: e.target.value })} required />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="codigo_actividad">Código Actividad *</Label>
+                                <Input id="codigo_actividad" value={currentItem?.codigo_actividad || ''} onChange={(e) => setCurrentItem({ ...currentItem, codigo_actividad: e.target.value })} required />
+                            </div>
+                            <div>
+                                <Label htmlFor="nombre">Nombre de la Actividad *</Label>
+                                <Input id="nombre" value={currentItem?.nombre || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre: e.target.value })} required />
+                            </div>
                         </div>
-                        <div>
-                            <Label htmlFor="proceso_asociado">Proceso Asociado *</Label>
-                            <Select value={currentItem?.proceso_asociado || 'general'} onValueChange={(value) => setCurrentItem({ ...currentItem, proceso_asociado: value })}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="recepcion">Recepción</SelectItem>
-                                    <SelectItem value="limpieza">Limpieza</SelectItem>
-                                    <SelectItem value="curtido">Curtido</SelectItem>
-                                    <SelectItem value="acabado">Acabado</SelectItem>
-                                    <SelectItem value="recurtido">Recurtido</SelectItem>
-                                    <SelectItem value="general">General</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <Label htmlFor="costo_plantilla">Costo Plantilla</Label>
-                            <Input id="costo_plantilla" type="number" value={currentItem?.costo_plantilla || 0} onChange={(e) => setCurrentItem({ ...currentItem, costo_plantilla: parseFloat(e.target.value) || 0 })} />
-                        </div>
-                        <div>
-                            <Label htmlFor="unidad_produccion">Unidad de Producción</Label>
-                            <Input id="unidad_produccion" placeholder="Ej: por piel, por lote..." value={currentItem?.unidad_produccion || ''} onChange={(e) => setCurrentItem({ ...currentItem, unidad_produccion: e.target.value })} />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="tipo">Tipo *</Label>
+                                <Select value={currentItem?.tipo || 'produccion'} onValueChange={(value) => setCurrentItem({ ...currentItem, tipo: value })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="produccion">Producción</SelectItem>
+                                        <SelectItem value="administrativo">Administrativo</SelectItem>
+                                        <SelectItem value="ventas">Ventas</SelectItem>
+                                        <SelectItem value="otro">Otro</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label htmlFor="estado">Estado</Label>
+                                <Select value={currentItem?.estado || 'activa'} onValueChange={(value) => setCurrentItem({ ...currentItem, estado: value })}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="activa">Activa</SelectItem>
+                                        <SelectItem value="inactiva">Inactiva</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div>
                             <Label htmlFor="descripcion">Descripción</Label>

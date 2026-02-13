@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProductoCatalogo, UnidadMedida, Insumo, ProductoTerminado } from '@/entities/all';
+import { ProductoCatalogo, UnidadMedida, Insumo, ProductoTerminado, Proveedor } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Plus, Edit, Trash2, Search } from 'lucide-react';
 export default function CatalogoProductos() {
     const [productos, setProductos] = useState([]);
     const [unidades, setUnidades] = useState([]);
+    const [proveedores, setProveedores] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -26,12 +27,14 @@ export default function CatalogoProductos() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [prodData, unidadesData] = await Promise.all([
+            const [prodData, unidadesData, provData] = await Promise.all([
                 ProductoCatalogo.list(),
-                UnidadMedida.list()
+                UnidadMedida.list(),
+                Proveedor.list()
             ]);
             setProductos(prodData);
             setUnidades(unidadesData);
+            setProveedores(provData);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
@@ -43,13 +46,15 @@ export default function CatalogoProductos() {
         setIsEditing(!!item);
         setCurrentItem(item || {
             codigo: '',
+            nombre_comercial: '',
             descripcion: '',
             unidad_medida: '',
             categoria: 'materia_prima',
+            tipo_producto: '',
             maneja_inventario: true,
             stock_minimo: 0,
             stock_maximo: 0,
-            costo_estandar: 0,
+            proveedor_principal_id: '',
             estado: 'activo'
         });
         setShowModal(true);
@@ -182,8 +187,11 @@ export default function CatalogoProductos() {
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Producto</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Código *</Label><Input value={currentItem?.codigo} onChange={e => setCurrentItem({...currentItem, codigo: e.target.value})} required disabled={isEditing}/></div>
-                            <div><Label>Descripción *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required/></div>
+                            <div><Label>Código Interno *</Label><Input value={currentItem?.codigo} onChange={e => setCurrentItem({...currentItem, codigo: e.target.value})} required disabled={isEditing}/></div>
+                            <div><Label>Nombre Comercial</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})}/></div>
+                        </div>
+                        <div>
+                            <div><Label>Referencia según el Proveedor *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required/></div>
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div>
@@ -196,23 +204,40 @@ export default function CatalogoProductos() {
                                 </Select>
                             </div>
                             <div>
-                                <Label>Categoría</Label>
+                                <Label>Categoría *</Label>
                                 <Select value={currentItem?.categoria} onValueChange={v => setCurrentItem({...currentItem, categoria: v})}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="materia_prima">Materia Prima</SelectItem>
                                         <SelectItem value="insumos_quimicos">Insumos y Químicos</SelectItem>
                                         <SelectItem value="productos_terminados">Productos Terminados</SelectItem>
+                                        <SelectItem value="productos_en_proceso">Productos en Proceso</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div>
-                                <Label>Estado</Label>
-                                <Select value={currentItem?.estado} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                <Label>Tipo de Producto</Label>
+                                <Select value={currentItem?.tipo_producto || ''} onValueChange={v => setCurrentItem({...currentItem, tipo_producto: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="activo">Activo</SelectItem>
-                                        <SelectItem value="inactivo">Inactivo</SelectItem>
+                                        <SelectItem value="piel_cruda_fresca">Piel Cruda Fresca</SelectItem>
+                                        <SelectItem value="piel_salada">Piel Salada</SelectItem>
+                                        <SelectItem value="crosta">Crosta</SelectItem>
+                                        <SelectItem value="retal_de_cuero">Retal de Cuero</SelectItem>
+                                        <SelectItem value="cuero_en_proceso">Cuero en Proceso</SelectItem>
+                                        <SelectItem value="anilina">Anilina</SelectItem>
+                                        <SelectItem value="pigmento">Pigmento</SelectItem>
+                                        <SelectItem value="sellador">Sellador</SelectItem>
+                                        <SelectItem value="resina">Resina</SelectItem>
+                                        <SelectItem value="fijador">Fijador</SelectItem>
+                                        <SelectItem value="neutralizante">Neutralizante</SelectItem>
+                                        <SelectItem value="desengrasante">Desengrasante</SelectItem>
+                                        <SelectItem value="curtiente">Curtiente</SelectItem>
+                                        <SelectItem value="recurtiente">Recurtiente</SelectItem>
+                                        <SelectItem value="engrasante">Engrasante</SelectItem>
+                                        <SelectItem value="acido">Ácido</SelectItem>
+                                        <SelectItem value="colorante">Colorante</SelectItem>
+                                        <SelectItem value="auxiliar_de_acabado">Auxiliar de Acabado</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -227,7 +252,27 @@ export default function CatalogoProductos() {
                             </div>
                             <div><Label>Stock Mínimo</Label><Input type="number" value={currentItem?.stock_minimo} onChange={e => setCurrentItem({...currentItem, stock_minimo: parseFloat(e.target.value) || 0})}/></div>
                             <div><Label>Stock Máximo</Label><Input type="number" value={currentItem?.stock_maximo} onChange={e => setCurrentItem({...currentItem, stock_maximo: parseFloat(e.target.value) || 0})}/></div>
-                            <div><Label>Costo Estándar</Label><Input type="number" value={currentItem?.costo_estandar} onChange={e => setCurrentItem({...currentItem, costo_estandar: parseFloat(e.target.value) || 0})}/></div>
+                            <div>
+                                <Label>Proveedor Principal</Label>
+                                <Select value={currentItem?.proveedor_principal_id || ''} onValueChange={v => setCurrentItem({...currentItem, proveedor_principal_id: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                    <SelectContent>
+                                        {proveedores.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Estado</Label>
+                                <Select value={currentItem?.estado} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="activo">Activo</SelectItem>
+                                        <SelectItem value="inactivo">Inactivo</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>

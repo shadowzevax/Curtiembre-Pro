@@ -89,28 +89,18 @@ const menuItems = [
       { title: "Recibo de Caja", url: createPageUrl("ReciboCaja"), icon: Calculator },
       { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator },
       { title: "Cuentas por Pagar", url: createPageUrl("CuentasPorPagar"), icon: Calculator },
-      { title: "Cuentas por Cobrar", url: createPageUrl("CuentasPorCobrar"), icon: Calculator }
-    ]
-  },
-  {
-    title: "Gestión de Bancos",
-    icon: Calculator,
-    roles: ["admin", "contador"],
-    subItems: [
-      { title: "Cuentas Bancarias", url: createPageUrl("CuentasBancarias"), icon: Calculator },
-      { title: "Movimientos Bancarios", url: createPageUrl("MovimientosBancarios"), icon: Calculator },
-      { title: "Transferencias Internas", url: createPageUrl("TransferenciasBancarias"), icon: Calculator },
-      { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator }
-    ]
-  },
-  {
-    title: "Gestión de Caja",
-    icon: Calculator,
-    roles: ["admin", "contador"],
-    subItems: [
-      { title: "Movimientos de Caja", url: createPageUrl("CajaMovimientos"), icon: Calculator },
-      { title: "Transferencias entre Cajas", url: createPageUrl("CajaTransferencias"), icon: Calculator },
-      { title: "Configuración Cajas", url: createPageUrl("CajaConfig"), icon: Calculator }
+      { title: "Cuentas por Cobrar", url: createPageUrl("CuentasPorCobrar"), icon: Calculator },
+      { title: "Gestión de Efectivo", icon: Calculator, subItems: [
+        { title: "Configuración de Cajas", url: createPageUrl("CajaConfig"), icon: Calculator },
+        { title: "Movimientos de Caja", url: createPageUrl("CajaMovimientos"), icon: Calculator },
+        { title: "Transferencias entre Cajas", url: createPageUrl("CajaTransferencias"), icon: Calculator }
+      ]},
+      { title: "Gestión Bancaria", icon: Calculator, subItems: [
+        { title: "Cuentas Bancarias", url: createPageUrl("CuentasBancarias"), icon: Calculator },
+        { title: "Movimientos Bancarios", url: createPageUrl("MovimientosBancarios"), icon: Calculator },
+        { title: "Transferencias Internas", url: createPageUrl("TransferenciasBancarias"), icon: Calculator },
+        { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator }
+      ]}
     ]
   },
   {
@@ -118,11 +108,12 @@ const menuItems = [
       icon: Package,
       roles: ["admin", "operario"],
       subItems: [
+        { title: "Ajuste Inicial de Inventario", url: createPageUrl("AjusteInicialInventario"), icon: Package },
         { title: "Catálogo de Productos", url: createPageUrl("CatalogoProductos"), icon: Package },
         { title: "Catálogo de Colores (Pintura)", url: createPageUrl("CatalogoColores"), icon: Package },
         { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
         { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
-        { title: "Inventarios en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },
+        { title: "Productos en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },
         { title: "Inventario de Productos Terminados", url: createPageUrl("InventarioProductos"), icon: Package },
         { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package },
         { title: "Traslado de Inventarios", url: createPageUrl("TrasladoInventario"), icon: Package }
