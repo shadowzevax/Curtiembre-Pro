@@ -373,7 +373,7 @@ export default function ProcesoRecepcion() {
       </Card>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Recepción</DialogTitle>
           </DialogHeader>

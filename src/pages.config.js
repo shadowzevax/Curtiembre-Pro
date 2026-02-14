@@ -52,6 +52,7 @@ import AdminServicios from './pages/AdminServicios';
 import AdminTerceros from './pages/AdminTerceros';
 import AdminTiposGasto from './pages/AdminTiposGasto';
 import AdminUnidadesMedida from './pages/AdminUnidadesMedida';
+import AjusteInicialInventario from './pages/AjusteInicialInventario';
 import AjusteInventario from './pages/AjusteInventario';
 import BilleterasDigitales from './pages/BilleterasDigitales';
 import CajaBancos from './pages/CajaBancos';
@@ -126,7 +127,6 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import AjusteInicialInventario from './pages/AjusteInicialInventario';
 import __Layout from './Layout.jsx';
 
 
@@ -136,6 +136,7 @@ export const PAGES = {
     "AdminTerceros": AdminTerceros,
     "AdminTiposGasto": AdminTiposGasto,
     "AdminUnidadesMedida": AdminUnidadesMedida,
+    "AjusteInicialInventario": AjusteInicialInventario,
     "AjusteInventario": AjusteInventario,
     "BilleterasDigitales": BilleterasDigitales,
     "CajaBancos": CajaBancos,
@@ -210,7 +211,6 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "AjusteInicialInventario": AjusteInicialInventario,
 }
 
 export const pagesConfig = {

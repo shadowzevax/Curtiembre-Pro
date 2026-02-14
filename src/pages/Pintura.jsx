@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, InventarioEnProceso, PedidoMarroquinero, ProductoTerminado } from '@/entities/all';
+import { ProcesoProduccion, Insumo, InventarioEnProceso, PedidoMarroquinero, ProductoTerminado, ProductoCatalogo } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,8 @@ export default function Pintura() {
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [inventarioInsumos, setInventarioInsumos] = useState([]);
   const [unidadesMedida, setUnidadesMedida] = useState([]);
+  const [productosCatalogo, setProductosCatalogo] = useState([]);
+  const [lotesRecepcion, setLotesRecepcion] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -34,13 +36,15 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, pedidosData, inventarioData, UnidadMedidaModule, InventarioModule] = await Promise.all([
+      const [procesosData, insumosData, pedidosData, inventarioData, UnidadMedidaModule, InventarioModule, prodCatalogo, procesosRecepcion] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
         Insumo.list(),
         PedidoMarroquinero.list(),
         InventarioEnProceso.filter({ estado_proceso: 'crosta' }),
         import('@/entities/all').then(m => m.UnidadMedida),
-        import('@/entities/all').then(m => m.DocumentoInventario)
+        import('@/entities/all').then(m => m.DocumentoInventario),
+        ProductoCatalogo.list(),
+        ProcesoProduccion.filter({ tipo_proceso: 'recepcion' })
       ]);
       const [unidadesData, inventarioInsumosData] = await Promise.all([
         UnidadMedidaModule.list(),
@@ -52,6 +56,8 @@ export default function Pintura() {
       setInventarioEnProceso(inventarioData);
       setUnidadesMedida(unidadesData);
       setInventarioInsumos(inventarioInsumosData);
+      setProductosCatalogo(prodCatalogo);
+      setLotesRecepcion(procesosRecepcion);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -173,10 +179,9 @@ export default function Pintura() {
 
   const agregarConsumo = () => {
     setConsumosItems([...consumosItems, {
-      insumo_id: '',
-      codigo: '',
-      producto: '',
-      tipo_producto: '',
+      producto_id: '',
+      codigo_pcto: '',
+      nombre_producto: '',
       unidad_medida: '',
       cantidad_consumida: 0,
       lote_producto: '',
@@ -188,13 +193,12 @@ export default function Pintura() {
     const updated = [...consumosItems];
     updated[index][field] = value;
 
-    if (field === 'insumo_id') {
-      const insumo = insumos.find(i => i.id === value);
-      if (insumo) {
-        updated[index].codigo = insumo.codigo || '';
-        updated[index].producto = insumo.producto || '';
-        updated[index].tipo_producto = insumo.categoria || '';
-        updated[index].unidad_medida = insumo.unidad_medida || '';
+    if (field === 'producto_id') {
+      const producto = productosCatalogo.find(p => p.id === value);
+      if (producto) {
+        updated[index].codigo_pcto = producto.codigo || '';
+        updated[index].nombre_producto = producto.descripcion || '';
+        updated[index].unidad_medida = producto.unidad_medida || '';
       }
     }
 
@@ -210,7 +214,7 @@ export default function Pintura() {
     
     // Validar consumos
     for (const consumo of consumosItems) {
-      if (!consumo.insumo_id || !consumo.producto) {
+      if (!consumo.producto_id || !consumo.nombre_producto) {
         alert('Error: Todos los productos deben ser seleccionados. No se permiten items vacíos.');
         return;
       }
@@ -227,24 +231,24 @@ export default function Pintura() {
 
       // Validar stock disponible
       const inventario = inventarioInsumos.find(inv => 
-        inv.codigo === consumo.codigo && inv.lote === consumo.lote_producto
+        inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
       );
       
       if (!inventario || inventario.cantidad < consumo.cantidad_consumida) {
-        alert(`Stock insuficiente para el producto: ${consumo.producto}. Stock disponible: ${inventario?.cantidad || 0}`);
+        alert(`Stock insuficiente para el producto: ${consumo.nombre_producto}. Stock disponible: ${inventario?.cantidad || 0}`);
         return;
       }
 
       // Validar duplicados
-      const duplicados = consumosItems.filter(c => c.insumo_id === consumo.insumo_id && c.lote_producto === consumo.lote_producto);
+      const duplicados = consumosItems.filter(c => c.producto_id === consumo.producto_id && c.lote_producto === consumo.lote_producto);
       if (duplicados.length > 1) {
-        if (!confirm(`El producto "${consumo.producto}" con lote "${consumo.lote_producto}" ya fue registrado. ¿Desea sumar las cantidades automáticamente?`)) {
+        if (!confirm(`El producto "${consumo.nombre_producto}" con lote "${consumo.lote_producto}" ya fue registrado. ¿Desea sumar las cantidades automáticamente?`)) {
           return;
         }
         // Consolidar duplicados
-        const indexPrimero = consumosItems.findIndex(c => c.insumo_id === consumo.insumo_id && c.lote_producto === consumo.lote_producto);
+        const indexPrimero = consumosItems.findIndex(c => c.producto_id === consumo.producto_id && c.lote_producto === consumo.lote_producto);
         const cantidadTotal = duplicados.reduce((sum, d) => sum + d.cantidad_consumida, 0);
-        const consolidados = consumosItems.filter(c => !(c.insumo_id === consumo.insumo_id && c.lote_producto === consumo.lote_producto));
+        const consolidados = consumosItems.filter(c => !(c.producto_id === consumo.producto_id && c.lote_producto === consumo.lote_producto));
         consolidados.splice(indexPrimero, 0, {...duplicados[0], cantidad_consumida: cantidadTotal});
         setConsumosItems(consolidados);
         return;
@@ -267,7 +271,7 @@ export default function Pintura() {
         // Descontar inventario
         for (const consumo of consumosItems) {
           const inventario = inventarioInsumos.find(inv => 
-            inv.codigo === consumo.codigo && inv.lote === consumo.lote_producto
+            inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
           );
           if (inventario) {
             const DocumentoInventario = (await import('@/entities/all')).DocumentoInventario;
@@ -460,9 +464,9 @@ export default function Pintura() {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-2">PRODUCTO</th>
-                      <th className="border p-2">TIPO DE PRODUCTO</th>
-                      <th className="border p-2">UNIDAD</th>
+                      <th className="border p-2">CÓDIGO PCTO.</th>
+                      <th className="border p-2">NOMBRE DEL PRODUCTO</th>
+                      <th className="border p-2">UNIDAD DE MEDIDA</th>
                       <th className="border p-2">CANTIDAD CONSUMIDA</th>
                       <th className="border p-2">LOTE DEL PRODUCTO</th>
                       <th className="border p-2">OBSERVACIÓN</th>
@@ -471,23 +475,22 @@ export default function Pintura() {
                   </thead>
                   <tbody>
                     {consumosItems.map((consumo, idx) => {
-                      const inventarioLotes = inventarioInsumos.filter(inv => inv.codigo === consumo.codigo);
                       return (
                         <tr key={idx} className="border-t">
                           <td className="border p-2">
-                            <Select value={consumo.insumo_id} onValueChange={v => handleConsumoChange(idx, 'insumo_id', v)}>
+                            <Input value={consumo.codigo_pcto || ''} readOnly className="bg-gray-50 h-8 text-xs font-mono font-bold" />
+                          </td>
+                          <td className="border p-2">
+                            <Select value={consumo.producto_id} onValueChange={v => handleConsumoChange(idx, 'producto_id', v)}>
                               <SelectTrigger className="h-8 text-xs">
                                 <SelectValue placeholder="Seleccionar *" />
                               </SelectTrigger>
                               <SelectContent>
-                                {insumos.map(ins => (
-                                  <SelectItem key={ins.id} value={ins.id}>{ins.codigo} - {ins.producto}</SelectItem>
+                                {productosCatalogo.map(prod => (
+                                  <SelectItem key={prod.id} value={prod.id}>{prod.codigo} - {prod.descripcion}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          </td>
-                          <td className="border p-2">
-                            <Input value={consumo.tipo_producto} readOnly className="bg-gray-50 h-8 text-xs" />
                           </td>
                           <td className="border p-2">
                             <Input value={consumo.unidad_medida} readOnly className="bg-gray-50 h-8 text-xs" />
@@ -508,9 +511,9 @@ export default function Pintura() {
                                 <SelectValue placeholder="Lote *" />
                               </SelectTrigger>
                               <SelectContent>
-                                {inventarioLotes.map(inv => (
-                                  <SelectItem key={inv.id} value={inv.lote}>
-                                    {inv.lote} (Stock: {inv.cantidad})
+                                {lotesRecepcion.map(lote => (
+                                  <SelectItem key={lote.id} value={lote.codigo_lote}>
+                                    {lote.codigo_lote} - {lote.descripcion_producto || 'N/A'}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

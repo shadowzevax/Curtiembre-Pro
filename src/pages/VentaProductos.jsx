@@ -119,7 +119,13 @@ export default function VentaProductos() {
     const handleSubmit = async (orderData) => {
         setLoading(true);
         try {
-            const savedOrder = await onSubmit(orderData);
+            let savedOrder;
+            if (editingOrder) {
+                await OrdenVenta.update(editingOrder.id, orderData);
+                savedOrder = { id: editingOrder.id };
+            } else {
+                savedOrder = await OrdenVenta.create(orderData);
+            }
             const orderId = savedOrder?.id || editingOrder?.id;
             
             // Si es CRÉDITO, generar cuenta por cobrar
@@ -299,6 +305,35 @@ export default function VentaProductos() {
             <Dialog open={!!viewMode} onOpenChange={() => setViewMode(null)}>
                 <DialogContent className="max-w-4xl p-0">
                     {renderPrintView()}
+                </DialogContent>
+            </Dialog>
+            
+            <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Detalle de Venta</DialogTitle>
+                    </DialogHeader>
+                    {selectedOrder && (
+                        <div className="space-y-3">
+                            <p><span className="font-semibold">No. Documento:</span> {selectedOrder.prefijo_documento}-{selectedOrder.numero_documento}</p>
+                            <p><span className="font-semibold">Cliente:</span> {getClienteNombre(selectedOrder.cliente_id)}</p>
+                            <p><span className="font-semibold">Fecha:</span> {formatDate(selectedOrder.fecha_orden)}</p>
+                            <p><span className="font-semibold">Total:</span> {formatCurrency(selectedOrder.total)}</p>
+                            <p><span className="font-semibold">Estado:</span> {selectedOrder.estado}</p>
+                            {selectedOrder.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedOrder.observaciones}</p>}
+                            <div className="border-t pt-3 mt-3">
+                                <h4 className="font-semibold mb-2">Items:</h4>
+                                {selectedOrder.items?.map((item, idx) => (
+                                    <div key={idx} className="text-sm border-b pb-2 mb-2">
+                                        <p>• {item.descripcion} - Cantidad: {item.cantidad} - {formatCurrency(item.subtotal)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex justify-end pt-4">
+                        <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

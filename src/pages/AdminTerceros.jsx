@@ -182,19 +182,6 @@ export default function AdminTerceros() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <Label>Tipo de Tercero *</Label>
-                    <Select value={currentItem?.tipo_tercero || ''} onValueChange={(value) => setCurrentItem({ ...currentItem, tipo_tercero: value })}>
-                        <SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="cliente">Cliente</SelectItem>
-                            <SelectItem value="proveedor">Proveedor</SelectItem>
-                            <SelectItem value="transportador">Transportador</SelectItem>
-                            <SelectItem value="trabajador">Trabajador</SelectItem>
-                            <SelectItem value="otro">Otro</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div>
                     <Label>Tipo de Persona *</Label>
                     <Select value={currentItem?.tipo_persona || 'natural'} onValueChange={(value) => setCurrentItem({ ...currentItem, tipo_persona: value })}>
                         <SelectTrigger><SelectValue /></SelectTrigger>

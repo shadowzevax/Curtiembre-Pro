@@ -187,11 +187,35 @@ export default function CatalogoProductos() {
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Producto</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Código Interno *</Label><Input value={currentItem?.codigo} onChange={e => setCurrentItem({...currentItem, codigo: e.target.value})} required disabled={isEditing}/></div>
-                            <div><Label>Nombre Comercial</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})}/></div>
+                            <div><Label>Código Pcto. *</Label><Input value={currentItem?.codigo} onChange={e => setCurrentItem({...currentItem, codigo: e.target.value})} required disabled={isEditing}/></div>
+                            <div><Label>Nombre del Producto *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required/></div>
                         </div>
-                        <div>
-                            <div><Label>Referencia según el Proveedor *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required/></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Descripción</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})}/></div>
+                            <div>
+                                <Label>Tipo de Producto</Label>
+                                <Select value={currentItem?.tipo_producto || ''} onValueChange={v => setCurrentItem({...currentItem, tipo_producto: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="hojas_crudas_en_pelo">Hojas Crudas en Pelo</SelectItem>
+                                        <SelectItem value="hojas_saladas">Hojas Saladas</SelectItem>
+                                        <SelectItem value="retazos">Retazos</SelectItem>
+                                        <SelectItem value="anilinas">Anilinas</SelectItem>
+                                        <SelectItem value="colorantes">Colorantes</SelectItem>
+                                        <SelectItem value="selladores">Selladores</SelectItem>
+                                        <SelectItem value="pigmentos">Pigmentos</SelectItem>
+                                        <SelectItem value="taninos">Taninos</SelectItem>
+                                        <SelectItem value="sales_cloruros">Sales y Cloruros</SelectItem>
+                                        <SelectItem value="solventes">Solventes</SelectItem>
+                                        <SelectItem value="aceites_grasas">Aceites y Grasas</SelectItem>
+                                        <SelectItem value="aditivos_especiales">Aditivos Especiales (Anticoagulantes, Plastificantes, Suavizantes)</SelectItem>
+                                        <SelectItem value="adhesivos">Adhesivos</SelectItem>
+                                        <SelectItem value="catalizadores">Catalizadores</SelectItem>
+                                        <SelectItem value="detergentes_auxiliares">Detergentes y Auxiliares de Limpieza</SelectItem>
+                                        <SelectItem value="acidos_bases">Ácidos y Bases (pH Ajustadores)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div>
@@ -210,34 +234,8 @@ export default function CatalogoProductos() {
                                     <SelectContent>
                                         <SelectItem value="materia_prima">Materia Prima</SelectItem>
                                         <SelectItem value="insumos_quimicos">Insumos y Químicos</SelectItem>
-                                        <SelectItem value="productos_terminados">Productos Terminados</SelectItem>
                                         <SelectItem value="productos_en_proceso">Productos en Proceso</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <Label>Tipo de Producto</Label>
-                                <Select value={currentItem?.tipo_producto || ''} onValueChange={v => setCurrentItem({...currentItem, tipo_producto: v})}>
-                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="piel_cruda_fresca">Piel Cruda Fresca</SelectItem>
-                                        <SelectItem value="piel_salada">Piel Salada</SelectItem>
-                                        <SelectItem value="crosta">Crosta</SelectItem>
-                                        <SelectItem value="retal_de_cuero">Retal de Cuero</SelectItem>
-                                        <SelectItem value="cuero_en_proceso">Cuero en Proceso</SelectItem>
-                                        <SelectItem value="anilina">Anilina</SelectItem>
-                                        <SelectItem value="pigmento">Pigmento</SelectItem>
-                                        <SelectItem value="sellador">Sellador</SelectItem>
-                                        <SelectItem value="resina">Resina</SelectItem>
-                                        <SelectItem value="fijador">Fijador</SelectItem>
-                                        <SelectItem value="neutralizante">Neutralizante</SelectItem>
-                                        <SelectItem value="desengrasante">Desengrasante</SelectItem>
-                                        <SelectItem value="curtiente">Curtiente</SelectItem>
-                                        <SelectItem value="recurtiente">Recurtiente</SelectItem>
-                                        <SelectItem value="engrasante">Engrasante</SelectItem>
-                                        <SelectItem value="acido">Ácido</SelectItem>
-                                        <SelectItem value="colorante">Colorante</SelectItem>
-                                        <SelectItem value="auxiliar_de_acabado">Auxiliar de Acabado</SelectItem>
+                                        <SelectItem value="productos_terminados">Productos Terminados</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

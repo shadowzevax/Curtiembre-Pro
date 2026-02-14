@@ -207,6 +207,51 @@ const MenuItem = ({ item, expandedMenus, toggleMenu, isActiveLink, togglePin, pi
                         {item.subItems.map((subItem) => {
                             const isSubVisible = subItem.roles ? userHasRole(subItem.roles) : true;
                             if (!isSubVisible) return null;
+                            
+                            // Si el subitem tiene subItems (submenú de nivel 2)
+                            if (subItem.subItems) {
+                                return (
+                                    <li key={subItem.title}>
+                                        <button
+                                            onClick={() => toggleMenu(subItem.title)}
+                                            className="w-full flex items-center justify-between p-2 pl-4 text-sm rounded-md transition-all duration-200 text-slate-600 hover:bg-gray-100 hover:text-slate-800"
+                                        >
+                                            <span>{subItem.title}</span>
+                                            {expandedMenus[subItem.title] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                        </button>
+                                        {expandedMenus[subItem.title] && (
+                                            <ul className="mt-1 ml-4 space-y-1">
+                                                {subItem.subItems.map((subSubItem) => {
+                                                    const isPinned = pinnedShortcuts.some(s => s.url === subSubItem.url);
+                                                    return (
+                                                        <li key={subSubItem.title} className="flex items-center group">
+                                                            <Link
+                                                                to={subSubItem.url}
+                                                                className={`flex-grow block p-2 pl-6 text-xs rounded-md transition-all duration-200 ${isActiveLink(subSubItem.url) ? 'bg-emerald-100 text-emerald-700 font-medium' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-800'}`}
+                                                                onClick={() => setSidebarOpen(false)}
+                                                            >
+                                                                {subSubItem.title}
+                                                            </Link>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    togglePin(subSubItem.url, subSubItem.title, subSubItem.icon?.name || 'Settings');
+                                                                }} 
+                                                                className="p-2 text-slate-400 hover:text-yellow-500 transition-colors group-hover:opacity-100 opacity-60"
+                                                                title={isPinned ? "Quitar de accesos directos" : "Fijar en accesos directos"}
+                                                            >
+                                                                <Star className={`w-3 h-3 ${isPinned ? 'fill-yellow-400 text-yellow-500' : 'text-slate-400 hover:text-yellow-500'}`} />
+                                                            </button>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        )}
+                                    </li>
+                                );
+                            }
+                            
                             const isPinned = pinnedShortcuts.some(s => s.url === subItem.url);
                             return (
                                 <li key={subItem.title} className="flex items-center group">

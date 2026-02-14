@@ -437,11 +437,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         finalData.codigo_lote_inventario = `LOTE-${Date.now()}`;
     }
 
-    // Validación antes de guardar
-    if (tipoDocumento === 'compra' && !finalData.fecha_emision_documento) {
-        alert('Error: La fecha de emisión del documento es obligatoria.');
-        return;
-    }
+    // Validación eliminada - permitir cualquier fecha
 
     // Guardar la orden primero
     try {
@@ -1200,8 +1196,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                     <table className="w-full text-xs">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="p-2 text-left font-semibold">Código</th>
-                                <th className="p-2 text-left font-semibold">Descripción</th>
+                                <th className="p-2 text-left font-semibold">Código del Pcto.</th>
+                                <th className="p-2 text-left font-semibold">Nombre del Pcto.</th>
                                 <th className="p-2 text-left font-semibold">Categoría</th>
                                 {tipoDocumento === 'compra' && <th className="p-2 text-left font-semibold">U. Medida</th>}
                                 <th className="p-2 text-left font-semibold">Cant.</th>
