@@ -126,7 +126,7 @@ export default function VentaProductos() {
             } else {
                 savedOrder = await OrdenVenta.create(orderData);
             }
-            const orderId = savedOrder?.id || editingOrder?.id;
+            const orderId = savedOrder?.id;
             
             // Si es CRÉDITO, generar cuenta por cobrar
             if (!editingOrder && orderData.condicion_pago === 'credito' && orderData.saldo_pendiente > 0) {

@@ -32,6 +32,7 @@ export default function Pintura() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [entregasParciales, setEntregasParciales] = useState([]);
   const [consumosItems, setConsumosItems] = useState([]);
+  const [manoObraItems, setManoObraItems] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -94,12 +95,15 @@ export default function Pintura() {
         codigo_lote: '',
         observaciones: '',
         entregas_parciales: [],
-        consumos: []
+        consumos: [],
+        mano_obra_pintura: []
       });
       setConsumosItems([]);
+      setManoObraItems([]);
     } else {
       setCurrentItem(item);
       setConsumosItems(item.consumos || []);
+      setManoObraItems(item.mano_obra_pintura || []);
     }
     setShowModal(true);
   };
@@ -184,12 +188,43 @@ export default function Pintura() {
       nombre_producto: '',
       unidad_medida: '',
       cantidad_consumida: 0,
+      costo_unitario: 0,
+      costo_total: 0,
       lote_producto: '',
       observacion: ''
     }]);
   };
 
-  const handleConsumoChange = (index, field, value) => {
+  const agregarManoObra = () => {
+    setManoObraItems([...manoObraItems, {
+      tipo_terminado: '',
+      detalle: '',
+      cantidad_hojas: 0,
+      valor_por_hoja: 0,
+      total: 0,
+      observacion: ''
+    }]);
+  };
+
+  const handleManoObraChange = (index, field, value) => {
+    const updated = [...manoObraItems];
+    updated[index][field] = value;
+    
+    // Calcular total automáticamente
+    if (field === 'cantidad_hojas' || field === 'valor_por_hoja') {
+      const cantidad = parseFloat(updated[index].cantidad_hojas) || 0;
+      const valor = parseFloat(updated[index].valor_por_hoja) || 0;
+      updated[index].total = cantidad * valor;
+    }
+    
+    setManoObraItems(updated);
+  };
+
+  const eliminarManoObra = (index) => {
+    setManoObraItems(manoObraItems.filter((_, i) => i !== index));
+  };
+
+  const handleConsumoChange = async (index, field, value) => {
     const updated = [...consumosItems];
     updated[index][field] = value;
 
@@ -199,7 +234,26 @@ export default function Pintura() {
         updated[index].codigo_pcto = producto.codigo || '';
         updated[index].nombre_producto = producto.descripcion || '';
         updated[index].unidad_medida = producto.unidad_medida || '';
+        
+        // Obtener costo unitario del inventario
+        try {
+          const DocumentoInventario = (await import('@/entities/all')).DocumentoInventario;
+          const inventario = await DocumentoInventario.filter({ codigo: producto.codigo });
+          if (inventario && inventario.length > 0) {
+            updated[index].costo_unitario = inventario[0].costo_unitario || 0;
+          }
+        } catch (e) {
+          console.error('Error obteniendo costo:', e);
+          updated[index].costo_unitario = 0;
+        }
       }
+    }
+
+    // Calcular costo total automáticamente
+    if (field === 'cantidad_consumida' || field === 'costo_unitario') {
+      const cantidad = parseFloat(updated[index].cantidad_consumida) || 0;
+      const costo = parseFloat(updated[index].costo_unitario) || 0;
+      updated[index].costo_total = cantidad * costo;
     }
 
     setConsumosItems(updated);
@@ -229,14 +283,16 @@ export default function Pintura() {
         return;
       }
 
-      // Validar stock disponible
-      const inventario = inventarioInsumos.find(inv => 
-        inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
-      );
-      
-      if (!inventario || inventario.cantidad < consumo.cantidad_consumida) {
-        alert(`Stock insuficiente para el producto: ${consumo.nombre_producto}. Stock disponible: ${inventario?.cantidad || 0}`);
-        return;
+      // Validar stock disponible (solo si hay código y lote)
+      if (consumo.codigo_pcto && consumo.lote_producto) {
+        const inventario = inventarioInsumos.find(inv => 
+          inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
+        );
+        
+        if (!inventario || inventario.cantidad < consumo.cantidad_consumida) {
+          alert(`Stock insuficiente para el producto: ${consumo.nombre_producto}. Stock disponible: ${inventario?.cantidad || 0}`);
+          return;
+        }
       }
 
       // Validar duplicados
@@ -260,7 +316,8 @@ export default function Pintura() {
         ...currentItem,
         numero_proceso: currentItem.id_consecutivo,
         hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0),
-        consumos: consumosItems
+        consumos: consumosItems,
+        mano_obra_pintura: manoObraItems
       };
       
       if (isEditing) {
@@ -468,6 +525,8 @@ export default function Pintura() {
                       <th className="border p-2">NOMBRE DEL PRODUCTO</th>
                       <th className="border p-2">UNIDAD DE MEDIDA</th>
                       <th className="border p-2">CANTIDAD CONSUMIDA</th>
+                      <th className="border p-2">COSTO UNITARIO</th>
+                      <th className="border p-2">COSTO TOTAL</th>
                       <th className="border p-2">LOTE DEL PRODUCTO</th>
                       <th className="border p-2">OBSERVACIÓN</th>
                       <th className="border p-2 w-16"></th>
@@ -506,6 +565,22 @@ export default function Pintura() {
                             />
                           </td>
                           <td className="border p-2">
+                            <Input 
+                              type="number" 
+                              value={consumo.costo_unitario || 0} 
+                              readOnly 
+                              className="h-8 text-xs text-right bg-gray-50 font-medium" 
+                            />
+                          </td>
+                          <td className="border p-2">
+                            <Input 
+                              type="number" 
+                              value={consumo.costo_total || 0} 
+                              readOnly 
+                              className="h-8 text-xs text-right bg-blue-50 font-bold" 
+                            />
+                          </td>
+                          <td className="border p-2">
                             <Select value={consumo.lote_producto} onValueChange={v => handleConsumoChange(idx, 'lote_producto', v)}>
                               <SelectTrigger className="h-8 text-xs">
                                 <SelectValue placeholder="Lote *" />
@@ -530,6 +605,103 @@ export default function Pintura() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* TABLA DE MANO DE OBRA DE PINTURA */}
+            <div className="border-t pt-4 mt-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-lg">Mano de Obra de Pintura</h3>
+                <Button type="button" onClick={agregarManoObra} size="sm" variant="outline">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Mano de Obra
+                </Button>
+              </div>
+              
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border p-2">TIPO DE TERMINADO</th>
+                      <th className="border p-2">DETALLE</th>
+                      <th className="border p-2">CANTIDAD HOJAS</th>
+                      <th className="border p-2">VALOR POR HOJA</th>
+                      <th className="border p-2">TOTAL</th>
+                      <th className="border p-2">OBSERVACIÓN</th>
+                      <th className="border p-2 w-16"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manoObraItems.map((mano, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="border p-2">
+                          <Select value={mano.tipo_terminado} onValueChange={v => handleManoObraChange(idx, 'tipo_terminado', v)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Seleccionar *" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="napa">Napa</SelectItem>
+                              <SelectItem value="napa_mate">Napa Mate</SelectItem>
+                              <SelectItem value="opaco">Opaco</SelectItem>
+                              <SelectItem value="envejecido">Envejecido</SelectItem>
+                              <SelectItem value="grabado">Grabado</SelectItem>
+                              <SelectItem value="liso">Liso</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border p-2">
+                          <Input 
+                            value={mano.detalle} 
+                            onChange={e => handleManoObraChange(idx, 'detalle', e.target.value)} 
+                            className="h-8 text-xs" 
+                            placeholder="Detalle del trabajo"
+                          />
+                        </td>
+                        <td className="border p-2">
+                          <Input 
+                            type="number" 
+                            value={mano.cantidad_hojas} 
+                            onChange={e => handleManoObraChange(idx, 'cantidad_hojas', parseFloat(e.target.value) || 0)} 
+                            className="h-8 text-xs text-right" 
+                            min="0"
+                            step="1"
+                          />
+                        </td>
+                        <td className="border p-2">
+                          <Input 
+                            type="number" 
+                            value={mano.valor_por_hoja} 
+                            onChange={e => handleManoObraChange(idx, 'valor_por_hoja', parseFloat(e.target.value) || 0)} 
+                            className="h-8 text-xs text-right" 
+                            min="0"
+                            step="100"
+                          />
+                        </td>
+                        <td className="border p-2">
+                          <Input 
+                            type="number" 
+                            value={mano.total} 
+                            readOnly 
+                            className="h-8 text-xs text-right bg-blue-50 font-bold" 
+                          />
+                        </td>
+                        <td className="border p-2">
+                          <Input 
+                            value={mano.observacion} 
+                            onChange={e => handleManoObraChange(idx, 'observacion', e.target.value)} 
+                            className="h-8 text-xs" 
+                            placeholder="Observaciones"
+                          />
+                        </td>
+                        <td className="border p-2 text-center">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => eliminarManoObra(idx)}>
+                            <X className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

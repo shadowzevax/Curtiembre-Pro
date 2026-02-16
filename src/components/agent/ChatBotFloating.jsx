@@ -11,7 +11,7 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState(() => {
     const saved = localStorage.getItem('copiloto_position');
-    return saved ? JSON.parse(saved) : { x: window.innerWidth - 420, y: window.innerHeight - 600 };
+    return saved ? JSON.parse(saved) : { x: window.innerWidth - 100, y: window.innerHeight - 100 };
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
