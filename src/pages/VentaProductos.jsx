@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Paperclip, FileText, Eye, Search, RotateCcw } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import DocumentoComercialForm from "../components/common/DocumentoComercialForm";
 import SoporteViewer from "../components/common/SoporteViewer";
 import CuentaCobroView from "../components/ventas/CuentaCobroView";
