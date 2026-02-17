@@ -312,12 +312,23 @@ export default function Pintura() {
     }
 
     try {
+      const totalConsumo = consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0);
+      const totalManoObra = manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0);
+      const costoTotalProceso = totalConsumo + totalManoObra;
+      const costoPromedioPorHoja = (currentItem.total_hojas_enviadas_pintura || 0) > 0 
+        ? costoTotalProceso / currentItem.total_hojas_enviadas_pintura 
+        : 0;
+
       const dataToSave = {
         ...currentItem,
         numero_proceso: currentItem.id_consecutivo,
         hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0),
         consumos: consumosItems,
-        mano_obra_pintura: manoObraItems
+        mano_obra_pintura: manoObraItems,
+        total_consumo_productos: totalConsumo,
+        total_mano_obra: totalManoObra,
+        costo_total_proceso_pintura: costoTotalProceso,
+        costo_promedio_por_hoja: costoPromedioPorHoja
       };
       
       if (isEditing) {
@@ -704,6 +715,63 @@ export default function Pintura() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+              
+              <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex justify-end">
+                  <div className="text-right">
+                    <span className="text-sm font-semibold mr-3">TOTAL MANO DE OBRA:</span>
+                    <span className="text-lg font-bold text-green-700">
+                      {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+                        manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* RESUMEN FINAL DEL PROCESO */}
+            <div className="border-t pt-4 mt-6 bg-slate-50 p-4 rounded-lg">
+              <h3 className="font-bold text-lg mb-3">Resumen de Costos del Proceso</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Total Consumo de Productos:</span>
+                  <span className="font-bold text-blue-700">
+                    {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+                      consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Total Mano de Obra:</span>
+                  <span className="font-bold text-green-700">
+                    {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+                      manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-base pt-2 border-t border-slate-300">
+                  <span className="font-bold">COSTO TOTAL DEL PROCESO DE PINTURA:</span>
+                  <span className="font-bold text-xl text-purple-700">
+                    {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+                      consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0) +
+                      manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between text-base pt-2 border-t border-slate-300">
+                  <span className="font-bold">COSTO PROMEDIO POR HOJA:</span>
+                  <span className="font-bold text-xl text-orange-700">
+                    {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+                      (currentItem.total_hojas_enviadas_pintura || 0) > 0 
+                        ? (consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0) + 
+                           manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0)) / 
+                          currentItem.total_hojas_enviadas_pintura
+                        : 0
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
 

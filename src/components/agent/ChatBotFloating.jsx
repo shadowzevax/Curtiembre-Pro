@@ -230,48 +230,47 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     setIsOpen(!isOpen);
   };
 
-  // Bola flotante minimizada
+  // Bola flotante minimizada - SIEMPRE EN ESQUINA INFERIOR DERECHA
   if (!isOpen) {
     return (
       <button
-        onMouseDown={handleMouseDown}
         onClick={handleToggleOpen}
         style={{ 
           position: 'fixed', 
-          top: `${position.y}px`, 
-          left: `${position.x}px`,
-          cursor: isDragging ? 'grabbing' : 'grab'
+          bottom: '24px',
+          right: '24px',
+          zIndex: 9999
         }}
-        className="z-[9999] h-16 w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group select-none"
-        title="Abrir Copiloto ERP - Arrastra para mover"
+        className="h-14 w-14 md:h-16 md:w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+        title="Abrir Copiloto ERP"
       >
-        <MessageCircle className="w-8 h-8 text-white group-hover:animate-pulse" />
-        <div className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full animate-pulse" />
+        <MessageCircle className="w-7 h-7 md:w-8 md:h-8 text-white group-hover:animate-pulse" />
+        <div className="absolute -top-1 -right-1 h-3 w-3 md:h-4 md:w-4 bg-red-500 rounded-full animate-pulse" />
       </button>
     );
   }
 
-  // Chat abierto - desplegarse desde la bola hacia arriba e izquierda
+  // Chat abierto - SIEMPRE EN ESQUINA INFERIOR DERECHA
   const chatStyle = isMaximized
-    ? { position: 'fixed', top: '20px', left: '20px', right: '20px', bottom: '20px', width: 'auto', height: 'auto' }
+    ? { position: 'fixed', top: '20px', left: '20px', right: '20px', bottom: '20px', width: 'auto', height: 'auto', zIndex: 9999 }
     : { 
         position: 'fixed', 
-        bottom: `${window.innerHeight - position.y}px`, 
-        right: `${window.innerWidth - position.x - 64}px`, 
-        width: '400px', 
-        height: '600px' 
+        bottom: '24px', 
+        right: '24px', 
+        width: 'min(400px, calc(100vw - 48px))', 
+        height: 'min(600px, calc(100vh - 100px))',
+        zIndex: 9999
       };
 
   return (
     <div
       ref={chatRef}
       style={chatStyle}
-      className="z-[9999] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
+      className="bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden"
     >
       {/* Header */}
       <div
-        onMouseDown={handleMouseDown}
-        className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-4 flex items-center justify-between cursor-move select-none"
+        className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-3 md:p-4 flex items-center justify-between"
       >
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">

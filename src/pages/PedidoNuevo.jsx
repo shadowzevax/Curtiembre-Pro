@@ -38,8 +38,9 @@ const PLACAS = [
   { key: 'piedra', label: 'PIEDRA' },
   { key: 'puntos', label: 'PUNTOS' },
   { key: 'mandala', label: 'MANDALA' },
+  { key: 'poro_fino', label: 'PORO FINO' },
   { key: 'opaco', label: 'OPACO' },
-  { key: 'napa_mate', label: 'NAPA MATE' },
+  { key: 'opaco_mate', label: 'OPACO MATE' },
   { key: 'envejecido', label: 'ENVEJECIDO' }
 ];
 
