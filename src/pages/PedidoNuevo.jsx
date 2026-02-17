@@ -86,12 +86,38 @@ export default function PedidoNuevo() {
   };
 
   const agregarColor = () => {
-    const newItem = {};
-    PLACAS.forEach(placa => { newItem[placa.key] = 0; });
-    placasCustom.forEach(placa => { newItem[placa.key] = 0; });
-    newItem.codigo_color = '';
-    newItem.color = '';
-    newItem.total = 0;
+    const newItem = {
+      codigo_color: '',
+      color: '',
+      can: 0,
+      point_eti: 0,
+      point: 0,
+      eti: 0,
+      ilusion: 0,
+      talype: 0,
+      cobra: 0,
+      damasco: 0,
+      boa: 0,
+      babilla: 0,
+      piedra: 0,
+      puntos: 0,
+      mandala: 0,
+      poro_fino: 0,
+      opaco: 0,
+      opaco_mate: 0,
+      envejecido: 0,
+      total: 0
+    };
+    PLACAS.forEach(placa => { 
+      if (!newItem.hasOwnProperty(placa.key)) {
+        newItem[placa.key] = 0; 
+      }
+    });
+    placasCustom.forEach(placa => { 
+      if (!newItem.hasOwnProperty(placa.key)) {
+        newItem[placa.key] = 0; 
+      }
+    });
     
     setCurrentPedido({
       ...currentPedido,
@@ -112,15 +138,21 @@ export default function PedidoNuevo() {
       items[index].codigo_color = value;
       items[index].color = colorData ? colorData.nombre_color : '';
     } else {
-      items[index][field] = parseFloat(value) || 0;
+      const numValue = parseFloat(value) || 0;
+      items[index][field] = numValue;
+      console.log(`Actualizando campo ${field} en item ${index} con valor ${numValue}`, items[index]);
     }
     
     if (field !== 'color' && field !== 'codigo_color') {
       const allPlacas = [...PLACAS, ...placasCustom];
-      items[index].total = allPlacas.reduce((sum, placa) => sum + (items[index][placa.key] || 0), 0);
+      items[index].total = allPlacas.reduce((sum, placa) => {
+        const val = parseFloat(items[index][placa.key]) || 0;
+        return sum + val;
+      }, 0);
+      console.log(`Total calculado para item ${index}:`, items[index].total, items[index]);
     }
     
-    const totalGeneral = items.reduce((sum, item) => sum + (item.total || 0), 0);
+    const totalGeneral = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
     setCurrentPedido({ ...currentPedido, items, total_hojas: totalGeneral });
   };
 

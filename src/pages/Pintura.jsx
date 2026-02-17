@@ -484,12 +484,12 @@ export default function Pintura() {
                 </Select>
               </div>
               <div>
-                <Label>Total de Hojas Enviadas a Pintura</Label>
-                <Input type="number" value={currentItem?.total_hojas_enviadas_pintura || ''} onChange={e => {
+                <Label>Total Hojas Enviadas a Pintura *</Label>
+                <Input type="number" value={currentItem?.total_hojas_enviadas_pintura || 0} onChange={e => {
                   const total = parseFloat(e.target.value) || 0;
                   const recibidas = currentItem?.hojas_pintadas_recibidas || 0;
                   setCurrentItem({...currentItem, total_hojas_enviadas_pintura: total, hojas_pendientes_pintar: total - recibidas});
-                }} />
+                }} required />
               </div>
               <div>
                 <Label>Código Lote Crosta (opcional)</Label>
@@ -509,7 +509,11 @@ export default function Pintura() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded">
-              <div><Label>Hojas Pintadas Recibidas</Label><Input type="number" value={currentItem?.hojas_pintadas_recibidas || 0} readOnly className="bg-white font-bold" /></div>
+              <div><Label>Hojas Pintadas Recibidas</Label><Input type="number" value={currentItem?.hojas_pintadas_recibidas || 0} onChange={e => {
+                const recibidas = parseFloat(e.target.value) || 0;
+                const total = currentItem?.total_hojas_enviadas_pintura || 0;
+                setCurrentItem({...currentItem, hojas_pintadas_recibidas: recibidas, hojas_pendientes_pintar: total - recibidas});
+              }} className="bg-white font-bold" /></div>
               <div><Label>Hojas Pendientes por Pintar</Label><Input type="number" value={currentItem?.hojas_pendientes_pintar || 0} readOnly className="bg-orange-50 font-bold text-orange-700" /></div>
             </div>
             
@@ -548,22 +552,22 @@ export default function Pintura() {
                       return (
                         <tr key={idx} className="border-t">
                           <td className="border p-2">
-                            <Input value={consumo.codigo_pcto || ''} readOnly className="bg-gray-50 h-8 text-xs font-mono font-bold" />
-                          </td>
-                          <td className="border p-2">
                             <Select value={consumo.producto_id} onValueChange={v => handleConsumoChange(idx, 'producto_id', v)}>
                               <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Seleccionar *" />
+                                <SelectValue placeholder="Buscar código..." />
                               </SelectTrigger>
                               <SelectContent>
                                 {productosCatalogo.map(prod => (
-                                  <SelectItem key={prod.id} value={prod.id}>{prod.codigo} - {prod.descripcion}</SelectItem>
+                                  <SelectItem key={prod.id} value={prod.id}>{prod.codigo}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </td>
                           <td className="border p-2">
-                            <Input value={consumo.unidad_medida} readOnly className="bg-gray-50 h-8 text-xs" />
+                            <Input value={consumo.nombre_producto || ''} readOnly className="bg-gray-50 h-8 text-xs font-medium" />
+                          </td>
+                          <td className="border p-2">
+                            <Input value={consumo.unidad_medida || ''} readOnly className="bg-gray-50 h-8 text-xs" />
                           </td>
                           <td className="border p-2">
                             <Input 
@@ -618,6 +622,19 @@ export default function Pintura() {
                     })}
                   </tbody>
                 </table>
+              </div>
+              
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex justify-end">
+                  <div className="text-right">
+                    <span className="text-sm font-semibold mr-3">TOTAL CONSUMO DE PRODUCTOS:</span>
+                    <span className="text-lg font-bold text-blue-700">
+                      {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+                        consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
