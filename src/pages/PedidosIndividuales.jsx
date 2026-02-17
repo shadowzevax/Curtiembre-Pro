@@ -185,7 +185,7 @@ export default function PedidosIndividuales() {
     }
   };
 
-  const placasOrdenadas = ['can', 'point', 'eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'poro_fino', 'opaco', 'opaco_mate', 'envejecido'];
+  const placasOrdenadas = ['can', 'point_eti', 'point', 'eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'poro_fino', 'opaco', 'opaco_mate', 'envejecido'];
 
   const handleExport = (pedido) => {
     // Extraer todas las placas
@@ -399,9 +399,10 @@ export default function PedidosIndividuales() {
                        <tr>
                          <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">CÓDIGO COLOR</th>
                          <th className="border p-2 text-left">COLOR</th>
-                         {placasOrdenadas.map(placa => (
-                           <th key={placa} className="border p-2 text-center">{placa.replace('_', ' ').toUpperCase()}</th>
-                         ))}
+                         {placasOrdenadas.map(placa => {
+                          const label = placa === 'point_eti' ? 'POINT ETI' : placa.replace('_', ' ').toUpperCase();
+                          return <th key={placa} className="border p-2 text-center">{label}</th>;
+                         })}
                          <th className="border p-2 text-center bg-yellow-100 font-bold">TOTAL HOJAS</th>
                        </tr>
                       </thead>
@@ -410,18 +411,24 @@ export default function PedidosIndividuales() {
                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                            <td className="border p-2 font-mono font-bold sticky left-0 bg-white z-10">{item.codigo_color || 'N/A'}</td>
                            <td className="border p-2 font-medium">{item.color}</td>
-                           {placasOrdenadas.map(placa => (
-                             <td key={placa} className="border p-2 text-center">
-                               {item[placa] || 0}
-                             </td>
-                           ))}
+                           {placasOrdenadas.map(placa => {
+                             const valor = item[placa] !== undefined && item[placa] !== null ? item[placa] : 0;
+                             return (
+                               <td key={placa} className="border p-2 text-center">
+                                 {valor}
+                               </td>
+                             );
+                           })}
                            <td className="border p-2 text-center font-bold bg-yellow-50">{item.total}</td>
                          </tr>
                        ))}
                         <tr className="bg-green-100 font-bold">
                           <td className="border p-2 sticky left-0 bg-green-100 z-10" colSpan="2">TOTALES</td>
                           {placasOrdenadas.map(placa => {
-                            const total = selectedPedido.items.reduce((sum, item) => sum + (item[placa] || 0), 0);
+                            const total = selectedPedido.items.reduce((sum, item) => {
+                              const val = parseFloat(item[placa]) || 0;
+                              return sum + val;
+                            }, 0);
                             return <td key={placa} className="border p-2 text-center">{total}</td>;
                           })}
                           <td className="border p-2 text-center bg-yellow-200">{selectedPedido.total_hojas}</td>
@@ -467,9 +474,10 @@ export default function PedidosIndividuales() {
                      <tr>
                        <th className="border p-2">Código Color</th>
                        <th className="border p-2">Color</th>
-                       {placasOrdenadas.map(placa => (
-                         <th key={placa} className="border p-2">{placa.replace('_', ' ').toUpperCase()}</th>
-                       ))}
+                       {placasOrdenadas.map(placa => {
+                         const label = placa === 'point_eti' ? 'POINT ETI' : placa.replace('_', ' ').toUpperCase();
+                         return <th key={placa} className="border p-2">{label}</th>;
+                       })}
                        <th className="border p-2 bg-yellow-100">TOTAL</th>
                      </tr>
                     </thead>
@@ -494,10 +502,10 @@ export default function PedidosIndividuales() {
                            </td>
                            {placasOrdenadas.map(placa => (
                              <td key={placa} className="border p-2">
-                               <Input type="number" value={item[placa] || 0} onChange={e => {
+                               <Input type="number" value={item[placa] !== undefined ? item[placa] : 0} onChange={e => {
                                  const updated = [...editingPedido.items];
-                                 updated[idx][placa] = parseInt(e.target.value) || 0;
-                                 updated[idx].total = placasOrdenadas.reduce((sum, p) => sum + (updated[idx][p] || 0), 0);
+                                 updated[idx][placa] = parseFloat(e.target.value) || 0;
+                                 updated[idx].total = placasOrdenadas.reduce((sum, p) => sum + (parseFloat(updated[idx][p]) || 0), 0);
                                  setEditingPedido({...editingPedido, items: updated});
                                }} className="w-16 text-center h-7 text-xs" />
                              </td>

@@ -165,7 +165,25 @@ export default function PedidoNuevo() {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
-      await PedidoMarroquinero.create(currentPedido);
+      // Asegurar que todos los items tengan todos los campos de placas
+      const itemsNormalizados = currentPedido.items.map(item => {
+        const itemCompleto = { ...item };
+        PLACAS.forEach(placa => {
+          if (itemCompleto[placa.key] === undefined) {
+            itemCompleto[placa.key] = 0;
+          } else {
+            itemCompleto[placa.key] = parseFloat(itemCompleto[placa.key]) || 0;
+          }
+        });
+        return itemCompleto;
+      });
+      
+      console.log('Guardando pedido con items normalizados:', itemsNormalizados);
+      
+      await PedidoMarroquinero.create({
+        ...currentPedido,
+        items: itemsNormalizados
+      });
       alert('Pedido guardado exitosamente');
       initNewPedido();
     } catch (error) {
@@ -274,13 +292,14 @@ export default function PedidoNuevo() {
                           </Select>
                         </td>
                         {todasLasPlacas.map(placa => (
-                          <td key={placa.key} className="border p-1">
-                            <NumericInput 
-                              className="h-8 text-center text-xs w-full min-w-[60px]" 
-                              value={item[placa.key] || 0} 
-                              onChange={v => actualizarItem(idx, placa.key, v)} 
-                            />
-                          </td>
+                         <td key={placa.key} className="border p-1">
+                           <Input
+                             type="number"
+                             className="h-8 text-center text-xs w-full min-w-[60px]" 
+                             value={item[placa.key] !== undefined ? item[placa.key] : 0} 
+                             onChange={e => actualizarItem(idx, placa.key, e.target.value)} 
+                           />
+                         </td>
                         ))}
                         <td className="border p-1 text-center font-bold bg-yellow-50">{item.total}</td>
                         <td className="border p-1 text-center">

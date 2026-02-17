@@ -411,6 +411,8 @@ export default function Pintura() {
     </tr>
   );
 
+  if (!currentItem) return <div className="p-6">Cargando...</div>;
+
   return (
     <div className="p-6">
       <PageHeader
@@ -442,11 +444,11 @@ export default function Pintura() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>ID/Consecutivo</Label>
-                <Input value={currentItem?.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold" />
+                <Input value={currentItem.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold" />
               </div>
               <div>
                 <Label>Fecha de Entrega al Pintor *</Label>
-                <Input type="date" value={currentItem?.fecha_entrega_pintor || ''} onChange={e => setCurrentItem({...currentItem, fecha_entrega_pintor: e.target.value})} required />
+                <Input type="date" value={currentItem.fecha_entrega_pintor || ''} onChange={e => setCurrentItem({...currentItem, fecha_entrega_pintor: e.target.value})} required />
               </div>
             </div>
             
@@ -474,7 +476,7 @@ export default function Pintura() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label>Estado del Pedido en Pintura *</Label>
-                <Select value={currentItem?.estado_pedido_pintura || 'pendiente'} onValueChange={v => setCurrentItem({...currentItem, estado_pedido_pintura: v})}>
+                <Select value={currentItem.estado_pedido_pintura || 'pendiente'} onValueChange={v => setCurrentItem({...currentItem, estado_pedido_pintura: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pendiente">PENDIENTE</SelectItem>
@@ -485,15 +487,15 @@ export default function Pintura() {
               </div>
               <div>
                 <Label>Total Hojas Enviadas a Pintura *</Label>
-                <Input type="number" value={currentItem?.total_hojas_enviadas_pintura || 0} onChange={e => {
+                <Input type="number" value={currentItem.total_hojas_enviadas_pintura || 0} onChange={e => {
                   const total = parseFloat(e.target.value) || 0;
-                  const recibidas = currentItem?.hojas_pintadas_recibidas || 0;
+                  const recibidas = currentItem.hojas_pintadas_recibidas || 0;
                   setCurrentItem({...currentItem, total_hojas_enviadas_pintura: total, hojas_pendientes_pintar: total - recibidas});
                 }} required />
               </div>
               <div>
                 <Label>Código Lote Crosta (opcional)</Label>
-                <Select value={currentItem?.codigo_lote || ''} onValueChange={v => {
+                <Select value={currentItem.codigo_lote || ''} onValueChange={v => {
                   setCurrentItem({...currentItem, codigo_lote: v});
                 }}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar lote" /></SelectTrigger>
@@ -509,17 +511,17 @@ export default function Pintura() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded">
-              <div><Label>Hojas Pintadas Recibidas</Label><Input type="number" value={currentItem?.hojas_pintadas_recibidas || 0} onChange={e => {
+              <div><Label>Hojas Pintadas Recibidas</Label><Input type="number" value={currentItem.hojas_pintadas_recibidas || 0} onChange={e => {
                 const recibidas = parseFloat(e.target.value) || 0;
-                const total = currentItem?.total_hojas_enviadas_pintura || 0;
+                const total = currentItem.total_hojas_enviadas_pintura || 0;
                 setCurrentItem({...currentItem, hojas_pintadas_recibidas: recibidas, hojas_pendientes_pintar: total - recibidas});
               }} className="bg-white font-bold" /></div>
-              <div><Label>Hojas Pendientes por Pintar</Label><Input type="number" value={currentItem?.hojas_pendientes_pintar || 0} readOnly className="bg-orange-50 font-bold text-orange-700" /></div>
+              <div><Label>Hojas Pendientes por Pintar</Label><Input type="number" value={currentItem.hojas_pendientes_pintar || 0} readOnly className="bg-orange-50 font-bold text-orange-700" /></div>
             </div>
             
             <div>
               <Label>Observaciones</Label>
-              <Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} />
+              <Textarea value={currentItem.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} />
             </div>
 
             {/* TABLA DE ITEMS DE CONSUMO */}
@@ -780,13 +782,13 @@ export default function Pintura() {
                 <div className="flex justify-between text-base pt-2 border-t border-slate-300">
                   <span className="font-bold">COSTO PROMEDIO POR HOJA:</span>
                   <span className="font-bold text-xl text-orange-700">
-                    {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
-                      (currentItem.total_hojas_enviadas_pintura || 0) > 0 
-                        ? (consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0) + 
-                           manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0)) / 
-                          currentItem.total_hojas_enviadas_pintura
-                        : 0
-                    )}
+                    {(() => {
+                      const totalHojas = parseFloat(currentItem.total_hojas_enviadas_pintura) || 0;
+                      if (totalHojas <= 0) return '$0';
+                      const totalCosto = consumosItems.reduce((sum, c) => sum + (parseFloat(c.costo_total) || 0), 0) + 
+                                        manoObraItems.reduce((sum, m) => sum + (parseFloat(m.total) || 0), 0);
+                      return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(totalCosto / totalHojas);
+                    })()}
                   </span>
                 </div>
               </div>
