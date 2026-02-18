@@ -27,8 +27,7 @@ const COLORES_PREDEFINIDOS = [
 
 const PLACAS = [
   { key: 'can', label: 'CAN' },
-  { key: 'point', label: 'POINT' },
-  { key: 'eti', label: 'ETI' },
+  { key: 'point_eti', label: 'POINT/ETI' },
   { key: 'ilusion', label: 'ILUSION' },
   { key: 'talype', label: 'TALYPE' },
   { key: 'cobra', label: 'COBRA' },
@@ -89,34 +88,15 @@ export default function PedidoNuevo() {
     const newItem = {
       codigo_color: '',
       color: '',
-      can: 0,
-      point_eti: 0,
-      point: 0,
-      eti: 0,
-      ilusion: 0,
-      talype: 0,
-      cobra: 0,
-      damasco: 0,
-      boa: 0,
-      babilla: 0,
-      piedra: 0,
-      puntos: 0,
-      mandala: 0,
-      poro_fino: 0,
-      opaco: 0,
-      opaco_mate: 0,
-      envejecido: 0,
       total: 0
     };
+    
+    // Inicializar todos los campos de placas en 0
     PLACAS.forEach(placa => { 
-      if (!newItem.hasOwnProperty(placa.key)) {
-        newItem[placa.key] = 0; 
-      }
+      newItem[placa.key] = 0; 
     });
     placasCustom.forEach(placa => { 
-      if (!newItem.hasOwnProperty(placa.key)) {
-        newItem[placa.key] = 0; 
-      }
+      newItem[placa.key] = 0; 
     });
     
     setCurrentPedido({
@@ -165,29 +145,41 @@ export default function PedidoNuevo() {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
-      // Asegurar que todos los items tengan todos los campos de placas
+      // Normalizar items para asegurar que todos los campos de placas existan
       const itemsNormalizados = currentPedido.items.map(item => {
-        const itemCompleto = { ...item };
-        PLACAS.forEach(placa => {
-          if (itemCompleto[placa.key] === undefined) {
-            itemCompleto[placa.key] = 0;
-          } else {
-            itemCompleto[placa.key] = parseFloat(itemCompleto[placa.key]) || 0;
-          }
+        const itemCompleto = { 
+          codigo_color: item.codigo_color || '',
+          color: item.color || ''
+        };
+        
+        // Asegurar que TODAS las placas estén presentes y sean números
+        [...PLACAS, ...placasCustom].forEach(placa => {
+          const valor = item[placa.key];
+          itemCompleto[placa.key] = (valor !== undefined && valor !== null && !isNaN(parseFloat(valor))) 
+            ? parseFloat(valor) 
+            : 0;
         });
+        
+        // Recalcular total
+        itemCompleto.total = [...PLACAS, ...placasCustom].reduce((sum, placa) => {
+          return sum + (itemCompleto[placa.key] || 0);
+        }, 0);
+        
         return itemCompleto;
       });
       
-      console.log('Guardando pedido con items normalizados:', itemsNormalizados);
+      console.log('Guardando pedido con items normalizados:', JSON.stringify(itemsNormalizados, null, 2));
       
       await PedidoMarroquinero.create({
         ...currentPedido,
-        items: itemsNormalizados
+        items: itemsNormalizados,
+        total_hojas: itemsNormalizados.reduce((sum, item) => sum + (item.total || 0), 0)
       });
+      
       alert('Pedido guardado exitosamente');
       initNewPedido();
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error al guardar:', error);
       alert('Error al guardar el pedido');
     }
   };

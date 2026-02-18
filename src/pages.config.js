@@ -127,6 +127,7 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
+import LoteDetalladoConsolidado from './pages/LoteDetalladoConsolidado';
 import __Layout from './Layout.jsx';
 
 
@@ -211,6 +212,7 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
+    "LoteDetalladoConsolidado": LoteDetalladoConsolidado,
 }
 
 export const pagesConfig = {
