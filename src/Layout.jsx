@@ -47,7 +47,8 @@ const menuItems = [
       { title: "Acabado", url: createPageUrl("ProcesoAcabado"), icon: Settings },
       { title: "Otros Costos de Producción", url: createPageUrl("ServiciosProduccion"), icon: Settings },
       { title: "Pintura", url: createPageUrl("Pintura"), icon: Settings },
-      { title: "Costos Indirectos", url: createPageUrl("CostosIndirectos"), icon: Settings }
+      { title: "Costos Indirectos", url: createPageUrl("CostosIndirectos"), icon: Settings },
+      { title: "Lote Detallado Consolidado", url: createPageUrl("LoteDetalladoConsolidado"), icon: Settings }
     ]
   },
   {
