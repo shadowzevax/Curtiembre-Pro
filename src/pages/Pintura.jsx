@@ -411,8 +411,6 @@ export default function Pintura() {
     </tr>
   );
 
-  if (!currentItem) return <div className="p-6">Cargando...</div>;
-
   return (
     <div className="p-6">
       <PageHeader
