@@ -95,17 +95,16 @@ export default function ProcesoRecepcion() {
   const handleOpenModal = async (item = null) => {
     setIsEditing(!!item);
     if (!item) {
-      // Generar código LT2026-001
+      // Generar código automático L-AAAA-XXX
       const year = new Date().getFullYear();
-      // VALIDACIÓN CRÍTICA: Asegurar que recepciones es un array antes de usar filter
       const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
-      const recepcionesDelAnio = recepcionesSeguras.filter(r => r && r.codigo_lote?.startsWith(`LT${year}`));
+      const recepcionesDelAnio = recepcionesSeguras.filter(r => r && r.codigo_lote?.startsWith(`L-${year}`));
       const consecutivos = recepcionesDelAnio.map(r => {
-        const match = r?.codigo_lote?.match(/LT\d{4}-(\d+)/);
+        const match = r?.codigo_lote?.match(/L-\d{4}-(\d+)/);
         return match ? parseInt(match[1]) : 0;
       });
       const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
-      const codigoLote = `LT${year}-${String(nextConsecutivo).padStart(3, '0')}`;
+      const codigoLote = `L-${year}-${String(nextConsecutivo).padStart(3, '0')}`;
       
       setCurrentItem({
         tipo_proceso: 'recepcion',
@@ -191,7 +190,7 @@ export default function ProcesoRecepcion() {
         numero_proceso: currentItem.codigo_lote
       };
       
-      // Guardar el proceso
+      // Guardar el proceso de recepción
       let procesoId;
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
@@ -403,24 +402,15 @@ export default function ProcesoRecepcion() {
                 </Select>
               </div>
               <div>
-                <Label>Código Lote *</Label>
+                <Label>Código de Lote (automático) *</Label>
                 <Input 
                   value={currentItem?.codigo_lote || ''} 
-                  onChange={e => setCurrentItem({...currentItem, codigo_lote: e.target.value})} 
-                  list="lotes-disponibles-recepcion"
+                  readOnly
                   required 
-                  placeholder="Crear nuevo o seleccionar"
+                  placeholder="Autogenerado L-AAAA-XXX"
+                  className="bg-gray-100 font-mono font-bold text-blue-700"
                 />
-                <datalist id="lotes-disponibles-recepcion">
-                  {/* Códigos de compras */}
-                  {lotesCompras.map((lote, idx) => (
-                    <option key={`compra-${idx}`} value={lote} />
-                  ))}
-                  {/* Códigos de recepciones existentes */}
-                  {recepciones.map((recep) => (
-                    <option key={`recep-${recep.id}`} value={recep.codigo_lote} />
-                  ))}
-                </datalist>
+                <p className="text-xs text-slate-500 mt-1">Código único generado automáticamente por el sistema</p>
               </div>
               <div><Label>Fecha de Recepción</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div>
@@ -440,7 +430,7 @@ export default function ProcesoRecepcion() {
             <div><Label>No. de Documento</Label><Input value={currentItem?.no_documento || ''} onChange={e => setCurrentItem({...currentItem, no_documento: e.target.value})} placeholder="Número de factura o documento" /></div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Código *</Label>
+                <Label>Código PCTO. *</Label>
                 <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
                   const catalogoProd = productos.find(p => p.codigo === v);
                   setCurrentItem({
@@ -462,13 +452,26 @@ export default function ProcesoRecepcion() {
                 </Select>
               </div>
               <div>
-                <Label>Descripción *</Label>
-                <Input 
-                  value={currentItem?.descripcion_producto || ''} 
-                  readOnly 
-                  className="bg-gray-100" 
-                  placeholder="Auto-cargado desde catálogo"
-                />
+                <Label>Nombre del Producto *</Label>
+                <Select value={currentItem?.descripcion_producto || ''} onValueChange={v => {
+                  const catalogoProd = productos.find(p => p.descripcion === v);
+                  setCurrentItem({
+                    ...currentItem, 
+                    codigo_producto: catalogoProd ? catalogoProd.codigo : currentItem.codigo_producto,
+                    descripcion_producto: v
+                  });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Buscar por nombre" /></SelectTrigger>
+                  <SelectContent>
+                    {productos
+                      .sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || ''))
+                      .map(prod => (
+                        <SelectItem key={prod.id} value={prod.descripcion}>
+                          {prod.descripcion}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-4 gap-4">
