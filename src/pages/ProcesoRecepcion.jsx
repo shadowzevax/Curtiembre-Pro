@@ -239,15 +239,33 @@ export default function ProcesoRecepcion() {
           console.log(`✅ Inventario actualizado: -${currentItem.cantidad_total_lote_hojas} hojas de ${currentItem.codigo_producto}`);
           
           // CREAR REGISTRO EN INVENTARIO EN PROCESO
-          await base44.entities.InventarioEnProceso.create({
-            codigo: currentItem.codigo_producto,
-            descripcion: currentItem.descripcion_producto,
-            codigo_lote: currentItem.codigo_lote,
-            origen_modulo: 'recepcion',
-            estado_proceso: 'piel_recibida',
-            cantidad_hojas: currentItem.cantidad_total_lote_hojas,
-            fecha_ingreso_proceso: currentItem.fecha_inicio,
-            proceso_origen_id: procesoId
+          if (currentItem.dividir_lote && sublotes.length > 0) {
+            // Si se dividió el lote, crear un registro por cada sublote
+            for (const sublote of sublotes) {
+              await base44.entities.InventarioEnProceso.create({
+                codigo: currentItem.codigo_producto,
+                descripcion: currentItem.descripcion_producto,
+                codigo_lote: sublote.codigo,
+                origen_modulo: 'recepcion',
+                etapa_actual: 'recepcion',
+                estado_proceso: 'listo_para_limpieza',
+                cantidad_hojas: sublote.cantidad,
+                fecha_ingreso_proceso: currentItem.fecha_inicio,
+                proceso_origen_id: procesoId
+              });
+            }
+          } else {
+            // Si no se dividió, crear un solo registro con el lote original
+            await base44.entities.InventarioEnProceso.create({
+              codigo: currentItem.codigo_producto,
+              descripcion: currentItem.descripcion_producto,
+              codigo_lote: currentItem.codigo_lote,
+              origen_modulo: 'recepcion',
+              etapa_actual: 'recepcion',
+              estado_proceso: 'listo_para_limpieza',
+              cantidad_hojas: currentItem.cantidad_total_lote_hojas,
+              fecha_ingreso_proceso: currentItem.fecha_inicio,
+              proceso_origen_id: procesoId
           });
           
           console.log(`✅ Inventario En Proceso creado para lote ${currentItem.codigo_lote}`);
