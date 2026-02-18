@@ -266,7 +266,8 @@ export default function ProcesoRecepcion() {
               cantidad_hojas: currentItem.cantidad_total_lote_hojas,
               fecha_ingreso_proceso: currentItem.fecha_inicio,
               proceso_origen_id: procesoId
-          });
+            });
+          }
           
           console.log(`✅ Inventario En Proceso creado para lote ${currentItem.codigo_lote}`);
         }
