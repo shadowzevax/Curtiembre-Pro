@@ -91,6 +91,7 @@ import InventarioProductos from './pages/InventarioProductos';
 import LibroDiario from './pages/LibroDiario';
 import LibroDiarioNuevo from './pages/LibroDiarioNuevo';
 import LibroMayor from './pages/LibroMayor';
+import LoteDetalladoConsolidado from './pages/LoteDetalladoConsolidado';
 import MovimientosBancarios from './pages/MovimientosBancarios';
 import PedidoNuevo from './pages/PedidoNuevo';
 import PedidosIndividuales from './pages/PedidosIndividuales';
@@ -127,7 +128,6 @@ import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import LoteDetalladoConsolidado from './pages/LoteDetalladoConsolidado';
 import __Layout from './Layout.jsx';
 
 
@@ -176,6 +176,7 @@ export const PAGES = {
     "LibroDiario": LibroDiario,
     "LibroDiarioNuevo": LibroDiarioNuevo,
     "LibroMayor": LibroMayor,
+    "LoteDetalladoConsolidado": LoteDetalladoConsolidado,
     "MovimientosBancarios": MovimientosBancarios,
     "PedidoNuevo": PedidoNuevo,
     "PedidosIndividuales": PedidosIndividuales,
@@ -212,7 +213,6 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "LoteDetalladoConsolidado": LoteDetalladoConsolidado,
 }
 
 export const pagesConfig = {
