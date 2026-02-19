@@ -185,7 +185,7 @@ export default function PedidosIndividuales() {
     }
   };
 
-  const placasOrdenadas = ['can', 'point_eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'poro_fino', 'opaco', 'opaco_mate', 'envejecido'];
+  const placasOrdenadas = ['can', 'point', 'eti', 'ilusion', 'talype', 'cobra', 'damasco', 'boa', 'babilla', 'piedra', 'puntos', 'mandala', 'poro_fino', 'opaco', 'opaco_mate', 'envejecido'];
 
   const handleExport = (pedido) => {
     // Extraer todas las placas

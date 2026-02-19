@@ -27,7 +27,8 @@ const COLORES_PREDEFINIDOS = [
 
 const PLACAS = [
   { key: 'can', label: 'CAN' },
-  { key: 'point_eti', label: 'POINT/ETI' },
+  { key: 'point', label: 'POINT' },
+  { key: 'eti', label: 'ETI' },
   { key: 'ilusion', label: 'ILUSION' },
   { key: 'talype', label: 'TALYPE' },
   { key: 'cobra', label: 'COBRA' },
