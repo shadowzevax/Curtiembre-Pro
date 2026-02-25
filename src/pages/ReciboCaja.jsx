@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CuentaContable, Cliente, OrdenVenta, MovimientoLibroDiario, CuentaBancaria, MovimientoBancario, Caja } from '@/entities/all';
+import { CuentaContable, Cliente, OrdenVenta, MovimientoLibroDiario, CuentaBancaria, MovimientoBancario, Caja, MovimientoCaja, CuentaPorCobrar } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,7 +84,6 @@ export default function ReciboCaja() {
         
         // Afectar Caja o Bancos
         if (currentItem.medio_pago === 'efectivo') {
-          const { Caja, MovimientoCaja } = await import('@/entities/all');
           const cajasData = await Caja.filter({ nombre: 'CAJA GENERAL' });
           if (cajasData && cajasData.length > 0) {
             const caja = cajasData[0];
@@ -131,7 +130,6 @@ export default function ReciboCaja() {
         }
 
         // Actualizar cuenta por cobrar si hay venta asociada
-        const { CuentaPorCobrar, OrdenVenta } = await import('@/entities/all');
         const ventasPendientes = await OrdenVenta.filter({ saldo_pendiente: { $gt: 0 } });
         const ventaPendiente = ventasPendientes.find(v => v.cliente_id === currentItem.proveedor_cliente_id);
         
