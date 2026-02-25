@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MovimientoBancario, CuentaBancaria, Caja, MovimientoCaja } from '@/entities/all';
+import { MovimientoBancario, CuentaBancaria, Caja, MovimientoCaja, TransferenciaInterna } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +25,7 @@ export default function TransferenciasBancarias() {
         setLoading(true);
         try {
             const [movsData, cuentasData, cajasData] = await Promise.all([
-                MovimientoBancario.filter({ tipo_movimiento: 'transferencia' }),
+                TransferenciaInterna.list(),
                 CuentaBancaria.list(),
                 Caja.list()
             ]);
@@ -84,9 +84,22 @@ export default function TransferenciasBancarias() {
                 destinoData = cajas.find(c => c.id === currentItem.destino_id);
             }
             
+            // Crear Transferencia Interna
+            const nuevaTransferencia = await TransferenciaInterna.create({
+                cuenta_origen_id: currentItem.origen_id,
+                cuenta_destino_id: currentItem.destino_id,
+                fecha: currentItem.fecha,
+                valor: currentItem.valor,
+                concepto: currentItem.concepto,
+                estado: 'confirmado'
+            });
+
             // Crear movimientos
+            let movOrigenId = null;
+            let movDestinoId = null;
+
             if (currentItem.tipo_origen === 'cuenta') {
-                await MovimientoBancario.create({
+                const movOrigen = await MovimientoBancario.create({
                     cuenta_id: currentItem.origen_id,
                     fecha: currentItem.fecha,
                     tipo_movimiento: 'egreso',
@@ -96,11 +109,13 @@ export default function TransferenciasBancarias() {
                     estado: 'confirmado',
                     es_automatico: true,
                     documento_origen_tipo: 'TransferenciaInterna',
+                    documento_origen_id: nuevaTransferencia.id,
                     observaciones: currentItem.concepto
                 });
+                movOrigenId = movOrigen.id;
                 await CuentaBancaria.update(currentItem.origen_id, { saldo_actual: origenData.saldo_actual - currentItem.valor });
             } else {
-                await MovimientoCaja.create({
+                const movOrigen = await MovimientoCaja.create({
                     caja_id: currentItem.origen_id,
                     nombre_caja: origenData.nombre,
                     fecha_movimiento: currentItem.fecha,
@@ -108,13 +123,15 @@ export default function TransferenciasBancarias() {
                     concepto: `Transferencia a ${currentItem.tipo_destino === 'cuenta' ? destinoData.banco : destinoData.nombre}`,
                     monto: currentItem.valor,
                     saldo_resultante: origenData.saldo_actual - currentItem.valor,
-                    documento_origen_tipo: 'TransferenciaInterna'
+                    documento_origen_tipo: 'TransferenciaInterna',
+                    documento_origen_id: nuevaTransferencia.id
                 });
+                movOrigenId = movOrigen.id;
                 await Caja.update(currentItem.origen_id, { saldo_actual: origenData.saldo_actual - currentItem.valor });
             }
             
             if (currentItem.tipo_destino === 'cuenta') {
-                await MovimientoBancario.create({
+                const movDestino = await MovimientoBancario.create({
                     cuenta_id: currentItem.destino_id,
                     fecha: currentItem.fecha,
                     tipo_movimiento: 'ingreso',
@@ -124,11 +141,13 @@ export default function TransferenciasBancarias() {
                     estado: 'confirmado',
                     es_automatico: true,
                     documento_origen_tipo: 'TransferenciaInterna',
+                    documento_origen_id: nuevaTransferencia.id,
                     observaciones: currentItem.concepto
                 });
+                movDestinoId = movDestino.id;
                 await CuentaBancaria.update(currentItem.destino_id, { saldo_actual: destinoData.saldo_actual + currentItem.valor });
             } else {
-                await MovimientoCaja.create({
+                const movDestino = await MovimientoCaja.create({
                     caja_id: currentItem.destino_id,
                     nombre_caja: destinoData.nombre,
                     fecha_movimiento: currentItem.fecha,
@@ -136,10 +155,17 @@ export default function TransferenciasBancarias() {
                     concepto: `Transferencia desde ${currentItem.tipo_origen === 'cuenta' ? origenData.banco : origenData.nombre}`,
                     monto: currentItem.valor,
                     saldo_resultante: destinoData.saldo_actual + currentItem.valor,
-                    documento_origen_tipo: 'TransferenciaInterna'
+                    documento_origen_tipo: 'TransferenciaInterna',
+                    documento_origen_id: nuevaTransferencia.id
                 });
+                movDestinoId = movDestino.id;
                 await Caja.update(currentItem.destino_id, { saldo_actual: destinoData.saldo_actual + currentItem.valor });
             }
+
+            await TransferenciaInterna.update(nuevaTransferencia.id, {
+                movimiento_origen_id: movOrigenId,
+                movimiento_destino_id: movDestinoId
+            });
             
             alert('Transferencia interna registrada exitosamente.');
             setShowModal(false);
@@ -151,16 +177,20 @@ export default function TransferenciasBancarias() {
     };
 
     const headers = ["Fecha", "Origen", "Destino", "Valor", "Concepto", "Estado"];
-    const renderRow = (t) => (
-        <tr key={t.id}>
-            <td>{new Date(t.fecha).toLocaleDateString()}</td>
-            <td>{t.origen_nombre || 'N/A'}</td>
-            <td>{t.destino_nombre || 'N/A'}</td>
-            <td className="text-right font-bold">{formatCurrency(t.valor)}</td>
-            <td>{t.concepto}</td>
-            <td><span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">{t.estado}</span></td>
-        </tr>
-    );
+    const renderRow = (t) => {
+        const origen = cuentas.find(c => c.id === t.cuenta_origen_id)?.banco || cajas.find(c => c.id === t.cuenta_origen_id)?.nombre || 'N/A';
+        const destino = cuentas.find(c => c.id === t.cuenta_destino_id)?.banco || cajas.find(c => c.id === t.cuenta_destino_id)?.nombre || 'N/A';
+        return (
+            <tr key={t.id}>
+                <td>{new Date(t.fecha).toLocaleDateString()}</td>
+                <td>{origen}</td>
+                <td>{destino}</td>
+                <td className="text-right font-bold">{formatCurrency(t.valor)}</td>
+                <td>{t.concepto}</td>
+                <td><span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">{t.estado}</span></td>
+            </tr>
+        );
+    };
 
     return (
         <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
