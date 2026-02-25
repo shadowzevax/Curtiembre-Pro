@@ -363,19 +363,15 @@ export default function CajaMovimientos() {
                     <form onSubmit={handleSave} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label>Código de Caja *</Label>
-                                <Input value={currentItem?.codigo_caja} readOnly className="bg-gray-100 font-bold" />
+                                <Label>Caja *</Label>
+                                <Input value={currentItem?.nombre_caja || ''} readOnly className="bg-gray-100 font-bold" />
                             </div>
-                            <div>
-                                <Label>Nombre de la Caja *</Label>
-                                <Input value={currentItem?.nombre_caja} readOnly className="bg-gray-100" />
-                            </div>
+                            <div><Label>Fecha Movimiento *</Label><Input type="date" value={currentItem?.fecha_movimiento || ''} onChange={e => handleInputChange('fecha_movimiento', e.target.value)} required /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Fecha *</Label><Input type="date" value={currentItem?.fecha} onChange={e => handleInputChange('fecha', e.target.value)} required /></div>
                             <div>
                                 <Label>Tipo de Movimiento *</Label>
-                                <Select value={currentItem?.tipo} onValueChange={v => handleInputChange('tipo', v)}>
+                                <Select value={currentItem?.tipo || 'entrada'} onValueChange={v => handleInputChange('tipo', v)}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="entrada">INGRESO</SelectItem>
@@ -383,14 +379,15 @@ export default function CajaMovimientos() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                            <div><Label>Monto *</Label><Input type="number" step="0.01" min="0.01" value={currentItem?.monto || ''} onChange={e => handleInputChange('monto', parseFloat(e.target.value) || 0)} required /></div>
                         </div>
-                        <div><Label>Concepto *</Label><Input value={currentItem?.concepto} onChange={e => handleInputChange('concepto', e.target.value)} required /></div>
-                        <div><Label>Responsable</Label><Input value={currentItem?.responsable} onChange={e => handleInputChange('responsable', e.target.value)} placeholder="Nombre del responsable" /></div>
+                        <div><Label>Concepto *</Label><Input value={currentItem?.concepto || ''} onChange={e => handleInputChange('concepto', e.target.value)} required /></div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Valor Entrada</Label><Input type="number" step="0.01" value={currentItem?.valor_entrada} onChange={e => handleInputChange('valor_entrada', parseFloat(e.target.value) || 0)} disabled={currentItem?.valor_salida > 0} className={currentItem?.valor_salida > 0 ? 'bg-gray-100' : ''} /></div>
-                            <div><Label>Valor Salida</Label><Input type="number" step="0.01" value={currentItem?.valor_salida} onChange={e => handleInputChange('valor_salida', parseFloat(e.target.value) || 0)} disabled={currentItem?.valor_entrada > 0} className={currentItem?.valor_entrada > 0 ? 'bg-gray-100' : ''} /></div>
+                            <div><Label>Documento Origen Tipo</Label><Input value={currentItem?.documento_origen_tipo || ''} onChange={e => handleInputChange('documento_origen_tipo', e.target.value)} placeholder="Ej: Factura, Recibo" /></div>
+                            <div><Label>Documento Origen ID</Label><Input value={currentItem?.documento_origen_id || ''} onChange={e => handleInputChange('documento_origen_id', e.target.value)} placeholder="Ej: FAC-1234" /></div>
                         </div>
-                        <div><Label>Saldo (Automático)</Label><Input type="number" value={currentItem?.saldo} readOnly className="bg-emerald-50 font-bold text-lg" /></div>
+                        <div><Label>Responsable</Label><Input value={currentItem?.responsable || ''} onChange={e => handleInputChange('responsable', e.target.value)} placeholder="Nombre del responsable" /></div>
+                        <div><Label>Saldo Automático</Label><Input type="number" value={currentItem?.saldo_resultante || 0} readOnly className="bg-emerald-50 font-bold text-lg text-emerald-800" /></div>
                         <div><Label>Observaciones</Label><Input value={currentItem?.observaciones} onChange={e => handleInputChange('observaciones', e.target.value)} /></div>
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
