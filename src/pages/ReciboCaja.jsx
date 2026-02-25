@@ -228,7 +228,7 @@ export default function ReciboCaja() {
   );
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4 max-w-full overflow-x-hidden">
       <style>{`@media print {#tabla-imprimible { position: absolute; left: 0; top: 0; width: 100%; } #page-header, .no-print { display: none; } body * { visibility: hidden; } #tabla-imprimible, #tabla-imprimible * { visibility: visible; }}`}</style>
       <PageHeader
         title="Recibo de Caja"
@@ -262,15 +262,15 @@ export default function ReciboCaja() {
       </div>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Recibo de Caja</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Prefijo</Label>
-                <Input value={currentItem?.prefijo || ''} readOnly className="bg-gray-100" />
+                <Label>No. ID</Label>
+                <Input value={currentItem?.prefijo || ''} readOnly className="bg-gray-100 font-mono font-bold" placeholder="Auto-generado" />
               </div>
               <div>
                 <Label>Fecha *</Label>

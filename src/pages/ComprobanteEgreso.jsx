@@ -248,6 +248,7 @@ export default function ComprobanteEgreso() {
   );
 
   return (
+
     <div className="p-6 space-y-6">
       <style>{`@media print {#tabla-imprimible { position: absolute; left: 0; top: 0; width: 100%; } #page-header, .no-print { display: none; } body * { visibility: hidden; } #tabla-imprimible, #tabla-imprimible * { visibility: visible; }}`}</style>
       <PageHeader

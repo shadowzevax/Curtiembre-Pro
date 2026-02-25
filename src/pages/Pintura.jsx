@@ -376,7 +376,7 @@ export default function Pintura() {
   
   const renderRow = (item) => (
     <tr key={item.id}>
-      <td className="font-mono font-bold">{item.id_consecutivo || item.numero_proceso || 'N/A'}</td>
+      <td className="font-mono font-bold">{item?.id_consecutivo || item?.numero_proceso || 'N/A'}</td>
       <td>{formatDate(item.fecha_entrega_pintor)}</td>
       <td>{item.pintor_responsable || 'N/A'}</td>
       <td className="font-mono">{item.numero_pedido || 'N/A'}</td>
