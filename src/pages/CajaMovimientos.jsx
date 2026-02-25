@@ -16,7 +16,7 @@ export default function CajaMovimientos() {
     const [movimientos, setMovimientos] = useState([]);
     const [movimientosFiltrados, setMovimientosFiltrados] = useState([]);
     const [cajas, setCajas] = useState([]);
-    const [codigoCajaSeleccionada, setCodigoCajaSeleccionada] = useState('');
+    const [cajaIdSeleccionada, setCajaIdSeleccionada] = useState('');
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [showTransferenciaModal, setShowTransferenciaModal] = useState(false);
@@ -33,40 +33,45 @@ export default function CajaMovimientos() {
             ]);
             setMovimientos(movsData);
             setCajas(cajasData);
-            if (cajasData.length > 0 && !codigoCajaSeleccionada) {
-                setCodigoCajaSeleccionada(cajasData[0].codigo_caja);
+            if (cajasData.length > 0 && !cajaIdSeleccionada) {
+                setCajaIdSeleccionada(cajasData[0].id);
             }
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
-    }, [codigoCajaSeleccionada]);
+    }, [cajaIdSeleccionada]);
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(); }, [loadData]);
 
     useEffect(() => {
-        if (codigoCajaSeleccionada) {
-            const filtrados = movimientos.filter(m => m.codigo_caja === codigoCajaSeleccionada);
+        if (cajaIdSeleccionada) {
+            const filtrados = movimientos.filter(m => m.caja_id === cajaIdSeleccionada);
             setMovimientosFiltrados(filtrados);
         }
-    }, [codigoCajaSeleccionada, movimientos]);
+    }, [cajaIdSeleccionada, movimientos]);
 
-    const cajaActual = cajas.find(c => c.codigo_caja === codigoCajaSeleccionada);
+    const cajaActual = cajas.find(c => c.id === cajaIdSeleccionada);
 
     const handleOpenModal = (item = null) => {
+        if (!cajaActual || cajaActual.estado !== 'activa') {
+            alert('Solo se pueden registrar movimientos en cajas activas.');
+            return;
+        }
+
         setIsEditing(!!item);
         if (item) {
             setCurrentItem(item);
         } else {
             setCurrentItem({
                 caja_id: cajaActual?.id || '',
-                codigo_caja: codigoCajaSeleccionada,
                 nombre_caja: cajaActual?.nombre || '',
-                fecha: new Date().toISOString().split('T')[0],
+                fecha_movimiento: new Date().toISOString().split('T')[0],
                 tipo: 'entrada',
                 concepto: '',
+                documento_origen_tipo: '',
+                documento_origen_id: '',
                 responsable: '',
-                valor_entrada: 0,
-                valor_salida: 0,
-                saldo: cajaActual?.saldo_actual || 0,
+                monto: 0,
+                saldo_resultante: cajaActual?.saldo_actual || 0,
                 observaciones: '',
                 documento_soporte: '',
                 usuario_id: 'current_user'
@@ -76,7 +81,7 @@ export default function CajaMovimientos() {
     };
 
     const handleOpenTransferencia = () => {
-        if (codigoCajaSeleccionada !== 'CAJA-GENERAL') {
+        if (cajaActual?.codigo_caja !== 'CAJA-GENERAL') {
             alert('Solo puede transferir desde Caja General');
             return;
         }
@@ -91,26 +96,20 @@ export default function CajaMovimientos() {
             if (field === 'caja_id') {
                 const caja = cajas.find(c => c.id === value);
                 if (caja) {
-                    updated.codigo_caja = caja.codigo_caja || '';
                     updated.nombre_caja = caja.nombre || '';
                 }
             }
             
-            if (field === 'valor_entrada' && value > 0) {
-                updated.valor_salida = 0;
-                updated.tipo = 'entrada';
-            }
-            if (field === 'valor_salida' && value > 0) {
-                updated.valor_entrada = 0;
-                updated.tipo = 'salida';
-            }
-            
-            if (field === 'valor_entrada' || field === 'valor_salida' || field === 'caja_id') {
+            if (field === 'monto' || field === 'tipo' || field === 'caja_id') {
                 const caja = cajas.find(c => c.id === updated.caja_id);
                 const saldoActual = caja ? (caja.saldo_actual || 0) : 0;
-                const entrada = parseFloat(updated.valor_entrada) || 0;
-                const salida = parseFloat(updated.valor_salida) || 0;
-                updated.saldo = saldoActual + entrada - salida;
+                const montoMovimiento = parseFloat(updated.monto) || 0;
+                
+                if (updated.tipo === 'entrada') {
+                    updated.saldo_resultante = saldoActual + montoMovimiento;
+                } else {
+                    updated.saldo_resultante = saldoActual - montoMovimiento;
+                }
             }
             
             return updated;
