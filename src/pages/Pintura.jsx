@@ -878,7 +878,7 @@ export default function Pintura() {
           <DialogHeader><DialogTitle>Detalle de Pintura</DialogTitle></DialogHeader>
           {selectedItem && (
             <div className="space-y-3 text-sm">
-              <p><span className="font-semibold">ID Consecutivo:</span> <span className="font-mono">{selectedItem.id_consecutivo}</span></p>
+              <p><span className="font-semibold">ID Consecutivo:</span> <span className="font-mono">{selectedItem.id_consecutivo || 'N/A'}</span></p>
               <p><span className="font-semibold">Fecha Entrega Pintor:</span> {formatDate(selectedItem.fecha_entrega_pintor)}</p>
               <p><span className="font-semibold">Pintor/Responsable:</span> {selectedItem.pintor_responsable || 'N/A'}</p>
               <p><span className="font-semibold">Pedido:</span> <span className="font-mono">{selectedItem.numero_pedido || 'N/A'}</span></p>
