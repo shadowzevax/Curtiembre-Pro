@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CuentaContable, Cliente, OrdenVenta, MovimientoLibroDiario, CuentaBancaria, MovimientoBancario } from '@/entities/all';
+import { CuentaContable, Cliente, OrdenVenta, MovimientoLibroDiario, CuentaBancaria, MovimientoBancario, Caja } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +20,7 @@ const formatDate = (dateString) => {
 export default function ReciboCaja() {
   const [recibos, setRecibos] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -36,12 +37,14 @@ export default function ReciboCaja() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cuentasData, clientesData] = await Promise.all([
+      const [cuentasData, clientesData, bancosData] = await Promise.all([
         CuentaContable.filter({ tipo_cuenta: 'otros_ingresos' }),
-        Cliente.list()
+        Cliente.list(),
+        CuentaBancaria.list()
       ]);
       setRecibos(cuentasData);
       setClientes(clientesData);
+      setCuentasBancarias(bancosData.filter(b => b.estado === 'activa'));
     } catch (error) {
       console.error("Error:", error);
     } finally {
@@ -344,13 +347,12 @@ export default function ReciboCaja() {
             {currentItem?.medio_pago === 'banco' && (
               <div>
                 <Label>Cuenta Bancaria Destino *</Label>
-                <Select value={currentItem?.cuenta_destino_id || ''} onValueChange={v => {
-                  const { CuentaBancaria: CB } = require('@/entities/all') || {};
-                  setCurrentItem({ ...currentItem, cuenta_destino_id: v });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                <Select value={currentItem?.cuenta_destino_id || ''} onValueChange={v => setCurrentItem({ ...currentItem, cuenta_destino_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta bancaria" /></SelectTrigger>
                   <SelectContent>
-                    {/* Cuentas bancarias se cargan dinámicamente */}
+                    {cuentasBancarias.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.banco} - {c.numero_cuenta}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
