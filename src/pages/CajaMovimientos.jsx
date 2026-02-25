@@ -132,12 +132,10 @@ export default function CajaMovimientos() {
                 return;
             }
 
-            const valor = currentItem.tipo === 'entrada' ? 
-                parseFloat(currentItem.valor_entrada) || 0 : 
-                parseFloat(currentItem.valor_salida) || 0;
+            const valor = parseFloat(currentItem.monto) || 0;
 
             if (valor <= 0) {
-                alert('El valor debe ser mayor a cero');
+                alert('El monto debe ser mayor a cero');
                 return;
             }
 
@@ -146,15 +144,15 @@ export default function CajaMovimientos() {
                 saldoAnterior + valor : 
                 saldoAnterior - valor;
 
-            if (nuevoSaldo < 0) {
-                alert('Saldo insuficiente en la caja');
+            if (nuevoSaldo < 0 && currentItem.tipo === 'salida') {
+                alert('Saldo insuficiente en la caja.');
                 return;
             }
             
             if (isEditing) {
-                await MovimientoCaja.update(currentItem.id, {...currentItem, saldo: nuevoSaldo});
+                await MovimientoCaja.update(currentItem.id, {...currentItem, saldo_resultante: nuevoSaldo});
             } else {
-                await MovimientoCaja.create({...currentItem, saldo: nuevoSaldo});
+                await MovimientoCaja.create({...currentItem, saldo_resultante: nuevoSaldo});
                 await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
             }
             
@@ -256,22 +254,47 @@ export default function CajaMovimientos() {
         } catch (e) { alert('Error al eliminar.'); }
     };
 
-    const headers = ["Fecha", "Código Caja", "Tipo", "Concepto", "Responsable", "Entrada", "Salida", "Saldo", "Acciones"];
+    const recalcularSaldo = async () => {
+        if (!cajaActual) return;
+        try {
+            const movs = movimientos.filter(m => m.caja_id === cajaActual.id);
+            const entradas = movs.filter(m => m.tipo === 'entrada').reduce((sum, m) => sum + (m.monto || 0), 0);
+            const salidas = movs.filter(m => m.tipo === 'salida').reduce((sum, m) => sum + (m.monto || 0), 0);
+            const saldoCalculado = (cajaActual.saldo_inicial || 0) + entradas - salidas;
+
+            await Caja.update(cajaActual.id, { saldo_actual: saldoCalculado });
+            loadData();
+            alert(`Saldo recalculado exitosamente. Nuevo saldo: ${formatCurrency(saldoCalculado)}`);
+        } catch (error) {
+            console.error(error);
+            alert('Error al recalcular saldo');
+        }
+    };
+
+    const headers = ["Fecha Movimiento", "Caja", "Tipo", "Concepto", "Documento", "Responsable", "Monto", "Saldo Resultante", "Acciones"];
     const renderRow = (m) => {
         return (
             <tr key={m.id}>
-                <td>{new Date(m.fecha).toLocaleDateString()}</td>
-                <td className="font-mono font-bold">{m.codigo_caja || 'N/A'}</td>
+                <td>{m.fecha_movimiento ? new Date(m.fecha_movimiento).toLocaleDateString() : 'N/A'}</td>
+                <td className="font-bold">{cajas.find(c => c.id === m.caja_id)?.nombre || 'N/A'}</td>
                 <td>
                     <span className={`px-2 py-1 rounded text-xs font-bold ${m.tipo === 'entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {m.tipo?.toUpperCase()}
                     </span>
                 </td>
                 <td>{m.concepto}</td>
+                <td>
+                    {m.documento_origen_tipo && m.documento_origen_id ? (
+                        <div className="text-xs">
+                            <span className="font-semibold">{m.documento_origen_tipo}:</span> {m.documento_origen_id}
+                        </div>
+                    ) : 'N/A'}
+                </td>
                 <td>{m.responsable || 'N/A'}</td>
-                <td className="text-right font-bold text-green-600">{formatCurrency(m.valor_entrada)}</td>
-                <td className="text-right font-bold text-red-600">{formatCurrency(m.valor_salida)}</td>
-                <td className="text-right font-bold">{formatCurrency(m.saldo)}</td>
+                <td className={`text-right font-bold ${m.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
+                    {m.tipo === 'entrada' ? '+' : '-'}{formatCurrency(m.monto)}
+                </td>
+                <td className="text-right font-bold">{formatCurrency(m.saldo_resultante)}</td>
                 <td>
                     <div className="flex space-x-2">
                         <Button variant="destructive" size="sm" onClick={() => handleDelete(m.id)}><Trash2 className="w-4 h-4" /></Button>
@@ -292,12 +315,15 @@ export default function CajaMovimientos() {
                             <Plus className="w-4 h-4 mr-2" />
                             Nuevo Movimiento
                         </Button>
-                        {codigoCajaSeleccionada === 'CAJA-GENERAL' && (
+                        {cajaActual?.codigo_caja === 'CAJA-GENERAL' && (
                             <Button onClick={handleOpenTransferencia} variant="outline" className="border-blue-600 text-blue-700">
                                 <ArrowRightLeft className="w-4 h-4 mr-2" />
                                 Transferir a Caja Menor
                             </Button>
                         )}
+                        <Button onClick={recalcularSaldo} variant="outline" className="border-emerald-600 text-emerald-700">
+                            🔄 Recalcular Saldo
+                        </Button>
                     </div>
                 }
             />
@@ -307,12 +333,12 @@ export default function CajaMovimientos() {
                 <CardContent>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <Label>Seleccionar Código de Caja *</Label>
-                            <Select value={codigoCajaSeleccionada} onValueChange={setCodigoCajaSeleccionada}>
+                            <Label>Seleccionar Caja *</Label>
+                            <Select value={cajaIdSeleccionada} onValueChange={setCajaIdSeleccionada}>
                                 <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {cajas.map(c => (
-                                        <SelectItem key={c.id} value={c.codigo_caja}>{c.codigo_caja} - {c.nombre}</SelectItem>
+                                    {cajas.filter(c => c.estado === 'activa').map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.codigo_caja} - {c.nombre}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
