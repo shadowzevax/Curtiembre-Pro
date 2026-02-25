@@ -438,6 +438,7 @@ export default function Pintura() {
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Pintura</DialogTitle>
           </DialogHeader>
+          {currentItem && (
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -797,6 +798,7 @@ export default function Pintura() {
               <Button type="submit">Guardar</Button>
             </div>
           </form>
+          )}
         </DialogContent>
       </Dialog>
 
