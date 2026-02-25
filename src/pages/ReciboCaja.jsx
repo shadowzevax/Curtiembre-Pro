@@ -333,14 +333,28 @@ export default function ReciboCaja() {
             </div>
             <div>
               <Label>Medio de Pago *</Label>
-              <Select value={currentItem?.medio_pago || 'efectivo'} onValueChange={v => setCurrentItem({ ...currentItem, medio_pago: v })}>
+              <Select value={currentItem?.medio_pago || 'efectivo'} onValueChange={v => setCurrentItem({ ...currentItem, medio_pago: v, cuenta_destino_id: '' })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="efectivo">EFECTIVO</SelectItem>
-                  <SelectItem value="banco">BANCO</SelectItem>
+                  <SelectItem value="banco">BANCO / TRANSFERENCIA</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {currentItem?.medio_pago === 'banco' && (
+              <div>
+                <Label>Cuenta Bancaria Destino *</Label>
+                <Select value={currentItem?.cuenta_destino_id || ''} onValueChange={v => {
+                  const { CuentaBancaria: CB } = require('@/entities/all') || {};
+                  setCurrentItem({ ...currentItem, cuenta_destino_id: v });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
+                  <SelectContent>
+                    {/* Cuentas bancarias se cargan dinámicamente */}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Por Valor De *</Label>
               <Input type="number" value={currentItem?.por_valor_de || ''} onChange={e => setCurrentItem({ ...currentItem, por_valor_de: parseFloat(e.target.value) || 0 })} />

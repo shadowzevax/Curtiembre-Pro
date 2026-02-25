@@ -119,20 +119,27 @@ export default function ComprobanteEgreso() {
             });
           }
         } else if (currentItem.medio_pago === 'banco' && currentItem.cuenta_destino_id) {
-          const cuenta = await CuentaBancaria.filter({ id: currentItem.cuenta_destino_id });
-          if (cuenta && cuenta.length > 0) {
-            const cuentaData = cuenta[0];
-            const nuevoSaldo = (cuentaData.saldo_actual || 0) - valorPago;
+          const cuentasAll = await CuentaBancaria.list();
+          const cuentaData = cuentasAll.find(c => c.id === currentItem.cuenta_destino_id);
+          if (cuentaData) {
+            const saldoAnterior = cuentaData.saldo_actual || 0;
+            const nuevoSaldo = saldoAnterior - valorPago;
             await CuentaBancaria.update(cuentaData.id, { saldo_actual: nuevoSaldo });
             await MovimientoBancario.create({
               cuenta_id: cuentaData.id,
               fecha: currentItem.fecha,
               tipo_movimiento: 'egreso',
               concepto: `Comprobante de Egreso: ${currentItem.concepto}`,
+              referencia: currentItem.prefijo,
               tercero_nombre: currentItem.proveedor_cliente_id ? proveedores.find(p => p.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
+              valor_entrada: 0,
               valor_salida: valorPago,
+              saldo_anterior: saldoAnterior,
               saldo: nuevoSaldo,
-              referencia: currentItem.prefijo
+              documento_origen_tipo: 'ComprobanteEgreso',
+              documento_origen_id: nuevoEgreso.id,
+              es_automatico: true,
+              observaciones: currentItem.observaciones || ''
             });
           }
         }
