@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CuentaContable, Cliente, OrdenVenta, MovimientoLibroDiario } from '@/entities/all';
+import { CuentaContable, Cliente, OrdenVenta, MovimientoLibroDiario, CuentaBancaria, MovimientoBancario } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -99,6 +99,31 @@ export default function ReciboCaja() {
               saldo: nuevoSaldo,
               documento_soporte: currentItem.prefijo
             });
+          }
+        } else if (currentItem.medio_pago === 'banco' && currentItem.cuenta_destino_id) {
+          // Generar MovimientoBancario automático
+          const cuentasData = await CuentaBancaria.list();
+          const cuentaBancaria = cuentasData.find(c => c.id === currentItem.cuenta_destino_id);
+          if (cuentaBancaria) {
+            const saldoAnterior = cuentaBancaria.saldo_actual || 0;
+            const nuevoSaldo = saldoAnterior + valorCobro;
+            await MovimientoBancario.create({
+              cuenta_id: currentItem.cuenta_destino_id,
+              fecha: currentItem.fecha,
+              tipo_movimiento: 'ingreso',
+              concepto: `Recibo de Caja: ${currentItem.concepto}`,
+              referencia: currentItem.prefijo,
+              tercero_nombre: clientes.find(c => c.id === currentItem.proveedor_cliente_id)?.nombre || '',
+              valor_entrada: valorCobro,
+              valor_salida: 0,
+              saldo_anterior: saldoAnterior,
+              saldo: nuevoSaldo,
+              documento_origen_tipo: 'ReciboCaja',
+              documento_origen_id: nuevoRecibo.id,
+              es_automatico: true,
+              observaciones: currentItem.observaciones || ''
+            });
+            await CuentaBancaria.update(currentItem.cuenta_destino_id, { saldo_actual: nuevoSaldo });
           }
         }
 
