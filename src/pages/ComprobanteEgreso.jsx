@@ -248,8 +248,7 @@ export default function ComprobanteEgreso() {
   );
 
   return (
-
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-4 max-w-full overflow-x-hidden">
       <style>{`@media print {#tabla-imprimible { position: absolute; left: 0; top: 0; width: 100%; } #page-header, .no-print { display: none; } body * { visibility: hidden; } #tabla-imprimible, #tabla-imprimible * { visibility: visible; }}`}</style>
       <PageHeader
         title="Comprobante de Egreso"
@@ -283,7 +282,7 @@ export default function ComprobanteEgreso() {
       </div>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Comprobante de Egreso</DialogTitle>
           </DialogHeader>
