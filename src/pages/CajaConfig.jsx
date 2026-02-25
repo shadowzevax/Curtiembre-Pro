@@ -40,6 +40,7 @@ export default function CajaConfig() {
         setIsEditing(!!item);
         const nextCodigo = cajas.length > 0 ? `CAJ-${String(cajas.length + 1).padStart(3, '0')}` : 'CAJ-001';
         setCurrentItem(item || {
+            caja_id: crypto.randomUUID ? crypto.randomUUID().split('-')[0].toUpperCase() : `ID-${Date.now()}`,
             codigo_caja: nextCodigo,
             nombre: '',
             tipo: 'general',
@@ -52,6 +53,23 @@ export default function CajaConfig() {
             observaciones: ''
         });
         setShowModal(true);
+    };
+
+    const recalcularSaldo = async (caja) => {
+        try {
+            const { MovimientoCaja } = await import('@/entities/all');
+            const movimientos = await MovimientoCaja.filter({ caja_id: caja.id });
+            const entradas = movimientos.filter(m => m.tipo === 'entrada').reduce((sum, m) => sum + (m.monto || 0), 0);
+            const salidas = movimientos.filter(m => m.tipo === 'salida').reduce((sum, m) => sum + (m.monto || 0), 0);
+            const saldoCalculado = (caja.saldo_inicial || 0) + entradas - salidas;
+
+            await Caja.update(caja.id, { saldo_actual: saldoCalculado });
+            loadData();
+            alert(`Saldo recalculado exitosamente. Nuevo saldo: ${formatCurrency(saldoCalculado)}`);
+        } catch (error) {
+            console.error(error);
+            alert('Error al recalcular saldo');
+        }
     };
 
     const handleSave = async (e) => {
@@ -71,6 +89,12 @@ export default function CajaConfig() {
     const handleDelete = async (id) => {
         if (!confirm('¿Eliminar esta caja?')) return;
         try {
+            const { MovimientoCaja } = await import('@/entities/all');
+            const movimientos = await MovimientoCaja.filter({ caja_id: id });
+            if (movimientos.length > 0) {
+                alert('No se puede eliminar la caja porque tiene movimientos registrados.');
+                return;
+            }
             await Caja.delete(id);
             loadData();
         } catch (e) { alert('Error al eliminar.'); }
@@ -90,6 +114,7 @@ export default function CajaConfig() {
                 <td><span className={`px-2 py-1 rounded-full text-xs ${c.estado === 'activa' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.estado}</span></td>
                 <td>
                     <div className="flex space-x-2">
+                        <Button variant="outline" size="sm" title="Recalcular Saldo" onClick={() => recalcularSaldo(c)}>🔄</Button>
                         <Button variant="outline" size="sm" onClick={() => handleOpenModal(c)}><Edit className="w-4 h-4" /></Button>
                         <Button variant="destructive" size="sm" onClick={() => handleDelete(c.id)}><Trash2 className="w-4 h-4" /></Button>
                     </div>
@@ -121,8 +146,11 @@ export default function CajaConfig() {
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Caja</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
-                        <div><Label>Código de Caja</Label><Input value={currentItem?.codigo_caja} readOnly className="bg-gray-100 font-mono font-bold" /></div>
-                        <div><Label>Nombre de la Caja *</Label><Input value={currentItem?.nombre} onChange={e => setCurrentItem({...currentItem, nombre: e.target.value})} required placeholder="Ej: Caja General, Caja Menor Pablo" /></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><Label>Caja ID</Label><Input value={currentItem?.caja_id || ''} readOnly className="bg-gray-100 font-mono font-bold text-gray-500" /></div>
+                            <div><Label>Código de Caja</Label><Input value={currentItem?.codigo_caja || ''} readOnly className="bg-gray-100 font-mono font-bold" /></div>
+                        </div>
+                        <div><Label>Nombre de la Caja *</Label><Input value={currentItem?.nombre || ''} onChange={e => setCurrentItem({...currentItem, nombre: e.target.value})} required placeholder="Ej: Caja General, Caja Menor Pablo" /></div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label>Tipo de Caja *</Label>
@@ -163,6 +191,10 @@ export default function CajaConfig() {
                                     </SelectContent>
                                 </Select>
                             </div>
+                        </div>
+                        <div>
+                            <Label>Saldo Actual</Label>
+                            <Input type="number" value={currentItem?.saldo_actual || 0} readOnly className="bg-emerald-50 font-bold text-emerald-800" />
                         </div>
                         <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
                         <div className="flex justify-end gap-2 pt-4">
