@@ -184,7 +184,7 @@ export default function ConciliacionBancaria() {
                                                 <td className="p-2">{new Date(m.fecha).toLocaleDateString()}</td>
                                                 <td className="p-2">{m.concepto}</td>
                                                 <td className="p-2">{m.tipo_movimiento}</td>
-                                                <td className="p-2 text-right">{formatCurrency(m.valor_entrada || m.valor_salida)}</td>
+                                                <td className="p-2 text-right">{formatCurrency(m.valor)}</td>
                                                 <td className="p-2"><Input className="h-7 text-xs" value={m.referencia_extracto} onChange={e => {
                                                     const updated = [...movimientosConciliacion];
                                                     updated[idx].referencia_extracto = e.target.value;

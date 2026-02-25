@@ -91,23 +91,24 @@ export default function TransferenciasBancarias() {
                     fecha: currentItem.fecha,
                     tipo_movimiento: 'egreso',
                     concepto: `Transferencia a ${currentItem.tipo_destino === 'cuenta' ? destinoData.banco : destinoData.nombre}`,
-                    valor_salida: currentItem.valor,
-                    valor_entrada: 0,
-                    saldo: origenData.saldo_actual - currentItem.valor,
+                    valor: currentItem.valor,
+                    saldo_posterior: origenData.saldo_actual - currentItem.valor,
+                    estado: 'confirmado',
+                    es_automatico: true,
+                    documento_origen_tipo: 'TransferenciaInterna',
                     observaciones: currentItem.concepto
                 });
                 await CuentaBancaria.update(currentItem.origen_id, { saldo_actual: origenData.saldo_actual - currentItem.valor });
             } else {
                 await MovimientoCaja.create({
                     caja_id: currentItem.origen_id,
-                    codigo_caja: origenData.codigo_caja,
                     nombre_caja: origenData.nombre,
-                    fecha: currentItem.fecha,
+                    fecha_movimiento: currentItem.fecha,
                     tipo: 'salida',
                     concepto: `Transferencia a ${currentItem.tipo_destino === 'cuenta' ? destinoData.banco : destinoData.nombre}`,
-                    valor_salida: currentItem.valor,
-                    valor_entrada: 0,
-                    saldo: origenData.saldo_actual - currentItem.valor
+                    monto: currentItem.valor,
+                    saldo_resultante: origenData.saldo_actual - currentItem.valor,
+                    documento_origen_tipo: 'TransferenciaInterna'
                 });
                 await Caja.update(currentItem.origen_id, { saldo_actual: origenData.saldo_actual - currentItem.valor });
             }
@@ -118,23 +119,24 @@ export default function TransferenciasBancarias() {
                     fecha: currentItem.fecha,
                     tipo_movimiento: 'ingreso',
                     concepto: `Transferencia desde ${currentItem.tipo_origen === 'cuenta' ? origenData.banco : origenData.nombre}`,
-                    valor_entrada: currentItem.valor,
-                    valor_salida: 0,
-                    saldo: destinoData.saldo_actual + currentItem.valor,
+                    valor: currentItem.valor,
+                    saldo_posterior: destinoData.saldo_actual + currentItem.valor,
+                    estado: 'confirmado',
+                    es_automatico: true,
+                    documento_origen_tipo: 'TransferenciaInterna',
                     observaciones: currentItem.concepto
                 });
                 await CuentaBancaria.update(currentItem.destino_id, { saldo_actual: destinoData.saldo_actual + currentItem.valor });
             } else {
                 await MovimientoCaja.create({
                     caja_id: currentItem.destino_id,
-                    codigo_caja: destinoData.codigo_caja,
                     nombre_caja: destinoData.nombre,
-                    fecha: currentItem.fecha,
+                    fecha_movimiento: currentItem.fecha,
                     tipo: 'entrada',
                     concepto: `Transferencia desde ${currentItem.tipo_origen === 'cuenta' ? origenData.banco : origenData.nombre}`,
-                    valor_entrada: currentItem.valor,
-                    valor_salida: 0,
-                    saldo: destinoData.saldo_actual + currentItem.valor
+                    monto: currentItem.valor,
+                    saldo_resultante: destinoData.saldo_actual + currentItem.valor,
+                    documento_origen_tipo: 'TransferenciaInterna'
                 });
                 await Caja.update(currentItem.destino_id, { saldo_actual: destinoData.saldo_actual + currentItem.valor });
             }
