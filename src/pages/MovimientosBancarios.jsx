@@ -66,10 +66,10 @@ export default function MovimientosBancarios() {
 
         // Calcular resumen
         const cuenta = cuentas.find(c => c.id === filtros.cuenta_id);
-        const totalEntradas = filtered.reduce((s, m) => s + (m.valor_entrada || 0), 0);
-        const totalSalidas = filtered.reduce((s, m) => s + (m.valor_salida || 0), 0);
+        const totalEntradas = filtered.filter(m => m.tipo_movimiento === 'ingreso').reduce((s, m) => s + (m.valor || 0), 0);
+        const totalSalidas = filtered.filter(m => m.tipo_movimiento !== 'ingreso').reduce((s, m) => s + (m.valor || 0), 0);
         const saldoFinal = (cuenta?.saldo_actual || 0);
-        const saldoInicial = saldoFinal - totalEntradas + totalSalidas;
+        const saldoInicial = cuenta?.saldo_inicial || (saldoFinal - totalEntradas + totalSalidas);
 
         setResumen({ saldo_inicial: saldoInicial, total_entradas: totalEntradas, total_salidas: totalSalidas, saldo_final: saldoFinal });
     }, [movimientos, filtros, cuentas]);
@@ -84,10 +84,9 @@ export default function MovimientosBancarios() {
             referencia: '',
             documento_origen_tipo: 'AjusteBancario',
             documento_origen_id: '',
-            valor_entrada: 0,
-            valor_salida: 0,
+            valor: 0,
             saldo_anterior: cuenta?.saldo_actual || 0,
-            saldo: cuenta?.saldo_actual || 0,
+            saldo_posterior: cuenta?.saldo_actual || 0,
             es_automatico: false,
             observaciones: ''
         });
@@ -103,17 +102,16 @@ export default function MovimientosBancarios() {
                 updated.saldo_anterior = c?.saldo_actual || 0;
             }
 
-            if (field === 'tipo_movimiento') {
-                if (value === 'ingreso') { updated.valor_salida = 0; }
-                else { updated.valor_entrada = 0; }
-            }
-
             // Calcular saldo resultante
-            if (['valor_entrada', 'valor_salida', 'cuenta_id'].includes(field)) {
+            if (['valor', 'tipo_movimiento', 'cuenta_id'].includes(field)) {
                 const c = cuentas.find(c => c.id === updated.cuenta_id);
                 const base = c?.saldo_actual || 0;
                 updated.saldo_anterior = base;
-                updated.saldo = base + (parseFloat(updated.valor_entrada) || 0) - (parseFloat(updated.valor_salida) || 0);
+                if (updated.tipo_movimiento === 'ingreso') {
+                    updated.saldo_posterior = base + (parseFloat(updated.valor) || 0);
+                } else {
+                    updated.saldo_posterior = base - (parseFloat(updated.valor) || 0);
+                }
             }
 
             return updated;
@@ -123,16 +121,16 @@ export default function MovimientosBancarios() {
     const handleSave = async (e) => {
         e.preventDefault();
         if (!currentItem.cuenta_id) { alert('Seleccione una cuenta bancaria.'); return; }
-        const valor = (parseFloat(currentItem.valor_entrada) || 0) + (parseFloat(currentItem.valor_salida) || 0);
+        const valor = parseFloat(currentItem.valor) || 0;
         if (valor <= 0) { alert('El valor debe ser mayor a cero.'); return; }
         if (!TIPOS_MANUALES.includes(currentItem.documento_origen_tipo)) {
             alert('Solo puede registrar manualmente: Intereses Bancarios, Comisión Bancaria o Ajuste Bancario.');
             return;
         }
         try {
-            await MovimientoBancario.create({ ...currentItem, es_automatico: false });
+            await MovimientoBancario.create({ ...currentItem, es_automatico: false, estado: 'confirmado' });
             // Actualizar saldo de cuenta
-            await CuentaBancaria.update(currentItem.cuenta_id, { saldo_actual: currentItem.saldo });
+            await CuentaBancaria.update(currentItem.cuenta_id, { saldo_actual: currentItem.saldo_posterior });
             setShowModal(false);
             loadData();
             alert('Movimiento registrado.');

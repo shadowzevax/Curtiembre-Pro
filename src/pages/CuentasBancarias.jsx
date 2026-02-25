@@ -43,7 +43,9 @@ export default function CuentasBancarias() {
             banco: '',
             numero_cuenta: '',
             titular: '',
+            saldo_inicial: 0,
             saldo_actual: 0,
+            fecha_apertura: new Date().toISOString().split('T')[0],
             moneda: 'COP',
             estado: 'activa',
             observaciones: ''
@@ -124,7 +126,9 @@ export default function CuentasBancarias() {
                         <div><Label>Banco/Entidad *</Label><Input value={currentItem?.banco} onChange={e => setCurrentItem({...currentItem, banco: e.target.value})} required /></div>
                         <div><Label>No. Cuenta *</Label><Input value={currentItem?.numero_cuenta} onChange={e => setCurrentItem({...currentItem, numero_cuenta: e.target.value})} required /></div>
                         <div><Label>Titular</Label><Input value={currentItem?.titular} onChange={e => setCurrentItem({...currentItem, titular: e.target.value})} /></div>
-                        <div><Label>Saldo Inicial</Label><Input type="number" value={currentItem?.saldo_actual} onChange={e => setCurrentItem({...currentItem, saldo_actual: parseFloat(e.target.value) || 0})} /></div>
+                        <div><Label>Fecha Apertura</Label><Input type="date" value={currentItem?.fecha_apertura} onChange={e => setCurrentItem({...currentItem, fecha_apertura: e.target.value})} /></div>
+                        <div><Label>Saldo Inicial</Label><Input type="number" value={currentItem?.saldo_inicial} onChange={e => setCurrentItem({...currentItem, saldo_inicial: parseFloat(e.target.value) || 0, saldo_actual: !isEditing ? parseFloat(e.target.value) || 0 : currentItem?.saldo_actual})} /></div>
+                        {isEditing && <div><Label>Saldo Actual</Label><Input type="number" value={currentItem?.saldo_actual} readOnly className="bg-gray-100" /></div>}
                         <div><Label>Estado</Label><Select value={currentItem?.estado} onValueChange={v => setCurrentItem({...currentItem, estado: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="activa">Activa</SelectItem><SelectItem value="inactiva">Inactiva</SelectItem></SelectContent></Select></div>
                         <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} /></div>
                         <div className="flex justify-end gap-2 pt-4">
