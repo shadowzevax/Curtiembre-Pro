@@ -803,7 +803,7 @@ export default function Pintura() {
       <Dialog open={showEntregasModal} onOpenChange={setShowEntregasModal}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Control de Entregas Parciales - {selectedItem?.id_consecutivo}</DialogTitle>
+            <DialogTitle>Control de Entregas Parciales{selectedItem?.id_consecutivo ? ` - ${selectedItem.id_consecutivo}` : ''}</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
