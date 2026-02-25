@@ -93,7 +93,7 @@ export default function ConciliacionBancaria() {
     };
 
     return (
-        <div className="p-6">
+        <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
             <PageHeader 
                 title="Conciliación Bancaria"
                 description="Concilia movimientos bancarios con extractos."

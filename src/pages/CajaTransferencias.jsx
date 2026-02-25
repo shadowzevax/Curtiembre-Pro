@@ -198,7 +198,7 @@ export default function CajaTransferencias() {
     );
 
     return (
-        <div className="p-6">
+        <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
             <PageHeader 
                 title="Transferencias entre Cajas" 
                 description="Gestión de transferencias de efectivo entre cajas."
@@ -217,7 +217,7 @@ export default function CajaTransferencias() {
             </Card>
 
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Nueva Transferencia entre Cajas</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
                         <div><Label>Número de Transferencia</Label><Input value={currentItem?.numero_transferencia} readOnly className="bg-gray-100 font-mono font-bold" /></div>

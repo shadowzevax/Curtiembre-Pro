@@ -99,7 +99,7 @@ export default function CajaConfig() {
     };
 
     return (
-        <div className="p-6">
+        <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
             <PageHeader 
                 title="Configuración de Cajas" 
                 description="Gestiona las cajas del sistema."
@@ -118,7 +118,7 @@ export default function CajaConfig() {
             </Card>
 
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Caja</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
                         <div><Label>Código de Caja</Label><Input value={currentItem?.codigo_caja} readOnly className="bg-gray-100 font-mono font-bold" /></div>

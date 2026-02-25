@@ -283,7 +283,7 @@ export default function CajaMovimientos() {
     };
 
     return (
-        <div className="p-6">
+        <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
             <PageHeader 
                 title="Movimientos de Caja" 
                 description="Registro de entradas y salidas de efectivo."
@@ -333,7 +333,7 @@ export default function CajaMovimientos() {
             </Card>
 
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Movimiento de Caja</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">

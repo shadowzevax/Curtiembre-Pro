@@ -98,7 +98,7 @@ export default function CuentasBancarias() {
     );
 
     return (
-        <div className="p-6">
+        <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
             <PageHeader
                 title="Cuentas Bancarias"
                 description="Gestión de cuentas bancarias y billeteras digitales."
@@ -116,7 +116,7 @@ export default function CuentasBancarias() {
             </Card>
 
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent>
+                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Cuenta</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
                         <div><Label>Código de Cuenta</Label><Input value={currentItem?.codigo_cuenta} readOnly className="bg-gray-100 font-mono font-bold" /></div>

@@ -161,7 +161,7 @@ export default function TransferenciasBancarias() {
     );
 
     return (
-        <div className="p-6">
+        <div className="p-4 md:p-6 max-w-full overflow-x-hidden space-y-4">
             <PageHeader 
                 title="Transferencias Internas" 
                 description="Transferencias entre cuentas bancarias y cajas."
@@ -180,7 +180,7 @@ export default function TransferenciasBancarias() {
             </Card>
 
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle>Nueva Transferencia Interna</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
