@@ -61,11 +61,11 @@ export default function ConsolidarPedidos() {
       pedido.items?.forEach(item => {
         const color = item.color;
         if (!consolidado[color]) {
-          consolidado[color] = {};
+          consolidado[color] = { codigo_color: item.codigo_color || 'N/A' };
         }
         
         Object.keys(item).forEach(key => {
-          if (key !== 'color' && key !== 'total') {
+          if (key !== 'color' && key !== 'codigo_color' && key !== 'total') {
             allPlacas.add(key);
             consolidado[color][key] = (consolidado[color][key] || 0) + (item[key] || 0);
           }
@@ -77,9 +77,11 @@ export default function ConsolidarPedidos() {
     Object.keys(consolidado).forEach(color => {
       let total = 0;
       Object.keys(consolidado[color]).forEach(key => {
-        const valor = consolidado[color][key];
-        if (typeof valor === 'number') {
-          total += valor;
+        if (key !== 'codigo_color') {
+          const valor = consolidado[color][key];
+          if (typeof valor === 'number') {
+            total += valor;
+          }
         }
       });
       consolidado[color].total = total;
@@ -129,6 +131,7 @@ export default function ConsolidarPedidos() {
       <table style="width:100%; border-collapse:collapse; font-size:9px; margin-top:15px;">
         <thead>
           <tr style="background-color:#e5e7eb;">
+            <th style="border:1px solid #333; padding:5px; text-align:left;">CÓDIGO DE COLOR</th>
             <th style="border:1px solid #333; padding:5px; text-align:left;">COLOR</th>
             ${previewData.placas.map(p => `<th style="border:1px solid #333; padding:5px; text-align:center;">${p.toUpperCase()}</th>`).join('')}
             <th style="border:1px solid #333; padding:5px; text-align:center; background-color:#fef3c7;">TOTAL</th>
@@ -137,13 +140,14 @@ export default function ConsolidarPedidos() {
         <tbody>
           ${Object.keys(previewData.colores).map((color, idx) => `
             <tr style="background-color:${idx % 2 === 0 ? 'white' : '#f9fafb'};">
+              <td style="border:1px solid #333; padding:5px; font-weight:bold;">${previewData.colores[color].codigo_color}</td>
               <td style="border:1px solid #333; padding:5px; font-weight:bold;">${color}</td>
               ${previewData.placas.map(placa => `<td style="border:1px solid #333; padding:5px; text-align:center;">${previewData.colores[color][placa] || 0}</td>`).join('')}
               <td style="border:1px solid #333; padding:5px; text-align:center; font-weight:bold; background-color:#fef9e7;">${previewData.colores[color].total}</td>
             </tr>
           `).join('')}
           <tr style="background-color:#d1fae5; font-weight:bold;">
-            <td style="border:1px solid #333; padding:5px;">TOTALES</td>
+            <td style="border:1px solid #333; padding:5px;" colspan="2">TOTALES</td>
             ${previewData.placas.map(placa => {
               const total = Object.keys(previewData.colores).reduce((sum, color) => sum + (previewData.colores[color][placa] || 0), 0);
               return `<td style="border:1px solid #333; padding:5px; text-align:center;">${total}</td>`;
@@ -275,7 +279,8 @@ export default function ConsolidarPedidos() {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-100">
                    <tr>
-                     <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">COLOR</th>
+                     <th className="border p-2 text-left sticky left-0 bg-gray-100 z-10">CÓDIGO DE COLOR</th>
+                     <th className="border p-2 text-left bg-gray-100 z-10">COLOR</th>
                      {previewData.placas.map(placa => (
                        <th key={placa} className="border p-2 text-center">{placa.replace('_', ' ').toUpperCase()}</th>
                      ))}
@@ -285,7 +290,8 @@ export default function ConsolidarPedidos() {
                   <tbody>
                     {Object.keys(previewData.colores).map((color, idx) => (
                       <tr key={color} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="border p-2 font-medium sticky left-0 bg-white">{color}</td>
+                        <td className="border p-2 font-medium sticky left-0 bg-white">{previewData.colores[color].codigo_color}</td>
+                        <td className="border p-2 font-medium bg-white">{color}</td>
                         {previewData.placas.map(placa => (
                           <td key={placa} className="border p-2 text-center">
                             {previewData.colores[color][placa] || 0}
@@ -297,7 +303,7 @@ export default function ConsolidarPedidos() {
                       </tr>
                     ))}
                     <tr className="bg-green-100 font-bold">
-                      <td className="border p-2 sticky left-0 bg-green-100">TOTALES</td>
+                      <td className="border p-2 sticky left-0 bg-green-100" colSpan={2}>TOTALES</td>
                       {previewData.placas.map(placa => {
                         const total = Object.keys(previewData.colores).reduce(
                           (sum, color) => sum + (previewData.colores[color][placa] || 0),
