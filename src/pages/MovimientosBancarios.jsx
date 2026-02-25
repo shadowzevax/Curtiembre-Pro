@@ -143,9 +143,11 @@ export default function MovimientosBancarios() {
     const handleExport = () => {
         const rows = movFiltrados.map(m => {
             const cta = cuentas.find(c => c.id === m.cuenta_id);
-            return `"${formatDate(m.fecha)}","${cta?.banco || ''}","${m.tipo_movimiento}","${m.concepto}","${m.documento_origen_tipo || ''}","${m.documento_origen_id || ''}","${m.valor_entrada || 0}","${m.valor_salida || 0}","${m.saldo || 0}"`;
+            const entrada = m.tipo_movimiento === 'ingreso' ? m.valor || 0 : 0;
+            const salida = m.tipo_movimiento !== 'ingreso' ? m.valor || 0 : 0;
+            return `"${formatDate(m.fecha)}","${cta?.banco || ''}","${m.tipo_movimiento}","${m.concepto}","${m.documento_origen_tipo || ''}","${m.documento_origen_id || ''}","${entrada}","${salida}","${m.saldo_posterior || 0}"`;
         }).join('\n');
-        const csv = `Fecha,Banco,Tipo,Concepto,Origen Tipo,Origen ID,Entrada,Salida,Saldo\n${rows}`;
+        const csv = `Fecha,Banco,Tipo,Concepto,Origen Tipo,Origen ID,Entrada,Salida,Saldo Posterior\n${rows}`;
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
@@ -326,12 +328,12 @@ export default function MovimientosBancarios() {
                                                     )}
                                                 </td>
                                                 <td className="p-3 text-right font-medium text-green-600">
-                                                    {(m.valor_entrada || 0) > 0 ? formatCurrency(m.valor_entrada) : '-'}
+                                                    {m.tipo_movimiento === 'ingreso' && (m.valor || 0) > 0 ? formatCurrency(m.valor) : '-'}
                                                 </td>
                                                 <td className="p-3 text-right font-medium text-red-600">
-                                                    {(m.valor_salida || 0) > 0 ? formatCurrency(m.valor_salida) : '-'}
+                                                    {m.tipo_movimiento !== 'ingreso' && (m.valor || 0) > 0 ? formatCurrency(m.valor) : '-'}
                                                 </td>
-                                                <td className="p-3 text-right font-bold">{formatCurrency(m.saldo)}</td>
+                                                <td className="p-3 text-right font-bold">{formatCurrency(m.saldo_posterior)}</td>
                                                 <td className="p-3 text-center">
                                                     <span className={`text-xs px-1.5 py-0.5 rounded ${m.es_automatico ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
                                                         {m.es_automatico ? 'Auto' : 'Manual'}
@@ -345,8 +347,8 @@ export default function MovimientosBancarios() {
                                     <tfoot className="bg-gray-100 font-bold">
                                         <tr>
                                             <td colSpan="5" className="p-3 text-right">TOTALES:</td>
-                                            <td className="p-3 text-right text-green-700">{formatCurrency(movFiltrados.reduce((s, m) => s + (m.valor_entrada || 0), 0))}</td>
-                                            <td className="p-3 text-right text-red-700">{formatCurrency(movFiltrados.reduce((s, m) => s + (m.valor_salida || 0), 0))}</td>
+                                            <td className="p-3 text-right text-green-700">{formatCurrency(movFiltrados.filter(m => m.tipo_movimiento === 'ingreso').reduce((s, m) => s + (m.valor || 0), 0))}</td>
+                                            <td className="p-3 text-right text-red-700">{formatCurrency(movFiltrados.filter(m => m.tipo_movimiento !== 'ingreso').reduce((s, m) => s + (m.valor || 0), 0))}</td>
                                             <td colSpan="2"></td>
                                         </tr>
                                     </tfoot>
@@ -411,16 +413,10 @@ export default function MovimientosBancarios() {
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <Label>Valor Entrada</Label>
-                                <Input type="number" min="0" value={currentItem?.valor_entrada}
-                                    onChange={e => handleFieldChange('valor_entrada', parseFloat(e.target.value) || 0)}
-                                    disabled={currentItem?.tipo_movimiento === 'egreso'} className={currentItem?.tipo_movimiento === 'egreso' ? 'bg-gray-100' : ''} />
-                            </div>
-                            <div>
-                                <Label>Valor Salida</Label>
-                                <Input type="number" min="0" value={currentItem?.valor_salida}
-                                    onChange={e => handleFieldChange('valor_salida', parseFloat(e.target.value) || 0)}
-                                    disabled={currentItem?.tipo_movimiento === 'ingreso'} className={currentItem?.tipo_movimiento === 'ingreso' ? 'bg-gray-100' : ''} />
+                                <Label>Valor del Movimiento *</Label>
+                                <Input type="number" min="0" value={currentItem?.valor || ''}
+                                    onChange={e => handleFieldChange('valor', parseFloat(e.target.value) || 0)}
+                                />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -430,7 +426,7 @@ export default function MovimientosBancarios() {
                             </div>
                             <div>
                                 <Label>Saldo Resultante</Label>
-                                <Input value={formatCurrency(currentItem?.saldo)} readOnly className="bg-blue-50 font-bold text-sm" />
+                                <Input value={formatCurrency(currentItem?.saldo_posterior)} readOnly className="bg-blue-50 font-bold text-sm" />
                             </div>
                         </div>
                         <div>
