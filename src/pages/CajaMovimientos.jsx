@@ -249,7 +249,18 @@ export default function CajaMovimientos() {
     const handleDelete = async (id) => {
         if (!confirm('¿Eliminar este movimiento?')) return;
         try {
-            await MovimientoCaja.delete(id);
+            const movimiento = movimientos.find(m => m.id === id);
+            if (movimiento && cajaActual) {
+                const monto = parseFloat(movimiento.monto) || 0;
+                const nuevoSaldo = movimiento.tipo === 'entrada' ? 
+                    (cajaActual.saldo_actual || 0) - monto :
+                    (cajaActual.saldo_actual || 0) + monto;
+                
+                await MovimientoCaja.delete(id);
+                await Caja.update(cajaActual.id, { saldo_actual: nuevoSaldo });
+            } else {
+                await MovimientoCaja.delete(id);
+            }
             loadData();
         } catch (e) { alert('Error al eliminar.'); }
     };
