@@ -107,14 +107,15 @@ export default function ComprobanteEgreso() {
             await Caja.update(cajaData.id, { saldo_actual: nuevoSaldo });
             await MovimientoCaja.create({
               caja_id: cajaData.id,
-              codigo_caja: cajaData.codigo_caja,
               nombre_caja: cajaData.nombre,
-              fecha: currentItem.fecha,
+              fecha_movimiento: currentItem.fecha,
               tipo: 'salida',
               concepto: `Comprobante de Egreso: ${currentItem.concepto}`,
               responsable: currentItem.proveedor_cliente_id ? proveedores.find(p => p.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
-              valor_salida: valorPago,
-              saldo: nuevoSaldo,
+              monto: valorPago,
+              saldo_resultante: nuevoSaldo,
+              documento_origen_tipo: 'ComprobanteEgreso',
+              documento_origen_id: nuevoEgreso.id,
               documento_soporte: currentItem.prefijo
             });
           }

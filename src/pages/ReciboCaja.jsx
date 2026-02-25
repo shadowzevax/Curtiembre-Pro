@@ -91,14 +91,15 @@ export default function ReciboCaja() {
             await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
             await MovimientoCaja.create({
               caja_id: caja.id,
-              codigo_caja: caja.codigo_caja,
               nombre_caja: caja.nombre,
-              fecha: currentItem.fecha,
+              fecha_movimiento: currentItem.fecha,
               tipo: 'entrada',
               concepto: `Recibo de Caja: ${currentItem.concepto}`,
               responsable: currentItem.proveedor_cliente_id ? clientes.find(c => c.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
-              valor_entrada: valorCobro,
-              saldo: nuevoSaldo,
+              monto: valorCobro,
+              saldo_resultante: nuevoSaldo,
+              documento_origen_tipo: 'ReciboCaja',
+              documento_origen_id: nuevoRecibo.id,
               documento_soporte: currentItem.prefijo
             });
           }
