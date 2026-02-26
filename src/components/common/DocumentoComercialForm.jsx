@@ -709,47 +709,88 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     if ((finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') && finalData.valor_pagado > 0) {
         try {
             if (tipoDocumento === 'venta') {
-                // Generar Recibo de Caja automáticamente
-                const { ReciboCaja } = await import('@/entities/all');
-                const lastRecibos = await ReciboCaja.list('-created_date', 1);
-                const nextNum = lastRecibos.length > 0 ? parseInt(lastRecibos[0].numero_recibo || '0') + 1 : 1;
+                const clienteNombre = terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '');
+                const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
 
-                await ReciboCaja.create({
-                    numero_recibo: String(nextNum).padStart(6, '0'),
-                    fecha: finalData.fecha_orden,
-                    tipo_ingreso: 'venta',
-                    tercero_id: finalData.cliente_id || '',
-                    tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || ''),
-                    concepto: `Venta ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                    valor: finalData.valor_pagado,
-                    medio_pago: finalData.forma_pago || 'efectivo',
-                    cuenta_destino_id: finalData.cuenta_destino_id || '',
-                    cuenta_destino_nombre: finalData.cuenta_destino_nombre || 'CAJA GENERAL',
-                    venta_id: orderId,
-                    generado_automaticamente: true,
-                    observaciones: `Generado automáticamente por venta ${finalData.condicion_pago}`
-                });
-
-                // Actualizar saldo de caja o cuenta bancaria
+                // Generar MovimientoCaja si pago en efectivo
                 if (finalData.forma_pago === 'efectivo' && finalData.cuenta_destino_id) {
-                    const { Caja } = await import('@/entities/all');
-                    const caja = await Caja.get(finalData.cuenta_destino_id);
-                    if (caja) {
-                        await Caja.update(caja.id, {
-                            saldo_actual: (caja.saldo_actual || 0) + finalData.valor_pagado
+                    const { MovimientoCaja } = await import('@/entities/all');
+                    // Verificar duplicado por documento_origen_id
+                    const existentes = await MovimientoCaja.filter({ documento_origen_id: orderId, documento_origen_tipo: 'OrdenVenta' });
+                    if (existentes.length === 0) {
+                        // Calcular saldo resultante sumando todos los movimientos anteriores de esa caja
+                        const movsPrevios = await MovimientoCaja.filter({ caja_id: finalData.cuenta_destino_id });
+                        const saldoPrevio = movsPrevios.reduce((acc, m) => {
+                            return acc + (m.tipo_movimiento === 'entrada' ? (parseFloat(m.valor) || 0) : -(parseFloat(m.valor) || 0));
+                        }, 0);
+                        const saldoResultante = saldoPrevio + (parseFloat(finalData.valor_pagado) || 0);
+
+                        await MovimientoCaja.create({
+                            caja_id: finalData.cuenta_destino_id,
+                            nombre_caja: finalData.cuenta_destino_nombre || '',
+                            fecha: finalData.fecha_emision_documento || finalData.fecha_orden,
+                            tipo_movimiento: 'entrada',
+                            concepto: `Venta ${noIdDoc} - ${clienteNombre}`,
+                            documento_origen_tipo: 'OrdenVenta',
+                            documento_origen_id: orderId,
+                            responsable: clienteNombre,
+                            valor: parseFloat(finalData.valor_pagado) || 0,
+                            saldo_resultante: saldoResultante,
+                            observacion: `Ingreso por venta ${noIdDoc}`,
+                            usuario_creacion: 'sistema'
                         });
+                        console.log('✅ MovimientoCaja ENTRADA generado para venta');
                     }
                 } else if (finalData.forma_pago !== 'efectivo' && finalData.cuenta_destino_id) {
-                    const { CuentaBancaria } = await import('@/entities/all');
-                    const cuenta = await CuentaBancaria.get(finalData.cuenta_destino_id);
-                    if (cuenta) {
-                        await CuentaBancaria.update(cuenta.id, {
-                            saldo_actual: (cuenta.saldo_actual || 0) + finalData.valor_pagado
+                    // Pago bancario → MovimientoBancario
+                    const { MovimientoBancario, CuentaBancaria: CB } = await import('@/entities/all');
+                    const cuentasData = await CB.filter({ id: finalData.cuenta_destino_id });
+                    if (cuentasData.length > 0) {
+                        const cuenta = cuentasData[0];
+                        const nuevoSaldo = (cuenta.saldo_actual || 0) + (parseFloat(finalData.valor_pagado) || 0);
+                        await CB.update(cuenta.id, { saldo_actual: nuevoSaldo });
+                        await MovimientoBancario.create({
+                            cuenta_id: cuenta.id,
+                            fecha: finalData.fecha_emision_documento || finalData.fecha_orden,
+                            tipo_movimiento: 'ingreso',
+                            concepto: `Venta ${noIdDoc} - ${clienteNombre}`,
+                            tercero_nombre: clienteNombre,
+                            valor: parseFloat(finalData.valor_pagado) || 0,
+                            saldo_posterior: nuevoSaldo,
+                            documento_origen_tipo: 'OrdenVenta',
+                            documento_origen_id: orderId,
+                            es_automatico: true
                         });
                     }
                 }
 
-                console.log('✅ Recibo de Caja generado automáticamente');
+                // Generar Cuenta por Cobrar para mixto (saldo pendiente)
+                if (finalData.condicion_pago === 'mixto' && finalData.saldo_pendiente > 0) {
+                    const { CuentaPorCobrar } = await import('@/entities/all');
+                    const existentesCpc = await CuentaPorCobrar.filter({ documento_origen_id: orderId });
+                    if (existentesCpc.length === 0) {
+                        await CuentaPorCobrar.create({
+                            id_cuenta: `CPC-${Date.now()}`,
+                            cliente_id: finalData.cliente_id,
+                            cliente_nombre: clienteNombre,
+                            cliente_nit: finalData.cc_nit_cliente || '',
+                            tipo_documento: finalData.tipo_documento_venta || finalData.tipo_documento,
+                            numero_documento: noIdDoc,
+                            documento_origen_id: orderId,
+                            modulo_origen: 'ventas',
+                            fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
+                            fecha_vencimiento: finalData.fecha_vencimiento,
+                            valor_total: finalData.saldo_pendiente,
+                            valor_cobrado: 0,
+                            saldo_pendiente: finalData.saldo_pendiente,
+                            estado: 'pendiente',
+                            historial_cobros: []
+                        });
+                        console.log('✅ CuentaPorCobrar (saldo mixto) generada automáticamente');
+                    }
+                }
+
+                console.log('✅ Automatización de venta contado/mixto completada');
             } else {
                 // Generar Comprobante de Egreso automáticamente
                 const { ComprobanteEgreso } = await import('@/entities/all');
