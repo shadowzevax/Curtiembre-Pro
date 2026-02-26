@@ -84,19 +84,22 @@ export default function ReciboCaja() {
         
         // Afectar Caja o Bancos
         if (currentItem.medio_pago === 'efectivo') {
-          const cajasData = await Caja.filter({ nombre: 'CAJA GENERAL' });
-          if (cajasData && cajasData.length > 0) {
-            const caja = cajasData[0];
+          if (!currentItem.caja_id) {
+             alert("Por favor seleccione una caja activa para el ingreso en efectivo.");
+             return;
+          }
+          const caja = cajas.find(c => c.id === currentItem.caja_id);
+          if (caja) {
             const nuevoSaldo = (caja.saldo_actual || 0) + valorCobro;
             await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
             await MovimientoCaja.create({
               caja_id: caja.id,
               nombre_caja: caja.nombre,
-              fecha_movimiento: currentItem.fecha,
-              tipo: 'entrada',
+              fecha: currentItem.fecha,
+              tipo_movimiento: 'entrada',
               concepto: `Recibo de Caja: ${currentItem.concepto}`,
               responsable: currentItem.proveedor_cliente_id ? clientes.find(c => c.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
-              monto: valorCobro,
+              valor: valorCobro,
               saldo_resultante: nuevoSaldo,
               documento_origen_tipo: 'ReciboCaja',
               documento_origen_id: nuevoRecibo.id,
@@ -304,6 +307,26 @@ export default function ReciboCaja() {
                 <Input type="date" value={currentItem?.fecha || ''} onChange={e => setCurrentItem({ ...currentItem, fecha: e.target.value })} required />
               </div>
             </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Caja ID *</Label>
+                <Select value={currentItem?.caja_id || ''} onValueChange={v => {
+                  const caja = cajas.find(c => c.id === v);
+                  setCurrentItem({...currentItem, caja_id: v, nombre_caja: caja?.nombre || ''});
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccione una caja" /></SelectTrigger>
+                  <SelectContent>
+                    {cajas.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo_caja} - {c.nombre}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Nombre de la Caja</Label>
+                <Input value={currentItem?.nombre_caja || ''} readOnly className="bg-gray-100" placeholder="Nombre autocompletado" />
+              </div>
+            </div>
+
             <div>
               <Label>Tipo de Ingreso</Label>
               <Select value={currentItem?.tipo_ingreso || 'venta'} onValueChange={v => setCurrentItem({ ...currentItem, tipo_ingreso: v })}>

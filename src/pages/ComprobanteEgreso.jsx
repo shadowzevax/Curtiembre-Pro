@@ -100,19 +100,19 @@ export default function ComprobanteEgreso() {
 
         // Afectar Caja o Bancos
         if (currentItem.medio_pago === 'caja' && currentItem.cuenta_destino_id) {
-          const caja = await Caja.filter({ id: currentItem.cuenta_destino_id });
-          if (caja && caja.length > 0) {
-            const cajaData = caja[0];
+          const caja = cajas.find(c => c.id === currentItem.cuenta_destino_id);
+          if (caja) {
+            const cajaData = caja;
             const nuevoSaldo = (cajaData.saldo_actual || 0) - valorPago;
             await Caja.update(cajaData.id, { saldo_actual: nuevoSaldo });
             await MovimientoCaja.create({
               caja_id: cajaData.id,
               nombre_caja: cajaData.nombre,
-              fecha_movimiento: currentItem.fecha,
-              tipo: 'salida',
+              fecha: currentItem.fecha,
+              tipo_movimiento: 'salida',
               concepto: `Comprobante de Egreso: ${currentItem.concepto}`,
               responsable: currentItem.proveedor_cliente_id ? proveedores.find(p => p.id === currentItem.proveedor_cliente_id)?.nombre || '' : '',
-              monto: valorPago,
+              valor: valorPago,
               saldo_resultante: nuevoSaldo,
               documento_origen_tipo: 'ComprobanteEgreso',
               documento_origen_id: nuevoEgreso.id,
@@ -372,15 +372,16 @@ export default function ComprobanteEgreso() {
 
             {currentItem?.medio_pago === 'caja' && (
               <div>
-                <Label>Seleccionar Caja *</Label>
-                <Select value={currentItem?.cuenta_destino_nombre || ''} onValueChange={v => {
-                  const caja = cajas.find(c => c.nombre === v);
-                  setCurrentItem({...currentItem, cuenta_destino_nombre: v, cuenta_destino_id: caja?.id || ''});
+                <Label>Seleccionar Caja Activa *</Label>
+                <Select value={currentItem?.cuenta_destino_id || ''} onValueChange={v => {
+                  const caja = cajas.find(c => c.id === v);
+                  setCurrentItem({...currentItem, cuenta_destino_id: v, cuenta_destino_nombre: caja?.nombre || ''});
                 }}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CAJA GENERAL">CAJA GENERAL</SelectItem>
-                    <SelectItem value="CAJA MENOR">CAJA MENOR</SelectItem>
+                    {cajas.filter(c => c.estado === 'activa').map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.codigo_caja} - {c.nombre}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

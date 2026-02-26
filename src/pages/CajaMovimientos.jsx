@@ -64,17 +64,17 @@ export default function CajaMovimientos() {
             setCurrentItem({
                 caja_id: cajaActual?.id || '',
                 nombre_caja: cajaActual?.nombre || '',
-                fecha_movimiento: new Date().toISOString().split('T')[0],
-                tipo: 'entrada',
+                fecha: new Date().toISOString().split('T')[0],
+                tipo_movimiento: 'entrada',
                 concepto: '',
                 documento_origen_tipo: '',
                 documento_origen_id: '',
                 responsable: '',
-                monto: 0,
+                valor: 0,
                 saldo_resultante: cajaActual?.saldo_actual || 0,
-                observaciones: '',
+                observacion: '',
                 documento_soporte: '',
-                usuario_id: 'current_user'
+                usuario_creacion: 'current_user'
             });
         }
         setShowModal(true);
@@ -100,12 +100,12 @@ export default function CajaMovimientos() {
                 }
             }
             
-            if (field === 'monto' || field === 'tipo' || field === 'caja_id') {
+            if (field === 'valor' || field === 'tipo_movimiento' || field === 'caja_id') {
                 const caja = cajas.find(c => c.id === updated.caja_id);
                 const saldoActual = caja ? (caja.saldo_actual || 0) : 0;
-                const montoMovimiento = parseFloat(updated.monto) || 0;
+                const montoMovimiento = parseFloat(updated.valor) || 0;
                 
-                if (updated.tipo === 'entrada') {
+                if (updated.tipo_movimiento === 'entrada') {
                     updated.saldo_resultante = saldoActual + montoMovimiento;
                 } else {
                     updated.saldo_resultante = saldoActual - montoMovimiento;

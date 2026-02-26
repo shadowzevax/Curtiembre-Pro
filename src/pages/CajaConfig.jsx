@@ -59,8 +59,8 @@ export default function CajaConfig() {
         try {
             const { MovimientoCaja } = await import('@/entities/all');
             const movimientos = await MovimientoCaja.filter({ caja_id: caja.id });
-            const entradas = movimientos.filter(m => m.tipo === 'entrada').reduce((sum, m) => sum + (m.monto || 0), 0);
-            const salidas = movimientos.filter(m => m.tipo === 'salida').reduce((sum, m) => sum + (m.monto || 0), 0);
+            const entradas = movimientos.filter(m => m.tipo_movimiento === 'entrada').reduce((sum, m) => sum + (m.valor || 0), 0);
+            const salidas = movimientos.filter(m => m.tipo_movimiento === 'salida').reduce((sum, m) => sum + (m.valor || 0), 0);
             const saldoCalculado = (caja.saldo_inicial || 0) + entradas - salidas;
 
             await Caja.update(caja.id, { saldo_actual: saldoCalculado });
@@ -102,13 +102,12 @@ export default function CajaConfig() {
 
     const headers = ["Código", "Nombre", "Tipo", "Responsable", "Saldo Inicial", "Saldo Actual", "Estado", "Acciones"];
     const renderRow = (c) => {
-        const responsable = empleados.find(e => e.id === c.responsable_id);
         return (
             <tr key={c.id}>
                 <td className="font-mono font-bold">{c.codigo_caja}</td>
                 <td className="font-bold">{c.nombre}</td>
                 <td className="capitalize">{c.tipo}</td>
-                <td>{responsable?.nombre || 'N/A'}</td>
+                <td>{c.responsable_id || 'N/A'}</td>
                 <td className="text-right">{formatCurrency(c.saldo_inicial)}</td>
                 <td className="text-right font-bold text-emerald-700">{formatCurrency(c.saldo_actual)}</td>
                 <td><span className={`px-2 py-1 rounded-full text-xs ${c.estado === 'activa' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{c.estado}</span></td>
@@ -163,13 +162,8 @@ export default function CajaConfig() {
                                 </Select>
                             </div>
                             <div>
-                                <Label>Responsable</Label>
-                                <Select value={currentItem?.responsable_id} onValueChange={v => setCurrentItem({...currentItem, responsable_id: v})}>
-                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                                    <SelectContent>
-                                        {empleados.map(e => <SelectItem key={e.id} value={e.id}>{e.nombre}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                                <Label>Responsable (Nombre editable)</Label>
+                                <Input value={currentItem?.responsable_id || ''} onChange={e => setCurrentItem({...currentItem, responsable_id: e.target.value})} placeholder="Ej: Juan Perez" />
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
