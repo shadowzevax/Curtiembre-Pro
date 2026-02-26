@@ -1447,15 +1447,16 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                  {formData.forma_pago === 'efectivo' ? (
                                      <div>
                                          <Label className="font-bold">Caja * (Obligatorio para Efectivo)</Label>
-                                         <Select value={formData.cuenta_destino_nombre} onValueChange={v => {
-                                             handleInputChange('cuenta_destino_nombre', v);
-                                             const caja = cajas.find(c => c.nombre === v);
-                                             if (caja) handleInputChange('cuenta_destino_id', caja.id);
+                                         <Select value={formData.cuenta_destino_id} onValueChange={v => {
+                                             const caja = cajas.find(c => c.id === v);
+                                             handleInputChange('cuenta_destino_id', v);
+                                             handleInputChange('cuenta_destino_nombre', caja ? caja.nombre : '');
                                          }} required>
                                              <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                                              <SelectContent>
-                                                 <SelectItem value="CAJA GENERAL">CAJA GENERAL</SelectItem>
-                                                 <SelectItem value="CAJA MENOR">CAJA MENOR</SelectItem>
+                                                 {cajas.map(c => (
+                                                     <SelectItem key={c.id} value={c.id}>{c.caja_id ? `${c.caja_id} - ` : ''}{c.nombre}</SelectItem>
+                                                 ))}
                                              </SelectContent>
                                          </Select>
                                      </div>
