@@ -439,6 +439,61 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
     // Validación eliminada - permitir cualquier fecha
 
+    // ─── VALIDACIONES PARA VENTAS ───────────────────────────────────────────
+    if (tipoDocumento === 'venta' && !documento) {
+        const totalNeto = totals.totalNeto;
+
+        if (totalNeto <= 0) {
+            alert('⚠️ El Total Neto debe ser mayor a cero para guardar la venta.');
+            setLoading(false);
+            return;
+        }
+
+        if (finalData.condicion_pago === 'contado') {
+            if (finalData.forma_pago === 'efectivo' && !finalData.cuenta_destino_id) {
+                alert('⚠️ CONTADO con pago en EFECTIVO requiere seleccionar una Caja.');
+                setLoading(false);
+                return;
+            }
+        }
+
+        if (finalData.condicion_pago === 'credito') {
+            if (!finalData.fecha_vencimiento) {
+                alert('⚠️ CRÉDITO requiere una Fecha de Vencimiento obligatoria.');
+                setLoading(false);
+                return;
+            }
+            if ((parseFloat(finalData.valor_pagado) || 0) > 0) {
+                alert('⚠️ En CRÉDITO no se permite registrar valor pagado mayor a cero.');
+                setLoading(false);
+                return;
+            }
+            finalData.valor_pagado = 0;
+            finalData.saldo_pendiente = totalNeto;
+        }
+
+        if (finalData.condicion_pago === 'mixto') {
+            const pagado = parseFloat(finalData.valor_pagado) || 0;
+            if (pagado <= 0) {
+                alert('⚠️ MIXTO requiere un Valor Pagado mayor a cero.');
+                setLoading(false);
+                return;
+            }
+            if (pagado > totalNeto) {
+                alert('⚠️ El Valor Pagado no puede ser mayor al Total Neto.');
+                setLoading(false);
+                return;
+            }
+            if (finalData.forma_pago === 'efectivo' && !finalData.cuenta_destino_id) {
+                alert('⚠️ MIXTO con pago en EFECTIVO requiere seleccionar una Caja.');
+                setLoading(false);
+                return;
+            }
+            finalData.saldo_pendiente = totalNeto - pagado;
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // Guardar la orden primero
     try {
         const savedOrder = await onSubmit(finalData);
