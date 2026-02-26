@@ -21,6 +21,7 @@ export default function ReciboCaja() {
   const [recibos, setRecibos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [cajas, setCajas] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -37,14 +38,16 @@ export default function ReciboCaja() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cuentasData, clientesData, bancosData] = await Promise.all([
+      const [cuentasData, clientesData, bancosData, cajasData] = await Promise.all([
         CuentaContable.filter({ tipo_cuenta: 'otros_ingresos' }),
         Cliente.list(),
-        CuentaBancaria.list()
+        CuentaBancaria.list(),
+        Caja.list()
       ]);
       setRecibos(cuentasData);
       setClientes(clientesData);
       setCuentasBancarias(bancosData.filter(b => b.estado === 'activa'));
+      setCajas(cajasData.filter(c => c.estado === 'activa'));
     } catch (error) {
       console.error("Error:", error);
     } finally {

@@ -126,25 +126,25 @@ export default function CajaMovimientos() {
             }
 
             // Validación: Caja menor solo recibe transferencias
-            if (caja.codigo_caja === 'CAJA-MENOR' && currentItem.tipo === 'entrada' && 
+            if (caja.codigo_caja === 'CAJA-MENOR' && currentItem.tipo_movimiento === 'entrada' && 
                 !currentItem.concepto.toLowerCase().includes('recibo desde caja general')) {
                 alert('Caja Menor solo puede recibir transferencias desde Caja General');
                 return;
             }
 
-            const valor = parseFloat(currentItem.monto) || 0;
+            const valorMonto = parseFloat(currentItem.valor) || 0;
 
-            if (valor <= 0) {
+            if (valorMonto <= 0) {
                 alert('El monto debe ser mayor a cero');
                 return;
             }
 
             const saldoAnterior = caja.saldo_actual || 0;
-            const nuevoSaldo = currentItem.tipo === 'entrada' ? 
-                saldoAnterior + valor : 
-                saldoAnterior - valor;
+            const nuevoSaldo = currentItem.tipo_movimiento === 'entrada' ? 
+                saldoAnterior + valorMonto : 
+                saldoAnterior - valorMonto;
 
-            if (nuevoSaldo < 0 && currentItem.tipo === 'salida') {
+            if (nuevoSaldo < 0 && currentItem.tipo_movimiento === 'salida') {
                 alert('Saldo insuficiente en la caja.');
                 return;
             }
@@ -208,29 +208,32 @@ export default function CajaMovimientos() {
             });
 
             // Registrar egreso en Caja General
+            const transferId = `TRANS-${Date.now()}`;
             await MovimientoCaja.create({
                 caja_id: cajaOrigen.id,
-                codigo_caja: cajaOrigen.codigo_caja,
                 nombre_caja: cajaOrigen.nombre,
-                fecha,
-                tipo: 'salida',
+                fecha: fecha,
+                tipo_movimiento: 'salida',
                 concepto: transferenciaData.concepto || 'Traslado a Caja Menor',
                 responsable: transferenciaData.responsable,
-                valor_salida: valor,
-                saldo: nuevoSaldoOrigen
+                valor: valor,
+                saldo_resultante: nuevoSaldoOrigen,
+                documento_origen_tipo: 'TransferenciaCaja',
+                documento_origen_id: transferId
             });
 
             // Registrar ingreso en Caja Menor
             await MovimientoCaja.create({
                 caja_id: cajaDestino.id,
-                codigo_caja: cajaDestino.codigo_caja,
                 nombre_caja: cajaDestino.nombre,
-                fecha,
-                tipo: 'entrada',
+                fecha: fecha,
+                tipo_movimiento: 'entrada',
                 concepto: 'Recibo desde Caja General',
                 responsable: transferenciaData.responsable,
-                valor_entrada: valor,
-                saldo: nuevoSaldoDestino
+                valor: valor,
+                saldo_resultante: nuevoSaldoDestino,
+                documento_origen_tipo: 'TransferenciaCaja',
+                documento_origen_id: transferId
             });
 
             // Actualizar saldos
@@ -250,9 +253,14 @@ export default function CajaMovimientos() {
         if (!confirm('¿Eliminar este movimiento?')) return;
         try {
             const movimiento = movimientos.find(m => m.id === id);
+            
+            if (movimiento && movimiento.documento_origen_tipo && !confirm('Este movimiento tiene un documento origen. ¿Seguro de eliminarlo manualmente?')) {
+                return;
+            }
+
             if (movimiento && cajaActual) {
-                const monto = parseFloat(movimiento.monto) || 0;
-                const nuevoSaldo = movimiento.tipo === 'entrada' ? 
+                const monto = parseFloat(movimiento.valor) || 0;
+                const nuevoSaldo = movimiento.tipo_movimiento === 'entrada' ? 
                     (cajaActual.saldo_actual || 0) - monto :
                     (cajaActual.saldo_actual || 0) + monto;
                 
@@ -286,11 +294,11 @@ export default function CajaMovimientos() {
     const renderRow = (m) => {
         return (
             <tr key={m.id}>
-                <td>{m.fecha_movimiento ? new Date(m.fecha_movimiento).toLocaleDateString() : 'N/A'}</td>
-                <td className="font-bold">{cajas.find(c => c.id === m.caja_id)?.nombre || 'N/A'}</td>
+                <td>{m.fecha ? new Date(m.fecha).toLocaleDateString() : 'N/A'}</td>
+                <td className="font-bold">{cajas.find(c => c.id === m.caja_id)?.nombre || m.nombre_caja || 'N/A'}</td>
                 <td>
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${m.tipo === 'entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {m.tipo?.toUpperCase()}
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${m.tipo_movimiento === 'entrada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {m.tipo_movimiento?.toUpperCase()}
                     </span>
                 </td>
                 <td>{m.concepto}</td>
@@ -302,8 +310,8 @@ export default function CajaMovimientos() {
                     ) : 'N/A'}
                 </td>
                 <td>{m.responsable || 'N/A'}</td>
-                <td className={`text-right font-bold ${m.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
-                    {m.tipo === 'entrada' ? '+' : '-'}{formatCurrency(m.monto)}
+                <td className={`text-right font-bold ${m.tipo_movimiento === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
+                    {m.tipo_movimiento === 'entrada' ? '+' : '-'}{formatCurrency(m.valor)}
                 </td>
                 <td className="text-right font-bold">{formatCurrency(m.saldo_resultante)}</td>
                 <td>
@@ -377,12 +385,12 @@ export default function CajaMovimientos() {
                                 <Label>Caja *</Label>
                                 <Input value={currentItem?.nombre_caja || ''} readOnly className="bg-gray-100 font-bold" />
                             </div>
-                            <div><Label>Fecha Movimiento *</Label><Input type="date" value={currentItem?.fecha_movimiento || ''} onChange={e => handleInputChange('fecha_movimiento', e.target.value)} required /></div>
+                            <div><Label>Fecha Movimiento *</Label><Input type="date" value={currentItem?.fecha || ''} onChange={e => handleInputChange('fecha', e.target.value)} required /></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label>Tipo de Movimiento *</Label>
-                                <Select value={currentItem?.tipo || 'entrada'} onValueChange={v => handleInputChange('tipo', v)}>
+                                <Select value={currentItem?.tipo_movimiento || 'entrada'} onValueChange={v => handleInputChange('tipo_movimiento', v)}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="entrada">INGRESO</SelectItem>
@@ -390,7 +398,7 @@ export default function CajaMovimientos() {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div><Label>Monto *</Label><Input type="number" step="0.01" min="0.01" value={currentItem?.monto || ''} onChange={e => handleInputChange('monto', parseFloat(e.target.value) || 0)} required /></div>
+                            <div><Label>Monto *</Label><Input type="number" step="0.01" min="0.01" value={currentItem?.valor || ''} onChange={e => handleInputChange('valor', parseFloat(e.target.value) || 0)} required /></div>
                         </div>
                         <div><Label>Concepto *</Label><Input value={currentItem?.concepto || ''} onChange={e => handleInputChange('concepto', e.target.value)} required /></div>
                         <div className="grid grid-cols-2 gap-4">
@@ -399,7 +407,7 @@ export default function CajaMovimientos() {
                         </div>
                         <div><Label>Responsable</Label><Input value={currentItem?.responsable || ''} onChange={e => handleInputChange('responsable', e.target.value)} placeholder="Nombre del responsable" /></div>
                         <div><Label>Saldo Automático</Label><Input type="number" value={currentItem?.saldo_resultante || 0} readOnly className="bg-emerald-50 font-bold text-lg text-emerald-800" /></div>
-                        <div><Label>Observaciones</Label><Input value={currentItem?.observaciones} onChange={e => handleInputChange('observaciones', e.target.value)} /></div>
+                        <div><Label>Observaciones</Label><Input value={currentItem?.observacion || ''} onChange={e => handleInputChange('observacion', e.target.value)} /></div>
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
                             <Button type="submit">Guardar</Button>
