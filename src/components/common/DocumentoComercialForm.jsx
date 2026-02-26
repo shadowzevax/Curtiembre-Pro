@@ -859,6 +859,38 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         }
     }
 
+    // GENERAR CUENTA POR COBRAR si es venta a crédito (puro)
+    if (tipoDocumento === 'venta' && !documento && finalData.condicion_pago === 'credito' && finalData.saldo_pendiente > 0) {
+        try {
+            const { CuentaPorCobrar } = await import('@/entities/all');
+            const existentesCpc = await CuentaPorCobrar.filter({ documento_origen_id: orderId });
+            if (existentesCpc.length === 0) {
+                const clienteNombre = terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '');
+                const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
+                await CuentaPorCobrar.create({
+                    id_cuenta: `CPC-${Date.now()}`,
+                    cliente_id: finalData.cliente_id,
+                    cliente_nombre: clienteNombre,
+                    cliente_nit: finalData.cc_nit_cliente || '',
+                    tipo_documento: finalData.tipo_documento_venta || finalData.tipo_documento,
+                    numero_documento: noIdDoc,
+                    documento_origen_id: orderId,
+                    modulo_origen: 'ventas',
+                    fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
+                    fecha_vencimiento: finalData.fecha_vencimiento,
+                    valor_total: finalData.saldo_pendiente,
+                    valor_cobrado: 0,
+                    saldo_pendiente: finalData.saldo_pendiente,
+                    estado: 'pendiente',
+                    historial_cobros: []
+                });
+                console.log('✅ CuentaPorCobrar CRÉDITO generada automáticamente');
+            }
+        } catch (e) {
+            console.error('Error generando cuenta por cobrar:', e);
+        }
+    }
+
     // GENERAR CUENTA POR PAGAR si es compra a crédito
     if (tipoDocumento === 'compra' && finalData.condicion_pago === 'credito' && finalData.saldo_pendiente > 0) {
         try {
