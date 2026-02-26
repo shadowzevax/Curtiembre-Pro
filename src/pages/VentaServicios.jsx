@@ -234,7 +234,10 @@ export default function VentaServicios() {
             {showForm && (
                 <DocumentoComercialForm
                     open={showForm}
-                    onOpenChange={setShowForm}
+                    onOpenChange={(open) => {
+                        setShowForm(open);
+                        if (!open) { setEditingOrder(null); loadData(); }
+                    }}
                     onSubmit={handleSubmit}
                     documento={editingOrder}
                     terceros={clientes}
