@@ -48,7 +48,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   const loadCuentas = async () => {
       try {
           const [cajasData, bancosData, comprasData] = await Promise.all([
-              Caja.list(),
+              Caja.filter({ estado: 'activa' }),
               CuentaBancaria.list(),
               OrdenCompra.list()
           ]);
