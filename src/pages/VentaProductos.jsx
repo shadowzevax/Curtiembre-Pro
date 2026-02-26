@@ -117,49 +117,11 @@ export default function VentaProductos() {
     };
     
     const handleSubmit = async (orderData) => {
-        setLoading(true);
-        try {
-            let savedOrder;
-            if (editingOrder) {
-                await OrdenVenta.update(editingOrder.id, orderData);
-                savedOrder = { id: editingOrder.id };
-            } else {
-                savedOrder = await OrdenVenta.create(orderData);
-            }
-            const orderId = savedOrder?.id;
-            
-            // Si es CRÉDITO, generar cuenta por cobrar
-            if (!editingOrder && orderData.condicion_pago === 'credito' && orderData.saldo_pendiente > 0) {
-                const { CuentaPorCobrar } = await import('@/entities/all');
-                const cliente = clientes.find(c => c.id === orderData.cliente_id);
-                await CuentaPorCobrar.create({
-                    id_cuenta: `CPC-${Date.now()}`,
-                    cliente_id: orderData.cliente_id,
-                    cliente_nombre: cliente?.nombre || '',
-                    cliente_nit: cliente?.numero_identificacion || '',
-                    tipo_documento: orderData.tipo_documento_venta || orderData.tipo_documento,
-                    numero_documento: orderData.numero_documento,
-                    documento_origen_id: orderId,
-                    modulo_origen: 'ventas',
-                    fecha_documento: orderData.fecha_orden,
-                    fecha_vencimiento: orderData.fecha_vencimiento,
-                    valor_total: orderData.total,
-                    valor_cobrado: 0,
-                    saldo_pendiente: orderData.total,
-                    estado: 'pendiente',
-                    historial_cobros: []
-                });
-            }
-            
-            alert('✅ GUARDADO EXITOSAMENTE');
-            setShowForm(false);
-            setEditingOrder(null);
-            loadData();
-        } catch (error) {
-            console.error("Error saving order:", error);
-            alert("Error al guardar la orden: " + error.message);
-        } finally {
-            setLoading(false);
+        if (editingOrder) {
+            await OrdenVenta.update(editingOrder.id, orderData);
+            return { id: editingOrder.id };
+        } else {
+            return await OrdenVenta.create(orderData);
         }
     };
     
