@@ -238,15 +238,11 @@ export default function VentaProductos() {
             {showForm && (
                 <DocumentoComercialForm
                     open={showForm}
-                    onOpenChange={setShowForm}
-                    onSubmit={async (orderData) => {
-                        if (editingOrder) {
-                            await OrdenVenta.update(editingOrder.id, orderData);
-                            return { id: editingOrder.id };
-                        } else {
-                            return await OrdenVenta.create(orderData);
-                        }
+                    onOpenChange={(open) => {
+                        setShowForm(open);
+                        if (!open) { setEditingOrder(null); loadData(); }
                     }}
+                    onSubmit={handleSubmit}
                     documento={editingOrder}
                     terceros={clientes}
                     itemsCatalogo={productos}
