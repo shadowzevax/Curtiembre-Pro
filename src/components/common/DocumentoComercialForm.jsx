@@ -856,19 +856,33 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                     const cajasData = await Caja.filter({ id: finalData.cuenta_destino_id });
                     if (cajasData && cajasData.length > 0) {
                         const caja = cajasData[0];
-                        const nuevoSaldo = (caja.saldo_actual || 0) - finalData.valor_pagado;
-                        await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
-                        await MovimientoCaja.create({
-                            caja_id: caja.id,
-                            codigo_caja: caja.codigo_caja,
-                            nombre_caja: caja.nombre,
-                            fecha: finalData.fecha_orden,
-                            tipo: 'salida',
-                            concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                            responsable: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
-                            valor_salida: finalData.valor_pagado,
-                            saldo: nuevoSaldo
-                        });
+                        const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
+                        const proveedorNombre = terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || '');
+                        // Verificar duplicado
+                        const existentesMovCaja = await MovimientoCaja.filter({ documento_origen_id: orderId, documento_origen_tipo: 'OrdenCompra' });
+                        if (existentesMovCaja.length === 0) {
+                            const movsPrevios = await MovimientoCaja.filter({ caja_id: caja.id });
+                            const saldoPrevio = movsPrevios.reduce((acc, m) => {
+                                return acc + (m.tipo_movimiento === 'entrada' ? (parseFloat(m.valor) || 0) : -(parseFloat(m.valor) || 0));
+                            }, caja.saldo_inicial || 0);
+                            const nuevoSaldo = saldoPrevio - (parseFloat(finalData.valor_pagado) || 0);
+                            await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
+                            await MovimientoCaja.create({
+                                caja_id: caja.id,
+                                nombre_caja: caja.nombre,
+                                fecha: finalData.fecha_emision_documento || finalData.fecha_orden,
+                                tipo_movimiento: 'salida',
+                                concepto: `Compra ${noIdDoc} - ${proveedorNombre}`,
+                                documento_origen_tipo: 'OrdenCompra',
+                                documento_origen_id: orderId,
+                                responsable: proveedorNombre,
+                                valor: parseFloat(finalData.valor_pagado) || 0,
+                                saldo_resultante: nuevoSaldo,
+                                observacion: `Egreso por compra ${noIdDoc}`,
+                                usuario_creacion: 'sistema'
+                            });
+                            console.log('✅ MovimientoCaja SALIDA generado para compra');
+                        }
                     }
                 } else if (finalData.forma_pago === 'banco' && finalData.cuenta_destino_id) {
                     const { CuentaBancaria, MovimientoBancario } = await import('@/entities/all');
