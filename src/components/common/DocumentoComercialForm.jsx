@@ -1131,6 +1131,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                         <SelectItem value="insumo_quimico">Insumo Químico</SelectItem>
                         <SelectItem value="servicio">Servicio</SelectItem>
                         <SelectItem value="activo_fijo">Activo Fijo</SelectItem>
+                        <SelectItem value="gastos_administrativos">Gastos Administrativos</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
