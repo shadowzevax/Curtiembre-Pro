@@ -705,6 +705,43 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         }
     }
 
+    // ─── VALIDACIONES PARA COMPRAS ───────────────────────────────────────────
+    if (tipoDocumento === 'compra' && !documento) {
+        const totalNeto = totals.totalNeto;
+
+        if (totalNeto <= 0) {
+            alert('⚠️ El Total Neto debe ser mayor a cero para guardar la compra.');
+            return;
+        }
+
+        if (finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') {
+            if (finalData.forma_pago === 'efectivo' && !finalData.cuenta_destino_id) {
+                alert('⚠️ Pago en EFECTIVO requiere seleccionar una Caja.');
+                return;
+            }
+        }
+
+        if (finalData.condicion_pago === 'credito' || finalData.condicion_pago === 'mixto') {
+            if (!finalData.fecha_vencimiento) {
+                alert('⚠️ CRÉDITO / MIXTO requiere una Fecha de Vencimiento obligatoria.');
+                return;
+            }
+        }
+
+        if (finalData.condicion_pago === 'mixto') {
+            const pagado = parseFloat(finalData.valor_pagado) || 0;
+            if (pagado <= 0) {
+                alert('⚠️ MIXTO requiere un Valor Pagado mayor a cero.');
+                return;
+            }
+            if (pagado >= totalNeto) {
+                alert('⚠️ El Valor Pagado no puede ser mayor o igual al Total Neto en modo Mixto.');
+                return;
+            }
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     // AUTOMATIZACIÓN: Generar Recibo de Caja o Comprobante de Egreso si es contado
     if ((finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') && finalData.valor_pagado > 0) {
         try {
