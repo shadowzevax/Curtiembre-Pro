@@ -928,29 +928,35 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         }
     }
 
-    // GENERAR CUENTA POR PAGAR si es compra a crédito
-    if (tipoDocumento === 'compra' && finalData.condicion_pago === 'credito' && finalData.saldo_pendiente > 0) {
+    // GENERAR CUENTA POR PAGAR si es compra a crédito o mixto
+    if (tipoDocumento === 'compra' && !documento && (finalData.condicion_pago === 'credito' || finalData.condicion_pago === 'mixto') && finalData.saldo_pendiente > 0) {
         try {
             const { CuentaPorPagar } = await import('@/entities/all');
-            const proveedor = terceros.find(p => p.id === finalData.proveedor_id);
-            await CuentaPorPagar.create({
-                id_cuenta: `CPP-${Date.now()}`,
-                proveedor_id: finalData.proveedor_id,
-                proveedor_nombre: proveedor?.nombre || '',
-                proveedor_nit: proveedor?.numero_identificacion || '',
-                tipo_documento: finalData.tipo_documento_proveedor,
-                numero_documento: finalData.numero_documento,
-                documento_origen_id: orderId,
-                modulo_origen: 'compras',
-                fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
-                fecha_vencimiento: finalData.fecha_vencimiento,
-                valor_total: finalData.total,
-                valor_pagado: 0,
-                saldo_pendiente: finalData.total,
-                estado: 'pendiente',
-                historial_pagos: []
-            });
-            console.log('✅ Cuenta por Pagar generada automáticamente');
+            // Verificar duplicado por documento_origen_id
+            const existentesCpp = await CuentaPorPagar.filter({ documento_origen_id: orderId });
+            if (existentesCpp.length === 0) {
+                const proveedor = terceros.find(p => p.id === finalData.proveedor_id);
+                const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
+                await CuentaPorPagar.create({
+                    id_cuenta: `CPP-${Date.now()}`,
+                    proveedor_id: finalData.proveedor_id,
+                    proveedor_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (proveedor?.nombre || ''),
+                    proveedor_nit: proveedor?.numero_identificacion || proveedor?.nit || '',
+                    tipo_documento: finalData.tipo_documento_proveedor,
+                    numero_documento: noIdDoc,
+                    documento_origen_id: orderId,
+                    modulo_origen: 'compras',
+                    condicion_pago: finalData.condicion_pago,
+                    fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
+                    fecha_vencimiento: finalData.fecha_vencimiento,
+                    valor_total: finalData.total,
+                    valor_pagado: finalData.condicion_pago === 'mixto' ? (parseFloat(finalData.valor_pagado) || 0) : 0,
+                    saldo_pendiente: finalData.saldo_pendiente,
+                    estado: 'pendiente',
+                    historial_pagos: []
+                });
+                console.log('✅ Cuenta por Pagar generada automáticamente para compra ' + finalData.condicion_pago);
+            }
         } catch (e) {
             console.error('Error generando cuenta por pagar:', e);
         }
