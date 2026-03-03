@@ -463,11 +463,6 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                 setLoading(false);
                 return;
             }
-            if ((parseFloat(finalData.valor_pagado) || 0) > 0) {
-                alert('⚠️ En CRÉDITO no se permite registrar valor pagado mayor a cero.');
-                setLoading(false);
-                return;
-            }
             finalData.valor_pagado = 0;
             finalData.saldo_pendiente = totalNeto;
         }
