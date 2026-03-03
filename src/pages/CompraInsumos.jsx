@@ -189,7 +189,7 @@ export default function CompraInsumos() {
         }
         
         // Si es CRÉDITO, generar cuenta por pagar
-        if (orderData.condicion_pago === 'credito' && orderData.valor_pagado === 0) {
+        if (orderData.condicion_pago === 'credito') {
           const CuentaPorPagar = (await import('@/entities/all')).CuentaPorPagar;
           const proveedor = proveedores.find(p => p.id === orderData.proveedor_id);
           await CuentaPorPagar.create({
@@ -204,9 +204,11 @@ export default function CompraInsumos() {
             fecha_documento: orderData.fecha_emision_documento || orderData.fecha_orden,
             fecha_vencimiento: orderData.fecha_vencimiento,
             valor_total: orderData.total,
-            valor_pagado: 0,
-            saldo_pendiente: orderData.total,
-            estado: 'pendiente',
+            valor_pagado: orderData.valor_pagado || 0,
+            saldo_pendiente: orderData.total - (orderData.valor_pagado || 0),
+            estado: (orderData.valor_pagado || 0) >= orderData.total ? 'pagada' :
+                    (orderData.valor_pagado || 0) > 0 ? 'parcial' :
+                    'pendiente',
             historial_pagos: []
           });
         }
