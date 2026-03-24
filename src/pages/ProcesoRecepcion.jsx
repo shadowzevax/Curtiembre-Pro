@@ -411,6 +411,7 @@ export default function ProcesoRecepcion() {
                   <SelectTrigger><SelectValue placeholder="Seleccionar orden" /></SelectTrigger>
                   <SelectContent>
                     {ordenesCompra
+                      .filter(oc => oc.id)
                       .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
                       .map(oc => (
                         <SelectItem key={oc.id} value={oc.id}>
