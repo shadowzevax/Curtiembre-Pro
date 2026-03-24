@@ -437,7 +437,7 @@ export default function ProcesoRecepcion() {
                 <Select value={currentItem?.proveedor_id || ''} onValueChange={v => setCurrentItem({...currentItem, proveedor_id: v})}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar proveedor" /></SelectTrigger>
                   <SelectContent>
-                    {proveedores.map(prov => (
+                    {proveedores.filter(prov => prov.id).map(prov => (
                       <SelectItem key={prov.id} value={prov.id}>
                         {prov.nombre}
                       </SelectItem>
