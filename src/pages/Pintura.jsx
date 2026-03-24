@@ -691,8 +691,8 @@ export default function Pintura() {
                                 <SelectValue placeholder="Buscar código..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {productosCatalogo.map(prod => (
-                                  <SelectItem key={prod.id} value={prod.id}>{prod.codigo}</SelectItem>
+                                {productosCatalogo.filter(prod => prod.id).map(prod => (
+                                  <SelectItem key={prod.id} value={prod.id}>{prod.codigo || prod.descripcion || prod.id}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
