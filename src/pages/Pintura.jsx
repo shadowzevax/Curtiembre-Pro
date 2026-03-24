@@ -584,6 +584,78 @@ export default function Pintura() {
               <Textarea value={currentItem.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} />
             </div>
 
+            {/* BLOQUE: ÍTEM DE PRODUCTOS DE PRODUCCIÓN */}
+            <div className="border-t pt-4 mt-6">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-lg">Ítem de productos de producción</h3>
+                <Button type="button" onClick={agregarProductoProduccion} size="sm" variant="outline">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar productos
+                </Button>
+              </div>
+              
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-purple-50">
+                    <tr>
+                      <th className="border p-2">CÓDIGO</th>
+                      <th className="border p-2">DESCRIPCIÓN</th>
+                      <th className="border p-2">CÓDIGO LOTE</th>
+                      <th className="border p-2 text-right">CANTIDAD HOJAS</th>
+                      <th className="border p-2 w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productosProduccion.length === 0 && (
+                      <tr><td colSpan={5} className="p-3 text-center text-gray-400 text-sm">No hay productos agregados. Haga clic en "Agregar productos".</td></tr>
+                    )}
+                    {productosProduccion.map((prod, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="border p-2">
+                          <Select value={prod.inv_proceso_id} onValueChange={v => handleProductoProduccionChange(idx, 'inv_proceso_id', v)}>
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Seleccionar..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {inventarioEnProceso.map(inv => (
+                                <SelectItem key={inv.id} value={inv.id}>
+                                  {inv.codigo} - {inv.codigo_lote} ({inv.cantidad_hojas} hojas)
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border p-2">
+                          <Input value={prod.descripcion || ''} readOnly className="bg-gray-50 h-8 text-xs" />
+                        </td>
+                        <td className="border p-2">
+                          <Input value={prod.codigo_lote || ''} readOnly className="bg-gray-50 h-8 text-xs font-mono" />
+                        </td>
+                        <td className="border p-2">
+                          <Input
+                            type="number"
+                            value={prod.cantidad_hojas}
+                            onChange={e => handleProductoProduccionChange(idx, 'cantidad_hojas', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-xs text-right"
+                            min="0"
+                            max={prod.cantidad_disponible}
+                          />
+                          {prod.cantidad_disponible > 0 && (
+                            <div className="text-gray-400 text-xs mt-1 text-right">Disp: {prod.cantidad_disponible}</div>
+                          )}
+                        </td>
+                        <td className="border p-2 text-center">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => eliminarProductoProduccion(idx)}>
+                            <X className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* TABLA DE ITEMS DE CONSUMO */}
             <div className="border-t pt-4 mt-6">
               <div className="flex justify-between items-center mb-3">
