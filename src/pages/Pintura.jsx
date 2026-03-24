@@ -268,6 +268,40 @@ export default function Pintura() {
     setConsumosItems(consumosItems.filter((_, i) => i !== index));
   };
 
+  // ── Productos de Producción (desde InventarioEnProceso) ──────────────────
+  const agregarProductoProduccion = () => {
+    setProductosProduccion([...productosProduccion, {
+      inv_proceso_id: '',
+      codigo: '',
+      descripcion: '',
+      codigo_lote: '',
+      cantidad_hojas: 0,
+      cantidad_disponible: 0
+    }]);
+  };
+
+  const eliminarProductoProduccion = (index) => {
+    setProductosProduccion(productosProduccion.filter((_, i) => i !== index));
+  };
+
+  const handleProductoProduccionChange = (index, field, value) => {
+    const updated = [...productosProduccion];
+    updated[index][field] = value;
+
+    if (field === 'inv_proceso_id') {
+      const invItem = inventarioEnProceso.find(i => i.id === value);
+      if (invItem) {
+        updated[index].codigo = invItem.codigo || '';
+        updated[index].descripcion = invItem.descripcion || '';
+        updated[index].codigo_lote = invItem.codigo_lote || '';
+        updated[index].cantidad_disponible = invItem.cantidad_hojas || 0;
+        updated[index].cantidad_hojas = invItem.cantidad_hojas || 0;
+      }
+    }
+
+    setProductosProduccion(updated);
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     
