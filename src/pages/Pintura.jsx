@@ -735,7 +735,7 @@ export default function Pintura() {
                                 <SelectValue placeholder="Lote *" />
                               </SelectTrigger>
                               <SelectContent>
-                                {lotesRecepcion.map(lote => (
+                                {lotesRecepcion.filter(lote => lote.codigo_lote).map(lote => (
                                   <SelectItem key={lote.id} value={lote.codigo_lote}>
                                     {lote.codigo_lote} - {lote.descripcion_producto || 'N/A'}
                                   </SelectItem>
