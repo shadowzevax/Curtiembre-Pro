@@ -397,20 +397,21 @@ export default function Pintura() {
         // Actualizar InventarioEnProceso: descontar cantidad usada de cada producto de producción
         for (const prod of productosProduccion) {
           if (prod.inv_proceso_id && prod.cantidad_hojas > 0) {
+            // Re-fetch el item actual para tener el stock más reciente
             const invItem = inventarioEnProceso.find(i => i.id === prod.inv_proceso_id);
             if (invItem) {
               const cantidadUsada = parseFloat(prod.cantidad_hojas) || 0;
-              if (cantidadUsada > (invItem.cantidad_hojas || 0)) {
-                alert(`⚠️ La cantidad de hojas (${cantidadUsada}) para "${prod.codigo}" supera la disponible (${invItem.cantidad_hojas}).`);
+              const cantidadActual = invItem.cantidad_hojas || 0;
+              if (cantidadUsada > cantidadActual) {
+                alert(`⚠️ La cantidad de hojas (${cantidadUsada}) para el código "${prod.codigo}" supera la cantidad disponible en inventario (${cantidadActual}). No se puede guardar.`);
                 return;
               }
-              const nuevaCantidad = (invItem.cantidad_hojas || 0) - cantidadUsada;
+              const nuevaCantidad = cantidadActual - cantidadUsada;
               const nuevoEstado = nuevaCantidad === 0 ? 'TERMINADO' : 'EN_PROCESO';
               await InventarioEnProceso.update(invItem.id, {
                 cantidad_hojas: nuevaCantidad,
                 estado_actual: nuevoEstado
               });
-              console.log(`✅ InventarioEnProceso actualizado: ${prod.codigo} → ${nuevaCantidad} hojas (${nuevoEstado})`);
             }
           }
         }
