@@ -97,14 +97,18 @@ export default function Pintura() {
         observaciones: '',
         entregas_parciales: [],
         consumos: [],
-        mano_obra_pintura: []
+        mano_obra_pintura: [],
+        finalizar_pintura: false,
+        productos_produccion: []
       });
       setConsumosItems([]);
       setManoObraItems([]);
+      setProductosProduccion([]);
     } else {
       setCurrentItem(item);
       setConsumosItems(item.consumos || []);
       setManoObraItems(item.mano_obra_pintura || []);
+      setProductosProduccion(item.productos_produccion || []);
     }
     setShowModal(true);
   };
