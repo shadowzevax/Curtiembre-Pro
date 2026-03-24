@@ -355,6 +355,21 @@ export default function Pintura() {
       }
     }
 
+    // Validar stock de productos de producción ANTES de guardar
+    for (const prod of productosProduccion) {
+      if (prod.inv_proceso_id && prod.cantidad_hojas > 0) {
+        const invItem = inventarioEnProceso.find(i => i.id === prod.inv_proceso_id);
+        if (invItem) {
+          const cantidadUsada = parseFloat(prod.cantidad_hojas) || 0;
+          const cantidadActual = invItem.cantidad_hojas || 0;
+          if (cantidadUsada > cantidadActual) {
+            alert(`⚠️ La cantidad de hojas (${cantidadUsada}) para el código "${prod.codigo}" supera la cantidad disponible en inventario (${cantidadActual}). No se puede guardar.`);
+            return;
+          }
+        }
+      }
+    }
+
     try {
       const totalConsumo = consumosItems.reduce((sum, c) => sum + (c.costo_total || 0), 0);
       const totalManoObra = manoObraItems.reduce((sum, m) => sum + (m.total || 0), 0);
@@ -379,7 +394,7 @@ export default function Pintura() {
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
-        const created = await ProcesoProduccion.create(dataToSave);
+        await ProcesoProduccion.create(dataToSave);
         
         // Descontar inventario de insumos químicos
         for (const consumo of consumosItems) {
@@ -394,19 +409,13 @@ export default function Pintura() {
           }
         }
 
-        // Actualizar InventarioEnProceso: descontar cantidad usada de cada producto de producción
+        // Actualizar InventarioEnProceso: descontar cantidad y actualizar estado
         for (const prod of productosProduccion) {
           if (prod.inv_proceso_id && prod.cantidad_hojas > 0) {
-            // Re-fetch el item actual para tener el stock más reciente
             const invItem = inventarioEnProceso.find(i => i.id === prod.inv_proceso_id);
             if (invItem) {
               const cantidadUsada = parseFloat(prod.cantidad_hojas) || 0;
-              const cantidadActual = invItem.cantidad_hojas || 0;
-              if (cantidadUsada > cantidadActual) {
-                alert(`⚠️ La cantidad de hojas (${cantidadUsada}) para el código "${prod.codigo}" supera la cantidad disponible en inventario (${cantidadActual}). No se puede guardar.`);
-                return;
-              }
-              const nuevaCantidad = cantidadActual - cantidadUsada;
+              const nuevaCantidad = (invItem.cantidad_hojas || 0) - cantidadUsada;
               const nuevoEstado = nuevaCantidad === 0 ? 'TERMINADO' : 'EN_PROCESO';
               await InventarioEnProceso.update(invItem.id, {
                 cantidad_hojas: nuevaCantidad,
