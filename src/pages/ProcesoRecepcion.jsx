@@ -484,6 +484,7 @@ export default function ProcesoRecepcion() {
                   <SelectTrigger><SelectValue placeholder="Buscar por nombre" /></SelectTrigger>
                   <SelectContent>
                     {productos
+                      .filter(prod => prod.descripcion)
                       .sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || ''))
                       .map(prod => (
                         <SelectItem key={prod.id} value={prod.descripcion}>
