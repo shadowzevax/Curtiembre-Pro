@@ -617,9 +617,9 @@ export default function Pintura() {
                               <SelectValue placeholder="Seleccionar..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {inventarioEnProceso.map(inv => (
+                              {inventarioEnProceso.filter(inv => inv.id).map(inv => (
                                 <SelectItem key={inv.id} value={inv.id}>
-                                  {inv.codigo} - {inv.codigo_lote} ({inv.cantidad_hojas} hojas)
+                                  {inv.codigo || '—'} - {inv.codigo_lote || '—'} ({inv.cantidad_hojas || 0} hojas)
                                 </SelectItem>
                               ))}
                             </SelectContent>
