@@ -364,6 +364,7 @@ export default function Pintura() {
         hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0),
         consumos: consumosItems,
         mano_obra_pintura: manoObraItems,
+        productos_produccion: productosProduccion,
         total_consumo_productos: totalConsumo,
         total_mano_obra: totalManoObra,
         costo_total_proceso_pintura: costoTotalProceso,
@@ -375,7 +376,7 @@ export default function Pintura() {
       } else {
         const created = await ProcesoProduccion.create(dataToSave);
         
-        // Descontar inventario
+        // Descontar inventario de insumos químicos
         for (const consumo of consumosItems) {
           const inventario = inventarioInsumos.find(inv => 
             inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
@@ -385,6 +386,27 @@ export default function Pintura() {
             await DocumentoInventario.update(inventario.id, {
               cantidad: inventario.cantidad - consumo.cantidad_consumida
             });
+          }
+        }
+
+        // Actualizar InventarioEnProceso: descontar cantidad usada de cada producto de producción
+        for (const prod of productosProduccion) {
+          if (prod.inv_proceso_id && prod.cantidad_hojas > 0) {
+            const invItem = inventarioEnProceso.find(i => i.id === prod.inv_proceso_id);
+            if (invItem) {
+              const cantidadUsada = parseFloat(prod.cantidad_hojas) || 0;
+              if (cantidadUsada > (invItem.cantidad_hojas || 0)) {
+                alert(`⚠️ La cantidad de hojas (${cantidadUsada}) para "${prod.codigo}" supera la disponible (${invItem.cantidad_hojas}).`);
+                return;
+              }
+              const nuevaCantidad = (invItem.cantidad_hojas || 0) - cantidadUsada;
+              const nuevoEstado = nuevaCantidad === 0 ? 'TERMINADO' : 'EN_PROCESO';
+              await InventarioEnProceso.update(invItem.id, {
+                cantidad_hojas: nuevaCantidad,
+                estado_actual: nuevoEstado
+              });
+              console.log(`✅ InventarioEnProceso actualizado: ${prod.codigo} → ${nuevaCantidad} hojas (${nuevoEstado})`);
+            }
           }
         }
       }
