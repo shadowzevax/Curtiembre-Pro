@@ -286,17 +286,22 @@ export default function Pintura() {
 
   const handleProductoProduccionChange = (index, field, value) => {
     const updated = [...productosProduccion];
-    updated[index][field] = value;
 
-    if (field === 'inv_proceso_id') {
-      const invItem = inventarioEnProceso.find(i => i.id === value);
+    if (field === 'codigo') {
+      // Buscar el item de inventario por código
+      const invItem = inventarioEnProceso.find(i => i.codigo === value);
       if (invItem) {
         updated[index].codigo = invItem.codigo || '';
+        updated[index].inv_proceso_id = invItem.id || '';
         updated[index].descripcion = invItem.descripcion || '';
         updated[index].codigo_lote = invItem.codigo_lote || '';
         updated[index].cantidad_disponible = invItem.cantidad_hojas || 0;
         updated[index].cantidad_hojas = invItem.cantidad_hojas || 0;
+      } else {
+        updated[index].codigo = value;
       }
+    } else {
+      updated[index][field] = value;
     }
 
     setProductosProduccion(updated);
