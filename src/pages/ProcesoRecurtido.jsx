@@ -482,8 +482,8 @@ export default function ProcesoRecurtido() {
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>
 
-            {/* Checkbox for finishing the process */}
-            <div className="p-4 bg-blue-50 rounded-lg">
+            {/* Checkbox + Tabla Resumen de Recurtido */}
+            <div className="p-4 bg-blue-50 rounded-lg space-y-4">
               <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="finalizar_recurtido" 
@@ -491,6 +491,35 @@ export default function ProcesoRecurtido() {
                   onCheckedChange={v => setCurrentItem({...currentItem, finalizar_recurtido: v})} 
                 />
                 <Label htmlFor="finalizar_recurtido" className="font-semibold cursor-pointer">Finalizar Recurtido</Label>
+              </div>
+
+              {/* Tabla Resumen de Recurtido */}
+              <div className="bg-white rounded-lg border p-3">
+                <h4 className="font-semibold text-sm mb-2 text-slate-700">Resumen de Recurtido</h4>
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="p-2 text-left">Código base</th>
+                      <th className="p-2 text-left">Color base</th>
+                      <th className="p-2 text-left">Código lote</th>
+                      <th className="p-2 text-right">Cantidad hojas</th>
+                      <th className="p-2 text-left">Origen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentItem?.codigo_lote ? (
+                      <tr className="border-t">
+                        <td className="p-2 font-mono font-bold">{currentItem.codigo_color || '—'}</td>
+                        <td className="p-2">{currentItem.nombre_color || '—'}</td>
+                        <td className="p-2 font-mono">{currentItem.codigo_lote}</td>
+                        <td className="p-2 text-right font-bold">{currentItem.cantidad_pieles || 0}</td>
+                        <td className="p-2">recurtido</td>
+                      </tr>
+                    ) : (
+                      <tr><td colSpan={5} className="p-2 text-center text-gray-400">Seleccione un lote para ver el resumen</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
