@@ -617,16 +617,18 @@ export default function Pintura() {
                     {productosProduccion.map((prod, idx) => (
                       <tr key={idx} className="border-t">
                         <td className="border p-2">
-                          <Select value={prod.inv_proceso_id} onValueChange={v => handleProductoProduccionChange(idx, 'inv_proceso_id', v)}>
+                          <Select value={prod.codigo} onValueChange={v => handleProductoProduccionChange(idx, 'codigo', v)}>
                             <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Seleccionar..." />
+                              <SelectValue placeholder="Seleccionar código..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {inventarioEnProceso.filter(inv => inv.id).map(inv => (
-                                <SelectItem key={inv.id} value={inv.id}>
-                                  {inv.codigo || '—'} - {inv.codigo_lote || '—'} ({inv.cantidad_hojas || 0} hojas)
-                                </SelectItem>
-                              ))}
+                              {inventarioEnProceso
+                                .filter(inv => inv.codigo)
+                                .map(inv => (
+                                  <SelectItem key={inv.id} value={inv.codigo}>
+                                    {inv.codigo}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                         </td>
