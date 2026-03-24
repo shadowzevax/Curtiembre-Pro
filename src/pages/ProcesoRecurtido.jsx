@@ -217,6 +217,30 @@ export default function ProcesoRecurtido() {
         const created = await ProcesoProduccion.create(dataToSave);
         procesoId = created.id;
       }
+
+      // Al finalizar recurtido → transferir datos al Inventario de Productos en Proceso
+      if (dataToSave.finalizar_recurtido && dataToSave.codigo_lote) {
+        try {
+          // Verificar si ya existe un registro para este lote + color en InventarioEnProceso
+          const existentes = await InventarioEnProceso.filter({ codigo_lote: dataToSave.codigo_lote, origen_modulo: 'recurtido' });
+          if (!existentes || existentes.length === 0) {
+            await InventarioEnProceso.create({
+              codigo: dataToSave.codigo_color || dataToSave.codigo_lote,
+              descripcion: dataToSave.nombre_color || '',
+              codigo_lote: dataToSave.codigo_lote,
+              cantidad_hojas: dataToSave.cantidad_pieles || 0,
+              color_base: dataToSave.nombre_color || '',
+              origen_modulo: 'recurtido',
+              estado_proceso: 'piel_recurtida',
+              fecha_ingreso_proceso: dataToSave.fecha_fin || dataToSave.fecha_inicio,
+              proceso_origen_id: procesoId
+            });
+            console.log('✅ Inventario En Proceso actualizado desde Recurtido');
+          }
+        } catch (e) {
+          console.error('Error transfiriendo a InventarioEnProceso:', e);
+        }
+      }
       
       // AFECTAR INVENTARIO DE INSUMOS Y QUÍMICOS (descontar insumos utilizados)
       if (!isEditing && dataToSave.insumos_utilizados && dataToSave.insumos_utilizados.length > 0) {
