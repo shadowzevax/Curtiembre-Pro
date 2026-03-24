@@ -926,6 +926,23 @@ export default function Pintura() {
               </div>
             </div>
 
+            {/* Finalizar Pintura */}
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg mt-4">
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  id="finalizar_pintura"
+                  checked={currentItem?.finalizar_pintura || false}
+                  onChange={e => setCurrentItem({...currentItem, finalizar_pintura: e.target.checked})}
+                  className="w-5 h-5 accent-emerald-600 cursor-pointer"
+                />
+                <label htmlFor="finalizar_pintura" className="font-semibold text-emerald-800 cursor-pointer">
+                  Finalizar Pintura
+                </label>
+                <span className="text-sm text-emerald-600">(Marcar cuando el proceso de pintura haya sido completado)</span>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-4 border-t mt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
               <Button type="submit">Guardar</Button>
