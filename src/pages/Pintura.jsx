@@ -42,7 +42,7 @@ export default function Pintura() {
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
         Insumo.list(),
         PedidoMarroquinero.list(),
-        InventarioEnProceso.filter({ estado_proceso: 'crosta' }),
+        InventarioEnProceso.list(),
         import('@/entities/all').then(m => m.UnidadMedida),
         import('@/entities/all').then(m => m.DocumentoInventario),
         ProductoCatalogo.list(),
