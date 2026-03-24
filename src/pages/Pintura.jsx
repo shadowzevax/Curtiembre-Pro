@@ -560,7 +560,7 @@ export default function Pintura() {
                 }}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar lote" /></SelectTrigger>
                   <SelectContent>
-                    {inventarioEnProceso.map(inv => (
+                    {inventarioEnProceso.filter(inv => inv.codigo_lote).map(inv => (
                       <SelectItem key={inv.id} value={inv.codigo_lote}>
                         {inv.codigo_lote} - {inv.cantidad_hojas} hojas
                       </SelectItem>
