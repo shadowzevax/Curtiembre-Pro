@@ -92,7 +92,7 @@ export default function ProcesoRecepcion() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleOpenModal = async (item = null) => {
+  const handleOpenModal = (item = null) => {
     setIsEditing(!!item);
     if (!item) {
       // Generar código automático L-AAAA-XXX
