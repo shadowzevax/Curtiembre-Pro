@@ -292,6 +292,16 @@ export default function Pintura() {
   const handleSave = async (e) => {
     e.preventDefault();
     
+    // Validar origen de hojas
+    if (origenHojas.length > 0) {
+      const totalOrigenHojas = origenHojas.reduce((sum, o) => sum + (parseFloat(o.cantidad_hojas) || 0), 0);
+      const totalEnviadas = parseFloat(currentItem.total_hojas_enviadas_pintura) || 0;
+      if (totalOrigenHojas !== totalEnviadas) {
+        alert(`⚠️ La suma de hojas por bodega (${totalOrigenHojas}) debe ser igual al total de hojas enviadas a pintura (${totalEnviadas}).`);
+        return;
+      }
+    }
+
     // Validar consumos
     for (const consumo of consumosItems) {
       if (!consumo.insumo_id || !consumo.nombre_producto) {
