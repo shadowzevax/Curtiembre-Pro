@@ -291,46 +291,27 @@ export default function Pintura() {
     
     // Validar consumos
     for (const consumo of consumosItems) {
-      if (!consumo.producto_id || !consumo.nombre_producto) {
-        alert('Error: Todos los productos deben ser seleccionados. No se permiten items vacíos.');
+      if (!consumo.insumo_id || !consumo.nombre_producto) {
+        alert('Error: Todos los productos deben tener un insumo seleccionado.');
         return;
       }
-      
       if (consumo.cantidad_consumida <= 0) {
         alert('Error: La cantidad consumida debe ser mayor a cero.');
         return;
       }
-
-      if (!consumo.lote_producto) {
-        alert('Error: Debe seleccionar un lote para cada producto.');
-        return;
-      }
-
-      // Validar stock disponible (solo si hay código y lote)
-      if (consumo.codigo_pcto && consumo.lote_producto) {
-        const inventario = inventarioInsumos.find(inv => 
-          inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
-        );
-        
-        if (!inventario || inventario.cantidad < consumo.cantidad_consumida) {
-          alert(`Stock insuficiente para el producto: ${consumo.nombre_producto}. Stock disponible: ${inventario?.cantidad || 0}`);
+      // Validar stock disponible
+      const insumo = insumosQuimicos.find(i => i.id === consumo.insumo_id);
+      if (insumo) {
+        const stockDisponible = insumo.stock_actual || 0;
+        if (consumo.cantidad_consumida > stockDisponible) {
+          alert(`⚠️ Stock insuficiente para "${consumo.nombre_producto}".\nStock disponible: ${stockDisponible} ${insumo.unidad_medida || ''}\nCantidad solicitada: ${consumo.cantidad_consumida}`);
           return;
         }
-      }
-
-      // Validar duplicados
-      const duplicados = consumosItems.filter(c => c.producto_id === consumo.producto_id && c.lote_producto === consumo.lote_producto);
-      if (duplicados.length > 1) {
-        if (!confirm(`El producto "${consumo.nombre_producto}" con lote "${consumo.lote_producto}" ya fue registrado. ¿Desea sumar las cantidades automáticamente?`)) {
-          return;
+        if (stockDisponible <= (insumo.stock_minimo || 0)) {
+          if (!confirm(`⚠️ ALERTA: El producto "${consumo.nombre_producto}" tiene stock bajo (${stockDisponible} ${insumo.unidad_medida || ''}). ¿Desea continuar de todas formas?`)) {
+            return;
+          }
         }
-        // Consolidar duplicados
-        const indexPrimero = consumosItems.findIndex(c => c.producto_id === consumo.producto_id && c.lote_producto === consumo.lote_producto);
-        const cantidadTotal = duplicados.reduce((sum, d) => sum + d.cantidad_consumida, 0);
-        const consolidados = consumosItems.filter(c => !(c.producto_id === consumo.producto_id && c.lote_producto === consumo.lote_producto));
-        consolidados.splice(indexPrimero, 0, {...duplicados[0], cantidad_consumida: cantidadTotal});
-        setConsumosItems(consolidados);
-        return;
       }
     }
 
