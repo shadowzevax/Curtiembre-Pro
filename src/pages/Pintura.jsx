@@ -358,6 +358,7 @@ export default function Pintura() {
         consumos: consumosItems,
         mano_obra_pintura: manoObraItems,
         productos_produccion: productosProduccion,
+        origen_hojas: origenHojas,
         total_consumo_productos: totalConsumo,
         total_mano_obra: totalManoObra,
         costo_total_proceso_pintura: costoTotalProceso,
