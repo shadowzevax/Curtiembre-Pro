@@ -530,7 +530,7 @@ export default function Pintura() {
               </div>
             </div>
             
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Estado del Pedido en Pintura *</Label>
                 <Select value={currentItem.estado_pedido_pintura || 'pendiente'} onValueChange={v => setCurrentItem({...currentItem, estado_pedido_pintura: v})}>
@@ -550,21 +550,82 @@ export default function Pintura() {
                   setCurrentItem({...currentItem, total_hojas_enviadas_pintura: total, hojas_pendientes_pintar: total - recibidas});
                 }} required />
               </div>
-              <div>
-                <Label>Código Lote Crosta (opcional)</Label>
-                <Select value={currentItem.codigo_lote || ''} onValueChange={v => {
-                  setCurrentItem({...currentItem, codigo_lote: v});
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar lote" /></SelectTrigger>
-                  <SelectContent>
-                    {inventarioEnProceso.filter(inv => inv.codigo_lote).map(inv => (
-                      <SelectItem key={inv.id} value={inv.codigo_lote}>
-                        {inv.codigo_lote} - {inv.cantidad_hojas} hojas
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            </div>
+
+            {/* SECCIÓN: ORIGEN DE HOJAS */}
+            <div className="border rounded-lg p-4 bg-amber-50 border-amber-200">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-bold text-sm text-amber-800">ORIGEN DE HOJAS</h3>
+                <Button type="button" size="sm" variant="outline" onClick={() => setOrigenHojas([...origenHojas, { bodega: '', cantidad_hojas: 0 }])}>
+                  <Plus className="w-3 h-3 mr-1" /> Agregar Bodega
+                </Button>
               </div>
+              {origenHojas.length === 0 && (
+                <p className="text-xs text-amber-600 italic">Haga clic en "Agregar Bodega" para registrar el origen de las hojas.</p>
+              )}
+              {origenHojas.length > 0 && (
+                <table className="w-full text-xs mb-2">
+                  <thead>
+                    <tr className="bg-amber-100">
+                      <th className="border p-2 text-left">BODEGA</th>
+                      <th className="border p-2 text-right">CANTIDAD DE HOJAS</th>
+                      <th className="border p-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {origenHojas.map((origen, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="border p-1">
+                          <Select value={origen.bodega} onValueChange={v => {
+                            const updated = [...origenHojas];
+                            updated[idx].bodega = v;
+                            setOrigenHojas(updated);
+                          }}>
+                            <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Seleccionar bodega..." /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="BODEGA 1">BODEGA 1</SelectItem>
+                              <SelectItem value="BODEGA 2">BODEGA 2</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border p-1">
+                          <Input type="number" value={origen.cantidad_hojas} min="0" step="1"
+                            onChange={e => {
+                              const updated = [...origenHojas];
+                              updated[idx].cantidad_hojas = parseFloat(e.target.value) || 0;
+                              setOrigenHojas(updated);
+                            }}
+                            className="h-7 text-xs text-right"
+                          />
+                        </td>
+                        <td className="border p-1 text-center">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setOrigenHojas(origenHojas.filter((_, i) => i !== idx))}>
+                            <X className="w-3 h-3 text-red-500" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {origenHojas.length > 0 && (
+                <div className="flex justify-between items-center text-xs mt-1">
+                  <span className="text-amber-700 font-semibold">
+                    Total hojas registradas: <span className="font-bold">{origenHojas.reduce((s, o) => s + (parseFloat(o.cantidad_hojas) || 0), 0)}</span>
+                  </span>
+                  {(() => {
+                    const sumOrigen = origenHojas.reduce((s, o) => s + (parseFloat(o.cantidad_hojas) || 0), 0);
+                    const totalEnviadas = parseFloat(currentItem.total_hojas_enviadas_pintura) || 0;
+                    if (totalEnviadas > 0 && sumOrigen !== totalEnviadas) {
+                      return <span className="text-red-600 font-bold">⚠️ Debe coincidir con Total Hojas Enviadas ({totalEnviadas})</span>;
+                    }
+                    if (totalEnviadas > 0 && sumOrigen === totalEnviadas) {
+                      return <span className="text-green-600 font-bold">✓ Coincide con Total Hojas Enviadas</span>;
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded">
