@@ -658,14 +658,13 @@ export default function Pintura() {
                     <tr>
                       <th className="border p-2">CÓDIGO</th>
                       <th className="border p-2">DESCRIPCIÓN</th>
-                      <th className="border p-2">CÓDIGO LOTE</th>
                       <th className="border p-2 text-right">CANTIDAD HOJAS</th>
                       <th className="border p-2 w-12"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {productosProduccion.length === 0 && (
-                      <tr><td colSpan={5} className="p-3 text-center text-gray-400 text-sm">No hay productos agregados. Haga clic en "Agregar productos".</td></tr>
+                      <tr><td colSpan={4} className="p-3 text-center text-gray-400 text-sm">No hay productos agregados. Haga clic en "Agregar productos".</td></tr>
                     )}
                     {productosProduccion.map((prod, idx) => (
                       <tr key={idx} className="border-t">
@@ -687,9 +686,6 @@ export default function Pintura() {
                         </td>
                         <td className="border p-2">
                           <Input value={prod.descripcion || ''} readOnly className="bg-gray-50 h-8 text-xs" />
-                        </td>
-                        <td className="border p-2">
-                          <Input value={prod.codigo_lote || ''} readOnly className="bg-gray-50 h-8 text-xs font-mono" />
                         </td>
                         <td className="border p-2">
                           <Input
