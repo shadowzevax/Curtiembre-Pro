@@ -32,6 +32,7 @@ export default function Pintura() {
   const [consumosItems, setConsumosItems] = useState([]);
   const [manoObraItems, setManoObraItems] = useState([]);
   const [productosProduccion, setProductosProduccion] = useState([]);
+  const [origenHojas, setOrigenHojas] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
