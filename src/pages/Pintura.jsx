@@ -216,35 +216,27 @@ export default function Pintura() {
     setManoObraItems(manoObraItems.filter((_, i) => i !== index));
   };
 
-  const handleConsumoChange = async (index, field, value) => {
+  const handleConsumoChange = (index, field, value) => {
     const updated = [...consumosItems];
     updated[index][field] = value;
 
-    if (field === 'producto_id') {
-      const producto = productosCatalogo.find(p => p.id === value);
-      if (producto) {
-        updated[index].codigo_pcto = producto.codigo || '';
-        updated[index].nombre_producto = producto.descripcion || '';
-        updated[index].unidad_medida = producto.unidad_medida || '';
-        
-        // Obtener costo unitario del inventario
-        try {
-          const DocumentoInventario = (await import('@/entities/all')).DocumentoInventario;
-          const inventario = await DocumentoInventario.filter({ codigo: producto.codigo });
-          if (inventario && inventario.length > 0) {
-            updated[index].costo_unitario = inventario[0].costo_unitario || 0;
-          }
-        } catch (e) {
-          console.error('Error obteniendo costo:', e);
-          updated[index].costo_unitario = 0;
-        }
+    if (field === 'insumo_id') {
+      const insumo = insumosQuimicos.find(i => i.id === value);
+      if (insumo) {
+        updated[index].codigo_pcto = insumo.codigo || '';
+        updated[index].nombre_producto = insumo.nombre || insumo.descripcion || '';
+        updated[index].unidad_medida = insumo.unidad_medida || '';
+        updated[index].costo_unitario = insumo.costo_promedio || 0;
+        // Recalcular costo total con el nuevo costo unitario
+        const cantidad = parseFloat(updated[index].cantidad_consumida) || 0;
+        updated[index].costo_total = cantidad * (insumo.costo_promedio || 0);
       }
     }
 
-    // Calcular costo total automáticamente
+    // Calcular costo total automáticamente al cambiar cantidad o costo unitario
     if (field === 'cantidad_consumida' || field === 'costo_unitario') {
-      const cantidad = parseFloat(updated[index].cantidad_consumida) || 0;
-      const costo = parseFloat(updated[index].costo_unitario) || 0;
+      const cantidad = parseFloat(field === 'cantidad_consumida' ? value : updated[index].cantidad_consumida) || 0;
+      const costo = parseFloat(field === 'costo_unitario' ? value : updated[index].costo_unitario) || 0;
       updated[index].costo_total = cantidad * costo;
     }
 
