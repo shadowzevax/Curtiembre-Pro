@@ -36,28 +36,18 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, pedidosData, inventarioData, UnidadMedidaModule, InventarioModule, prodCatalogo, procesosRecepcion] = await Promise.all([
+      const [procesosData, insumosData, pedidosData, inventarioData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
         Insumo.list(),
         PedidoMarroquinero.list(),
-        InventarioEnProceso.list(),
-        import('@/entities/all').then(m => m.UnidadMedida),
-        import('@/entities/all').then(m => m.DocumentoInventario),
-        ProductoCatalogo.list(),
-        ProcesoProduccion.filter({ tipo_proceso: 'recepcion' })
-      ]);
-      const [unidadesData, inventarioInsumosData] = await Promise.all([
-        UnidadMedidaModule.list(),
-        InventarioModule.filter({ categoria: 'insumos_quimicos' })
+        InventarioEnProceso.list()
       ]);
       setProcesos(procesosData);
       setInsumos(insumosData);
       setPedidos(pedidosData);
       setInventarioEnProceso(inventarioData);
-      setUnidadesMedida(unidadesData);
-      setInventarioInsumos(inventarioInsumosData);
-      setProductosCatalogo(prodCatalogo);
-      setLotesRecepcion(procesosRecepcion);
+      setInsumosQuimicos(insumosData);
+      setInventarioInsumos(insumosData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
