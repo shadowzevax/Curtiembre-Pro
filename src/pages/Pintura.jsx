@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, InventarioEnProceso, PedidoMarroquinero, ProductoTerminado, ProductoCatalogo } from '@/entities/all';
+import { ProcesoProduccion, Insumo, InventarioEnProceso, PedidoMarroquinero, ProductoTerminado, MovimientoInventario } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
