@@ -785,22 +785,22 @@ export default function Pintura() {
                               step="0.01"
                             />
                           </td>
-                          <td className="border p-2">
+                          <td className="border p-2 min-w-[130px]">
                             <Input 
                               type="number" 
                               value={consumo.costo_unitario || 0}
                               onChange={e => handleConsumoChange(idx, 'costo_unitario', parseFloat(e.target.value) || 0)}
-                              className="h-8 text-xs text-right font-medium" 
+                              className="h-8 text-xs text-right font-medium w-full" 
                               min="0"
                               step="1"
                             />
                           </td>
-                          <td className="border p-2">
+                          <td className="border p-2 min-w-[130px]">
                             <Input 
                               type="number" 
                               value={consumo.costo_total || 0} 
                               readOnly 
-                              className="h-8 text-xs text-right bg-blue-50 font-bold" 
+                              className="h-8 text-xs text-right bg-blue-50 font-bold w-full" 
                             />
                           </td>
                           <td className="border p-2 min-w-[120px]">
