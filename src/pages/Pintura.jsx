@@ -176,14 +176,13 @@ export default function Pintura() {
 
   const agregarConsumo = () => {
     setConsumosItems([...consumosItems, {
-      producto_id: '',
+      insumo_id: '',
       codigo_pcto: '',
       nombre_producto: '',
       unidad_medida: '',
       cantidad_consumida: 0,
       costo_unitario: 0,
       costo_total: 0,
-      lote_producto: '',
       observacion: ''
     }]);
   };
