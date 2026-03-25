@@ -356,15 +356,23 @@ export default function Pintura() {
       } else {
         await ProcesoProduccion.create(dataToSave);
         
-        // Descontar inventario de insumos químicos
+        // Descontar stock de insumos y registrar movimiento de inventario
+        const fechaHoy = new Date().toISOString().split('T')[0];
         for (const consumo of consumosItems) {
-          const inventario = inventarioInsumos.find(inv => 
-            inv.codigo === consumo.codigo_pcto && inv.lote === consumo.lote_producto
-          );
-          if (inventario) {
-            const DocumentoInventario = (await import('@/entities/all')).DocumentoInventario;
-            await DocumentoInventario.update(inventario.id, {
-              cantidad: inventario.cantidad - consumo.cantidad_consumida
+          const insumo = insumosQuimicos.find(i => i.id === consumo.insumo_id);
+          if (insumo) {
+            // Actualizar stock_actual del insumo
+            const nuevoStock = (insumo.stock_actual || 0) - consumo.cantidad_consumida;
+            await Insumo.update(insumo.id, { stock_actual: nuevoStock });
+            // Registrar movimiento de inventario
+            await MovimientoInventario.create({
+              tipo_movimiento: 'salida',
+              insumo_id: insumo.id,
+              cantidad: -consumo.cantidad_consumida,
+              costo_unitario: consumo.costo_unitario || 0,
+              fecha_movimiento: fechaHoy,
+              referencia: currentItem.id_consecutivo || currentItem.numero_pedido || 'PINTURA',
+              observaciones: `Salida por proceso de pintura. Pedido: ${currentItem.numero_pedido || 'N/A'}. Producto: ${consumo.nombre_producto}`
             });
           }
         }
