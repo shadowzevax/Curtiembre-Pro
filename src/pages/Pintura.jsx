@@ -20,9 +20,7 @@ export default function Pintura() {
   const [pedidos, setPedidos] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [inventarioInsumos, setInventarioInsumos] = useState([]);
-  const [unidadesMedida, setUnidadesMedida] = useState([]);
-  const [productosCatalogo, setProductosCatalogo] = useState([]);
-  const [lotesRecepcion, setLotesRecepcion] = useState([]);
+  const [insumosQuimicos, setInsumosQuimicos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
