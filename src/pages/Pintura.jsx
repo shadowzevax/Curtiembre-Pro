@@ -730,8 +730,8 @@ export default function Pintura() {
                       <th className="border p-2">DESCRIPCIÓN DEL PRODUCTO</th>
                       <th className="border p-2">U. MEDIDA</th>
                       <th className="border p-2">CANTIDAD CONSUMIDA</th>
-                      <th className="border p-2">COSTO UNITARIO</th>
-                      <th className="border p-2">COSTO TOTAL</th>
+                      <th className="border p-2 min-w-[130px]">COSTO UNITARIO</th>
+                      <th className="border p-2 min-w-[130px]">COSTO TOTAL</th>
                       <th className="border p-2">OBSERVACIÓN</th>
                       <th className="border p-2 w-10"></th>
                     </tr>
