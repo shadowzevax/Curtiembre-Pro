@@ -93,11 +93,13 @@ export default function Pintura() {
       setConsumosItems([]);
       setManoObraItems([]);
       setProductosProduccion([]);
+      setOrigenHojas([]);
     } else {
       setCurrentItem(item);
       setConsumosItems(item.consumos || []);
       setManoObraItems(item.mano_obra_pintura || []);
       setProductosProduccion(item.productos_produccion || []);
+      setOrigenHojas(item.origen_hojas || []);
     }
     setShowModal(true);
   };
