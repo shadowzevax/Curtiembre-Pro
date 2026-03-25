@@ -655,34 +655,50 @@ export default function Pintura() {
                 <table className="w-full text-xs">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="border p-2">CÓDIGO PCTO.</th>
-                      <th className="border p-2">NOMBRE DEL PRODUCTO</th>
-                      <th className="border p-2">UNIDAD DE MEDIDA</th>
+                      <th className="border p-2">CÓDIGO</th>
+                      <th className="border p-2">DESCRIPCIÓN DEL PRODUCTO</th>
+                      <th className="border p-2">U. MEDIDA</th>
                       <th className="border p-2">CANTIDAD CONSUMIDA</th>
                       <th className="border p-2">COSTO UNITARIO</th>
                       <th className="border p-2">COSTO TOTAL</th>
-                      <th className="border p-2">LOTE DEL PRODUCTO</th>
                       <th className="border p-2">OBSERVACIÓN</th>
-                      <th className="border p-2 w-16"></th>
+                      <th className="border p-2 w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
+                    {consumosItems.length === 0 && (
+                      <tr><td colSpan={8} className="p-3 text-center text-gray-400 text-sm">No hay productos agregados. Haga clic en "Agregar Producto".</td></tr>
+                    )}
                     {consumosItems.map((consumo, idx) => {
+                      const insumoRef = insumosQuimicos.find(i => i.id === consumo.insumo_id);
+                      const stockDisponible = insumoRef?.stock_actual || 0;
+                      const stockBajo = insumoRef && stockDisponible <= (insumoRef.stock_minimo || 0);
                       return (
                         <tr key={idx} className="border-t">
-                          <td className="border p-2">
-                            <Select value={consumo.producto_id} onValueChange={v => handleConsumoChange(idx, 'producto_id', v)}>
+                          <td className="border p-2 min-w-[140px]">
+                            <Select value={consumo.insumo_id} onValueChange={v => handleConsumoChange(idx, 'insumo_id', v)}>
                               <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Buscar código..." />
+                                <SelectValue placeholder="Seleccionar..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {productosCatalogo.filter(prod => prod.id).map(prod => (
-                                  <SelectItem key={prod.id} value={prod.id}>{prod.codigo || prod.descripcion || prod.id}</SelectItem>
-                                ))}
+                                {insumosQuimicos
+                                  .filter(i => i.id && i.codigo)
+                                  .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                                  .map(i => (
+                                    <SelectItem key={i.id} value={i.id}>
+                                      {i.codigo} - {i.nombre || i.descripcion || ''}
+                                    </SelectItem>
+                                  ))}
                               </SelectContent>
                             </Select>
+                            {consumo.insumo_id && (
+                              <div className={`text-xs mt-0.5 ${stockBajo ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                                Stock: {stockDisponible} {insumoRef?.unidad_medida || ''}
+                                {stockBajo && ' ⚠️ BAJO'}
+                              </div>
+                            )}
                           </td>
-                          <td className="border p-2">
+                          <td className="border p-2 min-w-[160px]">
                             <Input value={consumo.nombre_producto || ''} readOnly className="bg-gray-50 h-8 text-xs font-medium" />
                           </td>
                           <td className="border p-2">
@@ -701,9 +717,11 @@ export default function Pintura() {
                           <td className="border p-2">
                             <Input 
                               type="number" 
-                              value={consumo.costo_unitario || 0} 
-                              readOnly 
-                              className="h-8 text-xs text-right bg-gray-50 font-medium" 
+                              value={consumo.costo_unitario || 0}
+                              onChange={e => handleConsumoChange(idx, 'costo_unitario', parseFloat(e.target.value) || 0)}
+                              className="h-8 text-xs text-right font-medium" 
+                              min="0"
+                              step="1"
                             />
                           </td>
                           <td className="border p-2">
@@ -714,22 +732,8 @@ export default function Pintura() {
                               className="h-8 text-xs text-right bg-blue-50 font-bold" 
                             />
                           </td>
-                          <td className="border p-2">
-                            <Select value={consumo.lote_producto} onValueChange={v => handleConsumoChange(idx, 'lote_producto', v)}>
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Lote *" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {lotesRecepcion.filter(lote => lote.codigo_lote).map(lote => (
-                                  <SelectItem key={lote.id} value={lote.codigo_lote}>
-                                    {lote.codigo_lote} - {lote.descripcion_producto || 'N/A'}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border p-2">
-                            <Input value={consumo.observacion} onChange={e => handleConsumoChange(idx, 'observacion', e.target.value)} className="h-8 text-xs" />
+                          <td className="border p-2 min-w-[120px]">
+                            <Input value={consumo.observacion || ''} onChange={e => handleConsumoChange(idx, 'observacion', e.target.value)} className="h-8 text-xs" placeholder="Opcional" />
                           </td>
                           <td className="border p-2 text-center">
                             <Button type="button" variant="ghost" size="sm" onClick={() => eliminarConsumo(idx)}>
