@@ -983,6 +983,54 @@ export default function Pintura() {
                     })()}
                   </span>
                 </div>
+
+                {/* CAMPOS DE EFICIENCIA */}
+                <div className="border-t border-slate-300 pt-3 mt-3">
+                  <p className="text-xs font-bold text-slate-600 uppercase mb-2">Control de Eficiencia</p>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs">Hojas Dañadas (Merma)</Label>
+                      <Input
+                        type="number"
+                        value={currentItem.hojas_danadas || 0}
+                        min="0"
+                        step="1"
+                        onChange={e => {
+                          const danadas = parseFloat(e.target.value) || 0;
+                          const enviadas = parseFloat(currentItem.total_hojas_enviadas_pintura) || 0;
+                          setCurrentItem({ ...currentItem, hojas_danadas: danadas });
+                        }}
+                        className="h-8 text-sm text-right"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Hojas Buenas</Label>
+                      <Input
+                        type="number"
+                        value={Math.max(0, (parseFloat(currentItem.total_hojas_enviadas_pintura) || 0) - (parseFloat(currentItem.hojas_danadas) || 0))}
+                        readOnly
+                        className="h-8 text-sm text-right bg-green-50 font-bold text-green-700"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">% de Rendimiento</Label>
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          value={(() => {
+                            const enviadas = parseFloat(currentItem.total_hojas_enviadas_pintura) || 0;
+                            if (enviadas <= 0) return '0.00';
+                            const buenas = Math.max(0, enviadas - (parseFloat(currentItem.hojas_danadas) || 0));
+                            return ((buenas / enviadas) * 100).toFixed(2);
+                          })()}
+                          readOnly
+                          className="h-8 text-sm text-right bg-blue-50 font-bold text-blue-700 pr-8"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 font-bold">%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
