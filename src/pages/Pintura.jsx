@@ -448,7 +448,21 @@ export default function Pintura() {
           } else if (origen === 'terminado') {
             const ptItem = productosTerminados.find(i => i.id === prod.item_id);
             if (ptItem) {
-              const nuevoStock = (ptItem.stock_actual || 0) - cantidadUsada;
+              // Calcular stock real desde movimientos
+              const movsProd = await MovimientoInventario.filter({ insumo_id: ptItem.id });
+              const stockReal = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+              const nuevoStock = stockReal - cantidadUsada;
+              // Crear movimiento de salida (así InventarioProduccion lo refleja correctamente)
+              await MovimientoInventario.create({
+                tipo_movimiento: 'salida',
+                insumo_id: ptItem.id,
+                cantidad: -cantidadUsada,
+                costo_unitario: ptItem.costo_promedio || 0,
+                fecha_movimiento: fechaHoy,
+                referencia: currentItem.id_consecutivo || 'PINTURA',
+                observaciones: `Salida por proceso de pintura ${currentItem.id_consecutivo || ''}. Producto: ${prod.descripcion || prod.codigo}`
+              });
+              // También actualizar stock_actual directamente
               await ProductoTerminado.update(ptItem.id, { stock_actual: Math.max(0, nuevoStock) });
             }
           } else if (origen === 'insumo') {
@@ -456,6 +470,15 @@ export default function Pintura() {
             if (insumoItem) {
               const nuevoStock = (insumoItem.stock_actual || 0) - cantidadUsada;
               await Insumo.update(insumoItem.id, { stock_actual: Math.max(0, nuevoStock) });
+              await MovimientoInventario.create({
+                tipo_movimiento: 'salida',
+                insumo_id: insumoItem.id,
+                cantidad: -cantidadUsada,
+                costo_unitario: insumoItem.costo_promedio || 0,
+                fecha_movimiento: fechaHoy,
+                referencia: currentItem.id_consecutivo || 'PINTURA',
+                observaciones: `Salida por proceso de pintura ${currentItem.id_consecutivo || ''}. Producto: ${prod.descripcion || prod.codigo}`
+              });
             }
           }
         }
