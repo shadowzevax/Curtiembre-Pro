@@ -612,34 +612,24 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
              let entityType = null;
 
              try {
-                 // BUSCAR PRODUCTO PRIMERO POR CÓDIGO (más confiable)
+                 // BUSCAR PRODUCTO POR CÓDIGO: consultar catálogo para obtener categoría,
+                 // luego buscar en la entidad de inventario correspondiente SOLO por código.
                  if (item.codigo) {
-                     // Intentar primero en ProductoCatalogo para obtener categoría correcta
-                     const catalogoItem = await ProductoCatalogo.filter({ codigo: item.codigo });
-                     if (catalogoItem.length > 0) {
-                         const cat = catalogoItem[0].categoria;
-                         
-                         // Buscar en la entidad correcta según categoría del catálogo
-                         if (cat === 'materia_prima') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'pieles' });
-                             if (items.length > 0) {
-                                 currentItemData = items[0];
-                                 entityType = ProductoTerminado;
-                             }
-                         } else if (cat === 'insumos_quimicos') {
-                             const items = await Insumo.filter({ codigo: item.codigo });
-                             if (items.length > 0) {
-                                 currentItemData = items[0];
-                                 entityType = Insumo;
-                             }
-                         } else if (cat === 'productos_terminados') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'producto_terminado' });
-                             if (items.length > 0) {
-                                 currentItemData = items[0];
-                                 entityType = ProductoTerminado;
-                             }
-                         }
-                     }
+                    const catalogoItem = await ProductoCatalogo.filter({ codigo: item.codigo });
+                    if (catalogoItem.length > 0) {
+                        const cat = catalogoItem[0].categoria;
+
+                        if (cat === 'materia_prima') {
+                            const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        } else if (cat === 'insumos_quimicos') {
+                            const items = await Insumo.filter({ codigo: item.codigo });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
+                        } else if (cat === 'productos_terminados') {
+                            const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
+                        }
+                    }
                  }
 
                  if (entityType && currentItemData) {
@@ -1095,30 +1085,22 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                  let currentItemData = null;
                  let entityType = null;
 
-                 // BUSCAR POR CÓDIGO (más confiable)
+                 // BUSCAR POR CÓDIGO: consultar catálogo para obtener categoría,
+                 // luego buscar en la entidad de inventario correspondiente SOLO por código.
                  if (item.codigo) {
                      const catalogoItem = await ProductoCatalogo.filter({ codigo: item.codigo });
                      if (catalogoItem.length > 0) {
                          const cat = catalogoItem[0].categoria;
                          
                          if (cat === 'materia_prima') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'pieles' });
-                             if (items.length > 0) {
-                                 currentItemData = items[0];
-                                 entityType = ProductoTerminado;
-                             }
+                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                             if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
                          } else if (cat === 'insumos_quimicos') {
                              const items = await Insumo.filter({ codigo: item.codigo });
-                             if (items.length > 0) {
-                                 currentItemData = items[0];
-                                 entityType = Insumo;
-                             }
+                             if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
                          } else if (cat === 'productos_terminados') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo, categoria: 'producto_terminado' });
-                             if (items.length > 0) {
-                                 currentItemData = items[0];
-                                 entityType = ProductoTerminado;
-                             }
+                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
+                             if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
                          }
                      }
                  }
