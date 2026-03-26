@@ -686,14 +686,39 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                      });
 
                      console.log(`✅ Inventario actualizado para ${item.codigo}: Stock=${nuevoStock}, Costo Promedio=${nuevoCostoPromedio}`);
-                 } else {
-                     console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);
-                 }
-             } catch (err) {
-                 console.error("❌ Error actualizando inventario para item", item.codigo, err);
-             }
-        }
-    }
+
+                     // Crear registro en InventarioEnProceso si la categoría del catálogo lo requiere
+                     if (!documento) {
+                         try {
+                             const { InventarioEnProceso } = await import('@/entities/all');
+                             const catalogoData = (await ProductoCatalogo.filter({ codigo: item.codigo }))[0];
+                             if (catalogoData && (catalogoData.categoria === 'productos_en_proceso' || catalogoData.categoria === 'materia_prima')) {
+                                 await InventarioEnProceso.create({
+                                     codigo: item.codigo,
+                                     descripcion: item.descripcion || catalogoData.descripcion || '',
+                                     codigo_lote: finalData.codigo_lote_inventario || `${finalData.prefijo_documento}-${finalData.numero_documento}`,
+                                     origen_modulo: 'compras',
+                                     etapa_actual: 'recepcion',
+                                     estado_proceso: 'piel_recibida',
+                                     estado_actual: 'disponible',
+                                     cantidad_hojas: cantidadCompra,
+                                     fecha_ingreso_proceso: finalData.fecha_emision_documento || finalData.fecha_orden,
+                                     submodulo_origen: finalData.prefijo || 'compras',
+                                 });
+                                 console.log(`✅ InventarioEnProceso creado para ${item.codigo}`);
+                             }
+                         } catch (err) {
+                             console.error('Error creando InventarioEnProceso:', err);
+                         }
+                     }
+                     } else {
+                      console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);
+                     }
+                     } catch (err) {
+                     console.error("❌ Error actualizando inventario para item", item.codigo, err);
+                     }
+                     }
+                     }
 
     // Actualizar estado del documento según condición de pago en compras
     if (tipoDocumento === 'compra') {

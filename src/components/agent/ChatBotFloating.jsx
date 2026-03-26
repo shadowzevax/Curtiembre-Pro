@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,12 +9,16 @@ import ReactMarkdown from 'react-markdown';
 export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
-  const [position, setPosition] = useState(() => {
-    const saved = localStorage.getItem('copiloto_position');
-    return saved ? JSON.parse(saved) : { x: window.innerWidth - 100, y: window.innerHeight - 100 };
+  const dragPos = useRef(() => {
+    try {
+      const saved = localStorage.getItem('copiloto_position');
+      return saved ? JSON.parse(saved) : { x: window.innerWidth - 100, y: window.innerHeight - 100 };
+    } catch { return { x: window.innerWidth - 100, y: window.innerHeight - 100 }; }
   });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const buttonRef = useRef(null);
+  const chatContainerRef = useRef(null);
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -23,6 +27,12 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
   const messagesEndRef = useRef(null);
   const chatRef = useRef(null);
   const messagesContainerRef = useRef(null);
+
+  const applyPosition = useCallback((pos, el) => {
+    if (!el) return;
+    el.style.left = pos.x + 'px';
+    el.style.top = pos.y + 'px';
+  }, []);
 
   useEffect(() => {
     initConversation();
@@ -112,50 +122,38 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     }
   };
 
-  const handleMouseDown = (e) => {
+  const handleMouseDown = useCallback((e) => {
     if (isMaximized) return;
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y
-    });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging || isMaximized) return;
-    
     e.preventDefault();
-    
-    const newX = e.clientX - dragStart.x;
-    const newY = e.clientY - dragStart.y;
-    
-    // Límites de la ventana
-    const maxX = window.innerWidth - 80;
-    const maxY = window.innerHeight - 80;
-    
-    const newPosition = {
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY))
+    const pos = dragPos.current();
+    isDraggingRef.current = true;
+    dragStartRef.current = {
+      x: e.clientX - pos.x,
+      y: e.clientY - pos.y
     };
-    
-    setPosition(newPosition);
-    localStorage.setItem('copiloto_position', JSON.stringify(newPosition));
-  };
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+    const onMouseMove = (ev) => {
+      if (!isDraggingRef.current) return;
+      const el = isOpen ? chatRef.current : buttonRef.current;
+      const size = el ? el.getBoundingClientRect() : { width: 64, height: 64 };
+      const newX = Math.max(0, Math.min(ev.clientX - dragStartRef.current.x, window.innerWidth - size.width));
+      const newY = Math.max(0, Math.min(ev.clientY - dragStartRef.current.y, window.innerHeight - size.height));
+      const newPos = { x: newX, y: newY };
+      dragPos.current = () => newPos;
+      applyPosition(newPos, el);
+    };
 
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging]);
+    const onMouseUp = () => {
+      isDraggingRef.current = false;
+      const pos = dragPos.current();
+      localStorage.setItem('copiloto_position', JSON.stringify(pos));
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [isMaximized, isOpen, applyPosition]);
 
   const MessageBubble = ({ message }) => {
     const isUser = message.role === 'user';
@@ -230,18 +228,25 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     setIsOpen(!isOpen);
   };
 
-  // Bola flotante minimizada - SIEMPRE EN ESQUINA INFERIOR DERECHA
+  // Posición inicial para el elemento flotante
+  const initPos = dragPos.current();
+
+  // Bola flotante minimizada
   if (!isOpen) {
     return (
       <button
+        ref={buttonRef}
+        onMouseDown={handleMouseDown}
         onClick={handleToggleOpen}
         style={{ 
           position: 'fixed', 
-          bottom: '24px',
-          right: '24px',
-          zIndex: 9999
+          left: initPos.x + 'px',
+          top: initPos.y + 'px',
+          zIndex: 9999,
+          cursor: 'grab',
+          userSelect: 'none',
         }}
-        className="h-14 w-14 md:h-16 md:w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+        className="h-14 w-14 md:h-16 md:w-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl hover:shadow-emerald-500/50 transition-shadow duration-300 flex items-center justify-center group"
         title="Abrir Copiloto ERP"
       >
         <MessageCircle className="w-7 h-7 md:w-8 md:h-8 text-white group-hover:animate-pulse" />
@@ -250,16 +255,17 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     );
   }
 
-  // Chat abierto - SIEMPRE EN ESQUINA INFERIOR DERECHA
+  // Chat abierto
   const chatStyle = isMaximized
     ? { position: 'fixed', top: '20px', left: '20px', right: '20px', bottom: '20px', width: 'auto', height: 'auto', zIndex: 9999 }
     : { 
         position: 'fixed', 
-        bottom: '24px', 
-        right: '24px', 
+        left: initPos.x + 'px',
+        top: initPos.y + 'px',
         width: 'min(400px, calc(100vw - 48px))', 
         height: 'min(600px, calc(100vh - 100px))',
-        zIndex: 9999
+        zIndex: 9999,
+        userSelect: 'none',
       };
 
   return (
@@ -270,7 +276,9 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     >
       {/* Header */}
       <div
-        className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-3 md:p-4 flex items-center justify-between"
+        onMouseDown={handleMouseDown}
+        style={{ cursor: isMaximized ? 'default' : 'grab' }}
+        className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white p-3 md:p-4 flex items-center justify-between select-none"
       >
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-white/20 flex items-center justify-center">
