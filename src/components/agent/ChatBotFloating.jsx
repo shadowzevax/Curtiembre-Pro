@@ -125,8 +125,10 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
   const handleMouseDown = useCallback((e) => {
     if (isMaximized) return;
     e.preventDefault();
+    e.stopPropagation();
     const pos = dragPos.current();
     isDraggingRef.current = true;
+    let hasMoved = false;
     dragStartRef.current = {
       x: e.clientX - pos.x,
       y: e.clientY - pos.y
@@ -134,6 +136,9 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
 
     const onMouseMove = (ev) => {
       if (!isDraggingRef.current) return;
+      const dx = Math.abs(ev.clientX - e.clientX);
+      const dy = Math.abs(ev.clientY - e.clientY);
+      if (dx > 3 || dy > 3) hasMoved = true;
       const el = isOpen ? chatRef.current : buttonRef.current;
       const size = el ? el.getBoundingClientRect() : { width: 64, height: 64 };
       const newX = Math.max(0, Math.min(ev.clientX - dragStartRef.current.x, window.innerWidth - size.width));
@@ -143,12 +148,18 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
       applyPosition(newPos, el);
     };
 
-    const onMouseUp = () => {
+    const onMouseUp = (ev) => {
       isDraggingRef.current = false;
       const pos = dragPos.current();
       localStorage.setItem('copiloto_position', JSON.stringify(pos));
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
+      // Si se movió, cancelar el click siguiente
+      if (hasMoved) {
+        ev.stopPropagation();
+        const cancelClick = (e) => { e.stopPropagation(); e.preventDefault(); window.removeEventListener('click', cancelClick, true); };
+        window.addEventListener('click', cancelClick, true);
+      }
     };
 
     document.addEventListener('mousemove', onMouseMove);
@@ -255,15 +266,20 @@ export default function ChatBotFloating({ agentName = 'copiloto_erp' }) {
     );
   }
 
-  // Chat abierto
+  // Chat abierto: se despliega hacia arriba-izquierda respecto al botón
+  const chatW = Math.min(400, window.innerWidth - 48);
+  const chatH = Math.min(600, window.innerHeight - 100);
+  const chatLeft = Math.max(8, Math.min(initPos.x - chatW + 64, window.innerWidth - chatW - 8));
+  const chatTop = Math.max(8, initPos.y - chatH);
+
   const chatStyle = isMaximized
     ? { position: 'fixed', top: '20px', left: '20px', right: '20px', bottom: '20px', width: 'auto', height: 'auto', zIndex: 9999 }
     : { 
         position: 'fixed', 
-        left: initPos.x + 'px',
-        top: initPos.y + 'px',
-        width: 'min(400px, calc(100vw - 48px))', 
-        height: 'min(600px, calc(100vh - 100px))',
+        left: chatLeft + 'px',
+        top: chatTop + 'px',
+        width: chatW + 'px', 
+        height: chatH + 'px',
         zIndex: 9999,
         userSelect: 'none',
       };

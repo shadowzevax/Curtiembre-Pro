@@ -498,9 +498,10 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         
         // Mensaje de éxito
         toast({
-          title: "✅ Guardado exitosamente",
-          description: `El documento fue registrado correctamente.`,
+          title: "✅ Documento guardado",
+          description: `${finalData.numero_id || finalData.numero_documento} registrado correctamente.`,
           duration: 4000,
+          className: "border-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-2xl shadow-emerald-500/30 rounded-xl",
         });
 
     // REVERTIR MOVIMIENTOS ANTIGUOS SI ES EDICIÓN
@@ -687,16 +688,25 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
                      console.log(`✅ Inventario actualizado para ${item.codigo}: Stock=${nuevoStock}, Costo Promedio=${nuevoCostoPromedio}`);
 
-                     // Crear registro en InventarioEnProceso si la categoría del catálogo lo requiere
+                     // ─── SINCRONIZACIÓN AUTOMÁTICA POR CATEGORÍA DEL CATÁLOGO ───
+                     // Según la categoría del producto en CatálogoProductos, guardar en el inventario correspondiente
                      if (!documento) {
                          try {
-                             const { InventarioEnProceso } = await import('@/entities/all');
-                             const catalogoData = (await ProductoCatalogo.filter({ codigo: item.codigo }))[0];
-                             if (catalogoData && (catalogoData.categoria === 'productos_en_proceso' || catalogoData.categoria === 'materia_prima')) {
+                             const catalogoData = catalogoItem[0];
+                             const cat = catalogoData.categoria;
+                             const refDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
+
+                             if (cat === 'insumos_quimicos') {
+                                 // Ya está en Insumo (entityType = Insumo) — no hacer nada extra
+                                 console.log(`✅ Insumo Químico actualizado en Inventario de Insumos y Químicos`);
+
+                             } else if (cat === 'productos_en_proceso') {
+                                 // Guardar en InventarioEnProceso
+                                 const { InventarioEnProceso } = await import('@/entities/all');
                                  await InventarioEnProceso.create({
                                      codigo: item.codigo,
                                      descripcion: item.descripcion || catalogoData.descripcion || '',
-                                     codigo_lote: finalData.codigo_lote_inventario || `${finalData.prefijo_documento}-${finalData.numero_documento}`,
+                                     codigo_lote: finalData.codigo_lote_inventario || refDoc,
                                      origen_modulo: 'compras',
                                      etapa_actual: 'recepcion',
                                      estado_proceso: 'piel_recibida',
@@ -705,20 +715,30 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                      fecha_ingreso_proceso: finalData.fecha_emision_documento || finalData.fecha_orden,
                                      submodulo_origen: finalData.prefijo || 'compras',
                                  });
-                                 console.log(`✅ InventarioEnProceso creado para ${item.codigo}`);
+                                 console.log(`✅ Guardado en Inventario Productos en Proceso`);
+
+                             } else if (cat === 'materia_prima') {
+                                 // Ya está en ProductoTerminado con categoria 'pieles' — no hacer nada extra
+                                 console.log(`✅ Materia Prima actualizada en Inventario de Materias Primas`);
+
+                             } else if (cat === 'productos_terminados') {
+                                 // Ya está en ProductoTerminado con categoria 'producto_terminado' — no hacer nada extra
+                                 console.log(`✅ Producto Terminado actualizado en Inventario de Productos Terminados`);
                              }
                          } catch (err) {
-                             console.error('Error creando InventarioEnProceso:', err);
+                             console.error('Error en sincronización de inventario por categoría:', err);
                          }
                      }
-                     } else {
+                     // ────────────────────────────────────────────────────────────
+
+                 } else {
                       console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);
-                     }
-                     } catch (err) {
-                     console.error("❌ Error actualizando inventario para item", item.codigo, err);
-                     }
-                     }
-                     }
+                 }
+             } catch (err) {
+                 console.error("❌ Error actualizando inventario para item", item.codigo, err);
+             }
+        }
+    }
 
     // Actualizar estado del documento según condición de pago en compras
     if (tipoDocumento === 'compra') {
