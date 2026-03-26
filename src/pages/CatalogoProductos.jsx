@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, RefreshCw } from 'lucide-react';
 
 export default function CatalogoProductos() {
     const [productos, setProductos] = useState([]);
@@ -63,7 +63,6 @@ export default function CatalogoProductos() {
     const handleSave = async (e) => {
         e.preventDefault();
         
-        // Validate duplicate code
         if (!isEditing) {
             const exists = productos.some(p => p.codigo === currentItem.codigo);
             if (exists) {
@@ -75,10 +74,35 @@ export default function CatalogoProductos() {
         try {
             if (isEditing) {
                 await ProductoCatalogo.update(currentItem.id, currentItem);
+                
+                // Sincronizar datos básicos en el inventario espejo al editar
+                if (currentItem.maneja_inventario && currentItem.categoria) {
+                    try {
+                        const updateData = {
+                            nombre: currentItem.descripcion,
+                            descripcion: currentItem.descripcion,
+                            unidad_medida: currentItem.unidad_medida || 'UN',
+                            stock_minimo: currentItem.stock_minimo || 0,
+                            activo: currentItem.estado === 'activo'
+                        };
+                        if (currentItem.categoria === 'materia_prima') {
+                            const items = await ProductoTerminado.filter({ codigo: currentItem.codigo });
+                            if (items.length > 0) await ProductoTerminado.update(items[0].id, updateData);
+                        } else if (currentItem.categoria === 'insumos_quimicos') {
+                            const items = await Insumo.filter({ codigo: currentItem.codigo });
+                            if (items.length > 0) await Insumo.update(items[0].id, updateData);
+                        } else if (currentItem.categoria === 'productos_terminados') {
+                            const items = await ProductoTerminado.filter({ codigo: currentItem.codigo });
+                            if (items.length > 0) await ProductoTerminado.update(items[0].id, updateData);
+                        }
+                    } catch (err) {
+                        console.error("Error sincronizando inventario al editar:", err);
+                    }
+                }
             } else {
                 const newProduct = await ProductoCatalogo.create(currentItem);
                 
-                // Auto-create in inventory based on category
+                // Auto-crear en el inventario correspondiente según categoría
                 if (newProduct.maneja_inventario && newProduct.categoria) {
                     try {
                         const baseInventoryData = {
@@ -96,18 +120,13 @@ export default function CatalogoProductos() {
                         };
 
                         if (newProduct.categoria === 'materia_prima') {
-                            // Crear SOLO en Inventario de Materias Primas (ProductoTerminado con categoría específica)
                             await ProductoTerminado.create({...baseInventoryData, categoria: 'pieles'});
-                            console.log('✅ Producto creado en Inventario de Materias Primas');
                         } else if (newProduct.categoria === 'insumos_quimicos') {
-                            // Crear SOLO en Inventario de Insumos (Insumo)
                             await Insumo.create({...baseInventoryData, categoria: 'quimicos'});
-                            console.log('✅ Producto creado en Inventario de Insumos y Químicos');
                         } else if (newProduct.categoria === 'productos_terminados') {
-                            // Crear SOLO en Inventario de Productos Terminados (ProductoTerminado con categoría diferente)
                             await ProductoTerminado.create({...baseInventoryData, categoria: 'producto_terminado'});
-                            console.log('✅ Producto creado SOLO en Inventario de Productos Terminados');
                         }
+                        // productos_en_proceso: no se crea en inventario estático, se crea al hacer compra
                     } catch (err) {
                         console.error("Error creando en inventario:", err);
                         alert("Producto creado en catálogo, pero hubo un error al agregarlo al inventario. Puede agregarlo manualmente.");
@@ -121,6 +140,45 @@ export default function CatalogoProductos() {
             console.error("Error saving:", error);
             alert("Error al guardar el producto.");
         }
+    };
+
+    const handleSyncAll = async () => {
+        if (!confirm('¿Sincronizar todos los productos del catálogo con sus inventarios correspondientes? Solo creará los registros que falten.')) return;
+        let creados = 0;
+        let errores = 0;
+        for (const prod of productos) {
+            if (!prod.maneja_inventario || !prod.categoria) continue;
+            try {
+                const baseData = {
+                    codigo: prod.codigo,
+                    nombre: prod.descripcion,
+                    descripcion: prod.descripcion,
+                    unidad_medida: prod.unidad_medida || 'UN',
+                    stock_actual: 0,
+                    stock_minimo: prod.stock_minimo || 0,
+                    costo_promedio: prod.costo_estandar || 0,
+                    precio_venta_1: 0,
+                    precio_venta_2: 0,
+                    iva: 'grabado_19',
+                    activo: prod.estado === 'activo'
+                };
+                if (prod.categoria === 'materia_prima') {
+                    const existe = await ProductoTerminado.filter({ codigo: prod.codigo });
+                    if (existe.length === 0) { await ProductoTerminado.create({...baseData, categoria: 'pieles'}); creados++; }
+                } else if (prod.categoria === 'insumos_quimicos') {
+                    const existe = await Insumo.filter({ codigo: prod.codigo });
+                    if (existe.length === 0) { await Insumo.create({...baseData, categoria: 'quimicos'}); creados++; }
+                } else if (prod.categoria === 'productos_terminados') {
+                    const existe = await ProductoTerminado.filter({ codigo: prod.codigo });
+                    if (existe.length === 0) { await ProductoTerminado.create({...baseData, categoria: 'producto_terminado'}); creados++; }
+                }
+            } catch (err) {
+                console.error('Error sincronizando', prod.codigo, err);
+                errores++;
+            }
+        }
+        alert(`Sincronización completa.\nRegistros creados: ${creados}\nErrores: ${errores}`);
+        loadData();
     };
 
     const handleDelete = async (id) => {
@@ -161,9 +219,14 @@ export default function CatalogoProductos() {
                 title="Catálogo de Productos" 
                 description="Gestión maestra de productos y servicios."
                 actionButton={
-                    <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
-                        <Plus className="w-4 h-4 mr-2" /> Nuevo Producto
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleSyncAll} className="border-blue-500 text-blue-600 hover:bg-blue-50">
+                            <RefreshCw className="w-4 h-4 mr-2" /> Sincronizar Inventarios
+                        </Button>
+                        <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
+                            <Plus className="w-4 h-4 mr-2" /> Nuevo Producto
+                        </Button>
+                    </div>
                 }
             />
 
