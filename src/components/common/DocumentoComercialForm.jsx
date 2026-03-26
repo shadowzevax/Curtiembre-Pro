@@ -5,15 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, X, Save, Upload } from 'lucide-react';
+import { Plus, X, Save, Upload, CheckCircle2 } from 'lucide-react';
 import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
 import NumericInput from './NumericInput';
 import { ProductoCatalogo, OrdenCompra, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
+import { useToast } from "@/components/ui/use-toast";
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 
 export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, documento, terceros, itemsCatalogo, tipoDocumento, tipoItem, terceroLabel, documentoTitulo }) {
+  const { toast } = useToast();
   const [formData, setFormData] = useState(null);
   const [terceroPersonalizado, setTerceroPersonalizado] = useState(false);
   const [itemsPersonalizados, setItemsPersonalizados] = useState({});
@@ -495,7 +497,11 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         const orderId = savedOrder?.id || finalData.id;
         
         // Mensaje de éxito
-        alert('✅ GUARDADO EXITOSAMENTE');
+        toast({
+          title: "✅ Guardado exitosamente",
+          description: `El documento fue registrado correctamente.`,
+          duration: 4000,
+        });
 
     // REVERTIR MOVIMIENTOS ANTIGUOS SI ES EDICIÓN
     if (documento && tipoDocumento === 'compra' && finalData.afecta_inventario) {
@@ -892,8 +898,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                             tipo_movimiento: 'egreso',
                             concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
                             tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
-                            valor_salida: finalData.valor_pagado,
-                            saldo: nuevoSaldo
+                            valor: finalData.valor_pagado,
+                            saldo_posterior: nuevoSaldo
                         });
                     }
                 }

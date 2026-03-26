@@ -156,14 +156,13 @@ export default function CompraInsumos() {
               await Caja.update(cajaData.id, { saldo_actual: nuevoSaldo });
               await MovimientoCaja.create({
                 caja_id: cajaData.id,
-                codigo_caja: cajaData.codigo_caja,
                 nombre_caja: cajaData.nombre,
                 fecha: orderData.fecha_emision_documento || orderData.fecha_orden,
-                tipo: 'salida',
+                tipo_movimiento: 'salida',
                 concepto: `Compra - ${orderData.tipo_documento_proveedor} ${orderData.numero_documento}`,
                 responsable: '',
-                valor_salida: orderData.total,
-                saldo: nuevoSaldo
+                valor: orderData.total,
+                saldo_resultante: nuevoSaldo
               });
             }
           } else if (orderData.forma_pago === 'banco') {
@@ -180,8 +179,8 @@ export default function CompraInsumos() {
                   fecha: orderData.fecha_emision_documento || orderData.fecha_orden,
                   tipo_movimiento: 'egreso',
                   concepto: `Compra - ${orderData.tipo_documento_proveedor} ${orderData.numero_documento}`,
-                  valor_salida: orderData.total,
-                  saldo: nuevoSaldo
+                  valor: orderData.total,
+                  saldo_posterior: nuevoSaldo
                 });
               }
             }
@@ -218,7 +217,7 @@ export default function CompraInsumos() {
       loadData();
     } catch (error) {
       console.error("Error saving order:", error);
-      alert("Error al guardar la orden: " + error.message);
+      // El error ya se muestra en DocumentoComercialForm
     } finally {
       setLoading(false);
     }
