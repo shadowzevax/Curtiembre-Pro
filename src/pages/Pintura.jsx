@@ -11,6 +11,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Edit, Trash2, Eye, Table as TableIcon, X } from 'lucide-react';
 
+// Combina todos los inventarios en un único catálogo unificado para los selectores
+function buildCatalogoCombinado(inventarioEnProceso, insumosQuimicos, productosTerminados) {
+  const items = [];
+  productosTerminados.forEach(p => {
+    items.push({ id: p.id, codigo: p.codigo || '', descripcion: p.descripcion || p.nombre || '', unidad_medida: p.unidad_medida || '', costo_promedio: p.costo_promedio || 0, stock_actual: p.stock_actual || 0, stock_minimo: p.stock_minimo || 0, origen: 'terminado', entityId: p.id });
+  });
+  insumosQuimicos.forEach(i => {
+    if (!items.some(x => x.codigo === i.codigo)) {
+      items.push({ id: i.id, codigo: i.codigo || '', descripcion: i.nombre || i.descripcion || '', unidad_medida: i.unidad_medida || '', costo_promedio: i.costo_promedio || 0, stock_actual: i.stock_actual || 0, stock_minimo: i.stock_minimo || 0, origen: 'insumo', entityId: i.id });
+    }
+  });
+  inventarioEnProceso.forEach(p => {
+    if (!items.some(x => x.codigo === p.codigo)) {
+      items.push({ id: p.id, codigo: p.codigo || '', descripcion: p.descripcion || '', unidad_medida: 'HOJA', costo_promedio: 0, stock_actual: p.cantidad_hojas || 0, stock_minimo: 0, origen: 'en_proceso', entityId: p.id });
+    }
+  });
+  return items.filter(i => i.codigo).sort((a, b) => a.codigo.localeCompare(b.codigo));
+}
+
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('es-CO') : 'N/A';
 
@@ -21,6 +40,8 @@ export default function Pintura() {
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [inventarioInsumos, setInventarioInsumos] = useState([]);
   const [insumosQuimicos, setInsumosQuimicos] = useState([]);
+  const [productosTerminados, setProductosTerminados] = useState([]);
+  const [catalogoCombinado, setCatalogoCombinado] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -37,11 +58,12 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, pedidosData, inventarioData] = await Promise.all([
+      const [procesosData, insumosData, pedidosData, inventarioData, productosTermData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
         Insumo.list(),
         PedidoMarroquinero.list(),
-        InventarioEnProceso.list()
+        InventarioEnProceso.list(),
+        ProductoTerminado.list()
       ]);
       setProcesos(procesosData);
       setInsumos(insumosData);
@@ -49,6 +71,8 @@ export default function Pintura() {
       setInventarioEnProceso(inventarioData);
       setInsumosQuimicos(insumosData);
       setInventarioInsumos(insumosData);
+      setProductosTerminados(productosTermData);
+      setCatalogoCombinado(buildCatalogoCombinado(inventarioData, insumosData, productosTermData));
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -180,6 +204,8 @@ export default function Pintura() {
   const agregarConsumo = () => {
     setConsumosItems([...consumosItems, {
       insumo_id: '',
+      item_id: '',
+      origen_inventario: '',
       codigo_pcto: '',
       nombre_producto: '',
       unidad_medida: '',
@@ -223,16 +249,19 @@ export default function Pintura() {
     const updated = [...consumosItems];
     updated[index][field] = value;
 
-    if (field === 'insumo_id') {
-      const insumo = insumosQuimicos.find(i => i.id === value);
-      if (insumo) {
-        updated[index].codigo_pcto = insumo.codigo || '';
-        updated[index].nombre_producto = insumo.nombre || insumo.descripcion || '';
-        updated[index].unidad_medida = insumo.unidad_medida || '';
-        updated[index].costo_unitario = insumo.costo_promedio || 0;
-        // Recalcular costo total con el nuevo costo unitario
+    if (field === 'item_id') {
+      const catalogoItem = catalogoCombinado.find(i => i.id === value);
+      if (catalogoItem) {
+        updated[index].item_id = catalogoItem.id;
+        // Para compatibilidad con lógica de inventario existente
+        updated[index].insumo_id = catalogoItem.origen === 'insumo' ? catalogoItem.entityId : '';
+        updated[index].origen_inventario = catalogoItem.origen;
+        updated[index].codigo_pcto = catalogoItem.codigo;
+        updated[index].nombre_producto = catalogoItem.descripcion;
+        updated[index].unidad_medida = catalogoItem.unidad_medida;
+        updated[index].costo_unitario = catalogoItem.costo_promedio || 0;
         const cantidad = parseFloat(updated[index].cantidad_consumida) || 0;
-        updated[index].costo_total = cantidad * (insumo.costo_promedio || 0);
+        updated[index].costo_total = cantidad * (catalogoItem.costo_promedio || 0);
       }
     }
 
@@ -269,18 +298,22 @@ export default function Pintura() {
   const handleProductoProduccionChange = (index, field, value) => {
     const updated = [...productosProduccion];
 
-    if (field === 'codigo') {
-      // Buscar el item de inventario por código
-      const invItem = inventarioEnProceso.find(i => i.codigo === value);
-      if (invItem) {
-        updated[index].codigo = invItem.codigo || '';
-        updated[index].inv_proceso_id = invItem.id || '';
-        updated[index].descripcion = invItem.descripcion || '';
-        updated[index].codigo_lote = invItem.codigo_lote || '';
-        updated[index].cantidad_disponible = invItem.cantidad_hojas || 0;
-        updated[index].cantidad_hojas = invItem.cantidad_hojas || 0;
-      } else {
-        updated[index].codigo = value;
+    if (field === 'item_id') {
+      const catalogoItem = catalogoCombinado.find(i => i.id === value);
+      if (catalogoItem) {
+        updated[index].item_id = catalogoItem.id;
+        updated[index].codigo = catalogoItem.codigo;
+        updated[index].descripcion = catalogoItem.descripcion;
+        updated[index].origen_inventario = catalogoItem.origen;
+        // Para compatibilidad con lógica de inventario en proceso
+        updated[index].inv_proceso_id = catalogoItem.origen === 'en_proceso' ? catalogoItem.entityId : '';
+        updated[index].cantidad_disponible = catalogoItem.stock_actual || 0;
+        updated[index].cantidad_hojas = catalogoItem.stock_actual || 0;
+        // Lote si aplica
+        if (catalogoItem.origen === 'en_proceso') {
+          const invItem = inventarioEnProceso.find(i => i.id === catalogoItem.entityId);
+          updated[index].codigo_lote = invItem?.codigo_lote || '';
+        }
       }
     } else {
       updated[index][field] = value;
@@ -304,25 +337,27 @@ export default function Pintura() {
 
     // Validar consumos
     for (const consumo of consumosItems) {
-      if (!consumo.insumo_id || !consumo.nombre_producto) {
-        alert('Error: Todos los productos deben tener un insumo seleccionado.');
+      if (!consumo.item_id && !consumo.insumo_id && !consumo.nombre_producto) {
+        alert('Error: Todos los items de consumo deben tener un producto seleccionado.');
         return;
       }
       if (consumo.cantidad_consumida <= 0) {
         alert('Error: La cantidad consumida debe ser mayor a cero.');
         return;
       }
-      // Validar stock disponible
-      const insumo = insumosQuimicos.find(i => i.id === consumo.insumo_id);
-      if (insumo) {
-        const stockDisponible = insumo.stock_actual || 0;
-        if (consumo.cantidad_consumida > stockDisponible) {
-          alert(`⚠️ Stock insuficiente para "${consumo.nombre_producto}".\nStock disponible: ${stockDisponible} ${insumo.unidad_medida || ''}\nCantidad solicitada: ${consumo.cantidad_consumida}`);
-          return;
-        }
-        if (stockDisponible <= (insumo.stock_minimo || 0)) {
-          if (!confirm(`⚠️ ALERTA: El producto "${consumo.nombre_producto}" tiene stock bajo (${stockDisponible} ${insumo.unidad_medida || ''}). ¿Desea continuar de todas formas?`)) {
+      // Validar stock disponible solo para insumos (tienen stock_actual en Insumo entity)
+      if (consumo.insumo_id) {
+        const insumo = insumosQuimicos.find(i => i.id === consumo.insumo_id);
+        if (insumo) {
+          const stockDisponible = insumo.stock_actual || 0;
+          if (consumo.cantidad_consumida > stockDisponible) {
+            alert(`⚠️ Stock insuficiente para "${consumo.nombre_producto}".\nStock disponible: ${stockDisponible} ${insumo.unidad_medida || ''}\nCantidad solicitada: ${consumo.cantidad_consumida}`);
             return;
+          }
+          if (stockDisponible <= (insumo.stock_minimo || 0)) {
+            if (!confirm(`⚠️ ALERTA: El producto "${consumo.nombre_producto}" tiene stock bajo (${stockDisponible} ${insumo.unidad_medida || ''}). ¿Desea continuar de todas formas?`)) {
+              return;
+            }
           }
         }
       }
@@ -667,23 +702,22 @@ export default function Pintura() {
                       <tr><td colSpan={4} className="p-3 text-center text-gray-400 text-sm">No hay productos agregados. Haga clic en "Agregar productos".</td></tr>
                     )}
                     {productosProduccion.map((prod, idx) => (
-                      <tr key={idx} className="border-t">
-                        <td className="border p-2">
-                          <Select value={prod.codigo} onValueChange={v => handleProductoProduccionChange(idx, 'codigo', v)}>
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Seleccionar código..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {inventarioEnProceso
-                                .filter(inv => inv.codigo)
-                                .map(inv => (
-                                  <SelectItem key={inv.id} value={inv.codigo}>
-                                    {inv.codigo}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
+                     <tr key={idx} className="border-t">
+                       <td className="border p-2 min-w-[200px]">
+                         <Select value={prod.item_id || ''} onValueChange={v => handleProductoProduccionChange(idx, 'item_id', v)}>
+                           <SelectTrigger className="h-8 text-xs">
+                             <SelectValue placeholder="Seleccionar código..." />
+                           </SelectTrigger>
+                           <SelectContent>
+                             {catalogoCombinado.map(item => (
+                               <SelectItem key={item.id} value={item.id}>
+                                 {item.codigo} - {item.descripcion}
+                               </SelectItem>
+                             ))}
+                           </SelectContent>
+                         </Select>
+                         {prod.codigo && <div className="text-xs text-gray-400 mt-0.5">{prod.codigo}</div>}
+                       </td>
                         <td className="border p-2">
                           <Input value={prod.descripcion || ''} readOnly className="bg-gray-50 h-8 text-xs" />
                         </td>
@@ -741,30 +775,27 @@ export default function Pintura() {
                       <tr><td colSpan={8} className="p-3 text-center text-gray-400 text-sm">No hay productos agregados. Haga clic en "Agregar Producto".</td></tr>
                     )}
                     {consumosItems.map((consumo, idx) => {
-                      const insumoRef = insumosQuimicos.find(i => i.id === consumo.insumo_id);
-                      const stockDisponible = insumoRef?.stock_actual || 0;
-                      const stockBajo = insumoRef && stockDisponible <= (insumoRef.stock_minimo || 0);
-                      return (
+                     const catalogoRef = catalogoCombinado.find(i => i.id === consumo.item_id);
+                     const stockDisponible = catalogoRef?.stock_actual || 0;
+                     const stockBajo = catalogoRef && stockDisponible <= (catalogoRef.stock_minimo || 0);
+                     return (
                         <tr key={idx} className="border-t">
-                          <td className="border p-2 min-w-[140px]">
-                            <Select value={consumo.insumo_id} onValueChange={v => handleConsumoChange(idx, 'insumo_id', v)}>
+                          <td className="border p-2 min-w-[200px]">
+                            <Select value={consumo.item_id || ''} onValueChange={v => handleConsumoChange(idx, 'item_id', v)}>
                               <SelectTrigger className="h-8 text-xs">
                                 <SelectValue placeholder="Seleccionar..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {insumosQuimicos
-                                  .filter(i => i.id && i.codigo)
-                                  .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
-                                  .map(i => (
-                                    <SelectItem key={i.id} value={i.id}>
-                                      {i.codigo} - {i.nombre || i.descripcion || ''}
-                                    </SelectItem>
-                                  ))}
+                                {catalogoCombinado.map(i => (
+                                  <SelectItem key={i.id} value={i.id}>
+                                    {i.codigo} - {i.descripcion}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
-                            {consumo.insumo_id && (
+                            {consumo.item_id && (
                               <div className={`text-xs mt-0.5 ${stockBajo ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
-                                Stock: {stockDisponible} {insumoRef?.unidad_medida || ''}
+                                Stock: {stockDisponible} {catalogoRef?.unidad_medida || ''}
                                 {stockBajo && ' ⚠️ BAJO'}
                               </div>
                             )}
