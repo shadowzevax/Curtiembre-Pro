@@ -2,29 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
 
 export default function SuccessToast({ message, description, onClose, duration = 3000 }) {
-  const [visible, setVisible] = useState(true);
-  const [fading, setFading] = useState(false);
+  const [opacity, setOpacity] = useState(1);
+  const [gone, setGone] = useState(false);
+
+  const dismiss = () => {
+    setOpacity(0);
+    setTimeout(() => {
+      setGone(true);
+      onClose?.();
+    }, 500);
+  };
 
   useEffect(() => {
-    const fadeTimer = setTimeout(() => setFading(true), duration - 500);
-    const closeTimer = setTimeout(() => {
-      setVisible(false);
+    // Empezar a desaparecer 500ms antes del final
+    const fadeTimer = setTimeout(() => setOpacity(0), duration - 500);
+    // Remover completamente al cumplir la duración
+    const removeTimer = setTimeout(() => {
+      setGone(true);
       onClose?.();
     }, duration);
-    return () => { clearTimeout(fadeTimer); clearTimeout(closeTimer); };
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
   }, [duration, onClose]);
 
-  if (!visible) return null;
+  if (gone) return null;
 
   return (
     <div
       style={{
         position: 'fixed',
-        top: '20px',
-        right: '20px',
+        bottom: '24px',
+        right: '24px',
         zIndex: 99999,
+        opacity,
         transition: 'opacity 0.5s ease',
-        opacity: fading ? 0 : 1,
+        pointerEvents: opacity === 0 ? 'none' : 'auto',
       }}
       className="flex items-start gap-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-5 py-4 rounded-xl shadow-2xl shadow-emerald-500/40 min-w-[280px] max-w-[380px]"
     >
@@ -34,8 +49,8 @@ export default function SuccessToast({ message, description, onClose, duration =
         {description && <p className="text-xs text-emerald-100 mt-0.5">{description}</p>}
       </div>
       <button
-        onClick={() => { setFading(true); setTimeout(() => { setVisible(false); onClose?.(); }, 400); }}
-        className="text-white/70 hover:text-white transition-colors flex-shrink-0"
+        onClick={dismiss}
+        className="text-white/70 hover:text-white transition-colors flex-shrink-0 ml-2"
       >
         <X className="w-4 h-4" />
       </button>

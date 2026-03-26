@@ -127,6 +127,7 @@ export default function CompraInsumos() {
 
   const handleSubmit = async (orderData) => {
     setLoading(true);
+    let savedOrder = null;
     try {
       const isDuplicate = ordenes.some(orden => 
         orden.numero_id === orderData.numero_id &&
@@ -141,9 +142,10 @@ export default function CompraInsumos() {
       
       if (editingOrder) {
         await OrdenCompra.update(editingOrder.id, orderData);
-        return { id: editingOrder.id };
+        savedOrder = { id: editingOrder.id };
       } else {
         const nuevaCompra = await OrdenCompra.create(orderData);
+        savedOrder = nuevaCompra;
         
         // Si es CONTADO y valor pagado = total, generar movimiento automático
         if (orderData.condicion_pago === 'contado' && orderData.valor_pagado === orderData.total) {
@@ -199,7 +201,7 @@ export default function CompraInsumos() {
             proveedor_nit: proveedor?.numero_identificacion || '',
             tipo_documento: orderData.tipo_documento_proveedor,
             numero_documento: orderData.numero_documento,
-            documento_origen_id: nuevaCompra.id,
+            documento_origen_id: savedOrder.id,
             modulo_origen: 'compras',
             fecha_documento: orderData.fecha_emision_documento || orderData.fecha_orden,
             fecha_vencimiento: orderData.fecha_vencimiento,
@@ -212,14 +214,15 @@ export default function CompraInsumos() {
             historial_pagos: []
           });
         }
-        return nuevaCompra;
       }
+
+      // Siempre cerrar el modal y recargar al guardar exitosamente
       setShowForm(false);
       setEditingOrder(null);
       loadData();
+      return savedOrder;
     } catch (error) {
       console.error("Error saving order:", error);
-      // El error ya se muestra en DocumentoComercialForm
     } finally {
       setLoading(false);
     }

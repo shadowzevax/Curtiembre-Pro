@@ -1079,6 +1079,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         return;
         }
 
+    // Cerrar modal tras guardar exitosamente
+    onOpenChange(false);
+
     // Lógica de actualización de Inventario para VENTAS (Salidas)
     if (tipoDocumento === 'venta') {
         for (const item of finalData.items) {
