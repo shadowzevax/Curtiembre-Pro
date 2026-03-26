@@ -429,18 +429,33 @@ export default function Pintura() {
           }
         }
 
-        // Actualizar InventarioEnProceso: descontar cantidad y actualizar estado
+        // Descontar stock según el origen del inventario de cada producto de producción
         for (const prod of productosProduccion) {
-          if (prod.inv_proceso_id && prod.cantidad_hojas > 0) {
+          const cantidadUsada = parseFloat(prod.cantidad_hojas) || 0;
+          if (!cantidadUsada || !prod.item_id) continue;
+
+          const origen = prod.origen_inventario;
+
+          if (origen === 'en_proceso' && prod.inv_proceso_id) {
             const invItem = inventarioEnProceso.find(i => i.id === prod.inv_proceso_id);
             if (invItem) {
-              const cantidadUsada = parseFloat(prod.cantidad_hojas) || 0;
               const nuevaCantidad = (invItem.cantidad_hojas || 0) - cantidadUsada;
-              const nuevoEstado = nuevaCantidad === 0 ? 'TERMINADO' : 'EN_PROCESO';
               await InventarioEnProceso.update(invItem.id, {
-                cantidad_hojas: nuevaCantidad,
-                estado_actual: nuevoEstado
+                cantidad_hojas: Math.max(0, nuevaCantidad),
+                estado_actual: nuevaCantidad <= 0 ? 'TERMINADO' : 'EN_PROCESO'
               });
+            }
+          } else if (origen === 'terminado') {
+            const ptItem = productosTerminados.find(i => i.id === prod.item_id);
+            if (ptItem) {
+              const nuevoStock = (ptItem.stock_actual || 0) - cantidadUsada;
+              await ProductoTerminado.update(ptItem.id, { stock_actual: Math.max(0, nuevoStock) });
+            }
+          } else if (origen === 'insumo') {
+            const insumoItem = insumosQuimicos.find(i => i.id === prod.item_id);
+            if (insumoItem) {
+              const nuevoStock = (insumoItem.stock_actual || 0) - cantidadUsada;
+              await Insumo.update(insumoItem.id, { stock_actual: Math.max(0, nuevoStock) });
             }
           }
         }
