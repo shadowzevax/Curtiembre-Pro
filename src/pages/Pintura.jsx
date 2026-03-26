@@ -97,7 +97,9 @@ export default function Pintura() {
       
       setCurrentItem({
         tipo_proceso: 'pintura',
+        numero_proceso: idConsecutivo,
         id_consecutivo: idConsecutivo,
+        fecha_inicio: new Date().toISOString().split('T')[0],
         fecha_entrega_pintor: new Date().toISOString().split('T')[0],
         pintor_responsable: '',
         pedido_id: '',
@@ -388,8 +390,9 @@ export default function Pintura() {
 
       const dataToSave = {
         ...currentItem,
-        numero_proceso: currentItem.id_consecutivo,
-        hojas_pendientes_pintar: currentItem.total_hojas_enviadas_pintura - (currentItem.hojas_pintadas_recibidas || 0),
+        numero_proceso: currentItem.numero_proceso || currentItem.id_consecutivo,
+        fecha_inicio: currentItem.fecha_inicio || currentItem.fecha_entrega_pintor || new Date().toISOString().split('T')[0],
+        hojas_pendientes_pintar: (currentItem.total_hojas_enviadas_pintura || 0) - (currentItem.hojas_pintadas_recibidas || 0),
         consumos: consumosItems,
         mano_obra_pintura: manoObraItems,
         productos_produccion: productosProduccion,
