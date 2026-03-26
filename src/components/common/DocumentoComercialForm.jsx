@@ -74,9 +74,10 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
       setProductosCatalogo(prev => [...prev, newProduct]);
       if (pendingItemIndex !== null && formData) {
           const newItems = [...formData.items];
-          newItems[pendingItemIndex].producto_id = newProduct.id; // Si se usa ID
           newItems[pendingItemIndex].codigo = newProduct.codigo;
           newItems[pendingItemIndex].descripcion = newProduct.descripcion;
+          newItems[pendingItemIndex].categoria = newProduct.categoria || '';
+          newItems[pendingItemIndex].unidad_medida = newProduct.unidad_medida || '';
           newItems[pendingItemIndex].precio_unitario = newProduct.costo_estandar || 0;
           setFormData({ ...formData, items: newItems });
           setPendingItemIndex(null);
@@ -215,17 +216,17 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
 
     // Manejo especial para cambio de código manual (input con datalist)
     if (field === 'codigo') {
-         // Buscar en catálogo por código
          const catalogItem = productosCatalogo.find(p => p.codigo === value);
          if (catalogItem) {
-             newItems[index][itemIdField] = catalogItem.id;
+             // NO guardar el ID del catálogo en itemIdField — dejarlo vacío/nulo
+             // La sincronización de inventario usa item.codigo, no item[itemIdField]
+             newItems[index][itemIdField] = '';
              newItems[index].descripcion = catalogItem.descripcion;
-             newItems[index].categoria = catalogItem.categoria; // Auto-fill category
-             newItems[index].precio_unitario = tipoDocumento === 'compra' ? (catalogItem.costo_estandar || 0) : 0; 
+             newItems[index].categoria = catalogItem.categoria;
+             newItems[index].precio_unitario = tipoDocumento === 'compra' ? (catalogItem.costo_estandar || 0) : 0;
              newItems[index].unidad_medida = catalogItem.unidad_medida || '';
          } else {
-             // Si el código no está vacío y no existe en catalogo, preguntar si crear
-             if (value && !catalogItem) {
+             if (value) {
                  if (confirm(`El producto con código "${value}" no existe en el catálogo. ¿Desea crearlo?`)) {
                      setNewProductCode(value);
                      setNewProductDesc("");

@@ -141,6 +141,7 @@ export default function CompraInsumos() {
       
       if (editingOrder) {
         await OrdenCompra.update(editingOrder.id, orderData);
+        return { id: editingOrder.id };
       } else {
         const nuevaCompra = await OrdenCompra.create(orderData);
         
@@ -211,6 +212,7 @@ export default function CompraInsumos() {
             historial_pagos: []
           });
         }
+        return nuevaCompra;
       }
       setShowForm(false);
       setEditingOrder(null);
