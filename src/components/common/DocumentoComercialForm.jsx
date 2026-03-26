@@ -10,12 +10,12 @@ import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
 import NumericInput from './NumericInput';
 import { ProductoCatalogo, OrdenCompra, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
-import { useToast } from "@/components/ui/use-toast";
+import SuccessToast from './SuccessToast';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 
 export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, documento, terceros, itemsCatalogo, tipoDocumento, tipoItem, terceroLabel, documentoTitulo }) {
-  const { toast } = useToast();
+  const [successToast, setSuccessToast] = useState(null);
   const [formData, setFormData] = useState(null);
   const [terceroPersonalizado, setTerceroPersonalizado] = useState(false);
   const [itemsPersonalizados, setItemsPersonalizados] = useState({});
@@ -497,11 +497,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         const orderId = savedOrder?.id || finalData.id;
         
         // Mensaje de éxito
-        toast({
-          title: "✅ Documento guardado",
+        setSuccessToast({
+          message: "Documento guardado",
           description: `${finalData.numero_id || finalData.numero_documento} registrado correctamente.`,
-          duration: 4000,
-          className: "border-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-2xl shadow-emerald-500/30 rounded-xl",
         });
 
     // REVERTIR MOVIMIENTOS ANTIGUOS SI ES EDICIÓN
@@ -687,21 +685,23 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                      });
 
                      console.log(`✅ Inventario actualizado para ${item.codigo}: Stock=${nuevoStock}, Costo Promedio=${nuevoCostoPromedio}`);
+                 } else {
+                      console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);
+                 }
 
-                     // ─── SINCRONIZACIÓN AUTOMÁTICA POR CATEGORÍA DEL CATÁLOGO ───
-                     // Según la categoría del producto en CatálogoProductos, guardar en el inventario correspondiente
-                     if (!documento) {
-                         try {
-                             const catalogoData = catalogoItem[0];
+                 // ─── SINCRONIZACIÓN POR CATEGORÍA DEL CATÁLOGO (siempre, independiente de entityType) ───
+                 // Se ejecuta para TODOS los items de compra nueva, según categoria en CatálogoProductos
+                 if (!documento && item.codigo) {
+                     try {
+                         const catItems = await ProductoCatalogo.filter({ codigo: item.codigo });
+                         if (catItems.length > 0) {
+                             const catalogoData = catItems[0];
                              const cat = catalogoData.categoria;
+                             const cantidadCompra = parseFloat(item.cantidad) || 0;
                              const refDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
 
-                             if (cat === 'insumos_quimicos') {
-                                 // Ya está en Insumo (entityType = Insumo) — no hacer nada extra
-                                 console.log(`✅ Insumo Químico actualizado en Inventario de Insumos y Químicos`);
-
-                             } else if (cat === 'productos_en_proceso') {
-                                 // Guardar en InventarioEnProceso
+                             if (cat === 'productos_en_proceso') {
+                                 // → Inventario Productos en Proceso
                                  const { InventarioEnProceso } = await import('@/entities/all');
                                  await InventarioEnProceso.create({
                                      codigo: item.codigo,
@@ -715,25 +715,18 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                                      fecha_ingreso_proceso: finalData.fecha_emision_documento || finalData.fecha_orden,
                                      submodulo_origen: finalData.prefijo || 'compras',
                                  });
-                                 console.log(`✅ Guardado en Inventario Productos en Proceso`);
-
-                             } else if (cat === 'materia_prima') {
-                                 // Ya está en ProductoTerminado con categoria 'pieles' — no hacer nada extra
-                                 console.log(`✅ Materia Prima actualizada en Inventario de Materias Primas`);
-
-                             } else if (cat === 'productos_terminados') {
-                                 // Ya está en ProductoTerminado con categoria 'producto_terminado' — no hacer nada extra
-                                 console.log(`✅ Producto Terminado actualizado en Inventario de Productos Terminados`);
+                                 console.log(`✅ Sincronizado en Inventario Productos en Proceso: ${item.codigo}`);
                              }
-                         } catch (err) {
-                             console.error('Error en sincronización de inventario por categoría:', err);
+                             // insumos_quimicos → ya actualizado en Insumo arriba
+                             // materia_prima    → ya actualizado en ProductoTerminado arriba
+                             // productos_terminados → ya actualizado en ProductoTerminado arriba
                          }
+                     } catch (err) {
+                         console.error('Error en sincronización por categoría:', err);
                      }
-                     // ────────────────────────────────────────────────────────────
-
-                 } else {
-                      console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);
                  }
+                 // ─────────────────────────────────────────────────────────────────────────────────────
+
              } catch (err) {
                  console.error("❌ Error actualizando inventario para item", item.codigo, err);
              }
@@ -1177,6 +1170,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
   const itemIdField = tipoItem === 'producto' ? 'producto_id' : (tipoItem === 'servicio' ? 'servicio_id' : 'insumo_id');
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-7xl h-[95vh]">
         <DialogHeader>
@@ -1675,5 +1669,15 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
           initialDescription={newProductDesc}
       />
     </Dialog>
+
+    {successToast && (
+      <SuccessToast
+        message={successToast.message}
+        description={successToast.description}
+        duration={3000}
+        onClose={() => setSuccessToast(null)}
+      />
+    )}
+    </>
   );
 }
