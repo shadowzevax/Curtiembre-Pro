@@ -36,6 +36,9 @@ export default function ProcesoRecepcion() {
   const [loteConsolidado, setLoteConsolidado] = useState(null);
   const [lotesCompras, setLotesCompras] = useState([]);
   const [ordenesCompra, setOrdenesCompra] = useState([]);
+  const [costoPromedioProducto, setCostoPromedioProducto] = useState(0);
+  const [subloteSeleccionadoTerminado, setSubloteSeleccionadoTerminado] = useState('');
+  const [subloteSeleccionadoPendiente, setSubloteSeleccionadoPendiente] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -168,13 +171,18 @@ export default function ProcesoRecepcion() {
     
     // Validar duplicado de código lote
     if (!isEditing) {
-        // VALIDACIÓN CRÍTICA: Asegurar que recepciones es un array antes de usar some
         const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
         const exists = recepcionesSeguras.some(r => r && r.codigo_lote === currentItem.codigo_lote);
         if (exists) {
             alert('El CÓDIGO DE LOTE YA EXISTE. POR FAVOR, VERIFIQUE.');
             return;
         }
+    }
+
+    // Validar que Dividir Lote esté marcado
+    if (!currentItem.dividir_lote) {
+        alert('⚠️ El campo "Dividir Lote" es obligatorio para guardar la recepción.');
+        return;
     }
 
     try {
@@ -453,10 +461,15 @@ export default function ProcesoRecepcion() {
                 <Label>Código PCTO. *</Label>
                 <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
                   const catalogoProd = productos.find(p => p.codigo === v);
+                  const costoP = catalogoProd?.costo_promedio || 0;
+                  setCostoPromedioProducto(costoP);
+                  const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
                   setCurrentItem({
                     ...currentItem, 
                     codigo_producto: v,
-                    descripcion_producto: catalogoProd ? catalogoProd.descripcion : ''
+                    descripcion_producto: catalogoProd ? catalogoProd.descripcion : '',
+                    costo_promedio: costoP,
+                    costo_total: hojas * costoP
                   });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
@@ -499,8 +512,12 @@ export default function ProcesoRecepcion() {
             <div className="grid grid-cols-4 gap-4">
               <div><Label>Cantidad Total Lote en Hojas</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_total_lote_hojas || ''} onChange={e => {
                 const val = e.target.value.replace(/[^0-9]/g, '');
-                setCurrentItem({...currentItem, cantidad_total_lote_hojas: parseInt(val) || 0});
+                const hojas = parseInt(val) || 0;
+                const costo = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+                setCurrentItem({...currentItem, cantidad_total_lote_hojas: hojas, costo_total: hojas * costo});
               }} /></div>
+              <div><Label>Costo Promedio</Label><Input type="number" value={currentItem?.costo_promedio || 0} readOnly className="bg-blue-50 font-bold" title="Traído de Inventario de Materia Prima" /></div>
+              <div><Label>Costo Total</Label><Input type="number" value={currentItem?.costo_total || 0} readOnly className="bg-green-50 font-bold text-green-700" title="Cantidad Hojas × Costo Promedio" /></div>
               <div><Label>Cantidad Total Lote en Pieles</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_total_lote_pieles || ''} onChange={e => {
                 const val = e.target.value.replace(/[^0-9]/g, '');
                 setCurrentItem({...currentItem, cantidad_total_lote_pieles: parseInt(val) || 0});
@@ -517,7 +534,7 @@ export default function ProcesoRecepcion() {
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>
             <div className="flex items-center space-x-2">
               <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => setCurrentItem({...currentItem, dividir_lote: v})} id="dividir" />
-              <Label htmlFor="dividir">Dividir Lote</Label>
+              <Label htmlFor="dividir">Dividir Lote <span className="text-red-500">*</span> (obligatorio)</Label>
             </div>
             {currentItem?.dividir_lote && (
               <div className="space-y-2">
@@ -528,6 +545,74 @@ export default function ProcesoRecepcion() {
                 </div>
               </div>
             )}
+            {/* ── CUADRO RESUMEN DE SUBLOTES ─────────────────────────── */}
+            {sublotes.length > 0 && (
+              <div className="border rounded-lg p-4 bg-slate-50 mt-4">
+                <h3 className="font-bold text-base mb-3 text-slate-700">Cuadro Resumen de Sublotes</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* HOJAS TERMINADAS */}
+                  <div>
+                    <Label className="text-emerald-700 font-bold mb-2 block">Hojas Terminadas en Recepción</Label>
+                    <div className="border rounded overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-emerald-100">
+                          <tr><th className="border p-1">Código</th><th className="border p-1">Cantidad</th><th className="border p-1">Costo Prom.</th><th className="border p-1">Costo Total</th></tr>
+                        </thead>
+                        <tbody>
+                          {sublotes.map((sub, idx) => {
+                            const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+                            const cant = parseFloat(sub.cantidad) || 0;
+                            return (
+                              <tr key={idx} className={`border-t cursor-pointer ${subloteSeleccionadoTerminado === sub.codigo ? 'bg-emerald-100 font-bold' : 'hover:bg-emerald-50'}`}
+                                onClick={() => setSubloteSeleccionadoTerminado(subloteSeleccionadoTerminado === sub.codigo ? '' : sub.codigo)}>
+                                <td className="border p-1 font-mono">{sub.codigo}</td>
+                                <td className="border p-1 text-right">{cant}</td>
+                                <td className="border p-1 text-right">{formatCurrency(costoP)}</td>
+                                <td className="border p-1 text-right">{formatCurrency(cant * costoP)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {subloteSeleccionadoTerminado && (
+                      <p className="text-xs text-emerald-700 mt-1 font-semibold">✔ Seleccionado: {subloteSeleccionadoTerminado}</p>
+                    )}
+                  </div>
+
+                  {/* HOJAS PENDIENTES */}
+                  <div>
+                    <Label className="text-orange-700 font-bold mb-2 block">Hojas Pendientes en Recepción</Label>
+                    <div className="border rounded overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-orange-100">
+                          <tr><th className="border p-1">Código</th><th className="border p-1">Cantidad</th><th className="border p-1">Costo Prom.</th><th className="border p-1">Costo Total</th></tr>
+                        </thead>
+                        <tbody>
+                          {sublotes.map((sub, idx) => {
+                            const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+                            const cant = parseFloat(sub.cantidad) || 0;
+                            return (
+                              <tr key={idx} className={`border-t cursor-pointer ${subloteSeleccionadoPendiente === sub.codigo ? 'bg-orange-100 font-bold' : 'hover:bg-orange-50'}`}
+                                onClick={() => setSubloteSeleccionadoPendiente(subloteSeleccionadoPendiente === sub.codigo ? '' : sub.codigo)}>
+                                <td className="border p-1 font-mono">{sub.codigo}</td>
+                                <td className="border p-1 text-right">{cant}</td>
+                                <td className="border p-1 text-right">{formatCurrency(costoP)}</td>
+                                <td className="border p-1 text-right">{formatCurrency(cant * costoP)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {subloteSeleccionadoPendiente && (
+                      <p className="text-xs text-orange-700 mt-1 font-semibold">✔ Seleccionado: {subloteSeleccionadoPendiente}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
               <Button type="submit">Guardar</Button>
@@ -537,15 +622,29 @@ export default function ProcesoRecepcion() {
       </Dialog>
 
       <Dialog open={showSublotesModal} onOpenChange={setShowSublotesModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Configurar Sublotes</DialogTitle></DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {sublotes.map((sub, index) => (
-              <div key={index} className="grid grid-cols-2 gap-2 p-2 border rounded">
+            {sublotes.map((sub, index) => {
+              const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+              const cantidad = parseFloat(sub.cantidad) || 0;
+              const costoTotalSub = cantidad * costoP;
+              return (
+              <div key={index} className="grid grid-cols-4 gap-2 p-2 border rounded">
                 <div><Label>Código</Label><Input value={sub.codigo} onChange={e => handleSubloteChange(index, 'codigo', e.target.value)} /></div>
-                <div><Label>Cantidad</Label><Input type="number" value={sub.cantidad} onChange={e => handleSubloteChange(index, 'cantidad', parseFloat(e.target.value) || 0)} /></div>
+                <div><Label>Cantidad</Label><Input type="number" value={sub.cantidad} onChange={e => {
+                  const val = parseFloat(e.target.value) || 0;
+                  const updated = [...sublotes];
+                  updated[index].cantidad = val;
+                  updated[index].costo_promedio = costoP;
+                  updated[index].costo_total = val * costoP;
+                  setSublotes(updated);
+                }} /></div>
+                <div><Label>Costo Promedio</Label><Input type="number" value={costoP} readOnly className="bg-blue-50 font-bold text-sm" /></div>
+                <div><Label>Costo Total</Label><Input type="number" value={costoTotalSub.toFixed(0)} readOnly className="bg-green-50 font-bold text-green-700 text-sm" /></div>
               </div>
-            ))}
+              );
+            })}
           </div>
           <div className="flex justify-end pt-4">
             <Button onClick={() => setShowSublotesModal(false)}>Cerrar</Button>

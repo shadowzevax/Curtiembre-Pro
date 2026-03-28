@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { InventarioEnProceso } from '@/entities/all';
+import { InventarioEnProceso, ProductoCatalogo } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,11 +46,17 @@ export default function InventarioEnProcesoPage() {
   const [showControlModal, setShowControlModal] = useState(false);
   const [controlItem, setControlItem] = useState(null);
 
+  const [catalogoProductos, setCatalogoProductos] = useState([]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await InventarioEnProceso.list();
+      const [data, catalogo] = await Promise.all([
+        InventarioEnProceso.list(),
+        ProductoCatalogo.list()
+      ]);
       setInventarios(data);
+      setCatalogoProductos(catalogo);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -76,9 +82,12 @@ export default function InventarioEnProcesoPage() {
 
   const handlePrint = () => window.print();
 
-  const headers = ['Código', 'Descripción', 'Código Lote', 'Origen', 'Estado Proceso', 'Cantidad Hojas', 'Color Base', 'Acciones'];
+  const headers = ['Código', 'Descripción', 'Código Lote', 'Origen', 'Estado Proceso', 'Unidad de Medida', 'Cantidad Hojas', 'Color Base', 'Acciones'];
   
-  const renderRow = (item) => (
+  const renderRow = (item) => {
+    const catalogoProd = catalogoProductos.find(p => p.codigo === item.codigo);
+    const unidadMedida = catalogoProd?.unidad_medida || 'N/A';
+    return (
     <tr key={item.id}>
       <td className="font-mono">{item.codigo}</td>
       <td>{item.descripcion}</td>
@@ -89,6 +98,7 @@ export default function InventarioEnProcesoPage() {
           {estadoProcesoLabel(item.estado_proceso)}
         </span>
       </td>
+      <td className="text-center">{unidadMedida}</td>
       <td className="text-center font-bold">{item.cantidad_hojas}</td>
       <td>{item.color_base || 'N/A'}</td>
       <td>
@@ -103,6 +113,7 @@ export default function InventarioEnProcesoPage() {
       </td>
     </tr>
   );
+  };
 
   return (
     <div className="p-6">

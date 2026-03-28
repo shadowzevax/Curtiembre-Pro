@@ -60,10 +60,11 @@ export default function Pintura() {
   const [entregasParciales, setEntregasParciales] = useState([]);
 
   // Sub-tablas
-  const [consumoCueroItems, setConsumoCueroItems] = useState([]);   // Items Consumo de Cuero en Hojas
-  const [consumosItems, setConsumosItems] = useState([]);            // Items Consumo de Insumos y Químicos
+  const [consumoCueroItems, setConsumoCueroItems] = useState([]);
+  const [consumosItems, setConsumosItems] = useState([]);
   const [manoObraItems, setManoObraItems] = useState([]);
   const [origenHojas, setOrigenHojas] = useState([]);
+  const [stockPanelIdx, setStockPanelIdx] = useState(null); // index del item con panel de stock visible
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -160,14 +161,20 @@ export default function Pintura() {
     if (esFinalizado) return;
     const updated = [...consumoCueroItems];
     if (field === 'item_id') {
-      const catalogoItem = catalogoCombinado.find(i => i.id === value);
-      if (catalogoItem) {
-        updated[index].item_id = catalogoItem.id;
-        updated[index].codigo = catalogoItem.codigo;
-        updated[index].descripcion = catalogoItem.descripcion;
-        updated[index].inv_proceso_id = catalogoItem.origen === 'en_proceso' ? catalogoItem.entityId : '';
-        updated[index].origen_inventario = catalogoItem.origen;
-        updated[index].cantidad_disponible = catalogoItem.stock_actual || 0;
+      // Solo buscar en InventarioEnProceso
+      const invItem = inventarioEnProceso.find(i => i.id === value);
+      if (invItem) {
+        updated[index].item_id = invItem.id;
+        updated[index].inv_proceso_id = invItem.id;
+        updated[index].codigo = invItem.codigo;
+        updated[index].descripcion = invItem.descripcion;
+        updated[index].origen_inventario = 'en_proceso';
+        updated[index].cantidad_disponible = invItem.cantidad_hojas || 0;
+        updated[index].unidad_medida = invItem.unidad_medida || 'HOJA';
+        updated[index].costo_promedio = invItem.costo_promedio || 0;
+        // Recalcular costo_total si ya hay cantidad
+        const cant = parseFloat(updated[index].cantidad_hojas) || 0;
+        updated[index].costo_total_cuero = cant * (invItem.costo_promedio || 0);
       }
     } else {
       updated[index][field] = field === 'cantidad_hojas' || field === 'merma_produccion' ? (parseFloat(value) || 0) : value;
@@ -177,6 +184,8 @@ export default function Pintura() {
       const cant = parseFloat(field === 'cantidad_hojas' ? value : updated[index].cantidad_hojas) || 0;
       const merma = parseFloat(field === 'merma_produccion' ? value : updated[index].merma_produccion) || 0;
       updated[index].hojas_buenas = Math.max(0, cant - merma);
+      // Recalcular costo_total_cuero
+      updated[index].costo_total_cuero = cant * (updated[index].costo_promedio || 0);
     }
     setConsumoCueroItems(updated);
     if (field === 'cantidad_hojas') {
@@ -273,6 +282,12 @@ export default function Pintura() {
       if (!c.tipo_acabado) { alert('Error: El campo "Tipo de acabado" es obligatorio en Items Consumo de Cuero en Hojas.'); return; }
       if (!c.tipo_acabado_real) { alert('Error: El campo "Tipo de acabado real" es obligatorio en Items Consumo de Cuero en Hojas.'); return; }
       if (!c.cantidad_hojas || c.cantidad_hojas <= 0) { alert('Error: La cantidad de hojas debe ser mayor a cero.'); return; }
+      // Validar stock
+      const invItem = inventarioEnProceso.find(i => i.id === c.inv_proceso_id);
+      if (invItem && c.cantidad_hojas > (invItem.cantidad_hojas || 0)) {
+        alert(`⚠️ La cantidad a consumir (${c.cantidad_hojas}) supera el stock disponible en inventario de productos en proceso (${invItem.cantidad_hojas}) para "${c.codigo}".`);
+        return;
+      }
     }
 
     // Validar consumos insumos
@@ -577,10 +592,13 @@ export default function Pintura() {
                   <thead className="bg-purple-50">
                     <tr>
                       <th className="border p-2 w-12">ITEM</th>
-                      <th className="border p-2">CÓDIGO</th>
+                      <th className="border p-2">CÓDIGO (Inv. en Proceso)</th>
                       <th className="border p-2">DESCRIPCIÓN</th>
+                      <th className="border p-2">U. MEDIDA</th>
                       <th className="border p-2">TIPO DE ACABADO *</th>
                       <th className="border p-2 text-right">CANT. HOJAS *</th>
+                      <th className="border p-2 text-right">COSTO PROMEDIO</th>
+                      <th className="border p-2 text-right">COSTO TOTAL</th>
                       <th className="border p-2 text-right">MERMA PROD. (HOJAS)</th>
                       <th className="border p-2 text-right">HOJAS BUENAS</th>
                       <th className="border p-2">TIPO DE ACABADO REAL *</th>
@@ -588,37 +606,60 @@ export default function Pintura() {
                     </tr>
                   </thead>
                   <tbody>
-                    {consumoCueroItems.length === 0 && <tr><td colSpan={9} className="p-3 text-center text-gray-400 text-sm">No hay items agregados.</td></tr>}
-                    {consumoCueroItems.map((prod, idx) => (
-                      <tr key={idx} className="border-t">
-                        {/* ITEM (auto-consecutivo) */}
+                    {consumoCueroItems.length === 0 && <tr><td colSpan={12} className="p-3 text-center text-gray-400 text-sm">No hay items agregados.</td></tr>}
+                    {consumoCueroItems.map((prod, idx) => {
+                      const cantConsumir = parseFloat(prod.cantidad_hojas) || 0;
+                      const stockDisp = prod.cantidad_disponible || 0;
+                      const diferencia = stockDisp - cantConsumir;
+                      const stockInsuficiente = cantConsumir > stockDisp && stockDisp > 0;
+                      return (
+                      <React.Fragment key={idx}>
+                      <tr className="border-t">
                         <td className="border p-2 text-center font-bold text-purple-700 bg-purple-50">{prod.item_num}</td>
-                        {/* CÓDIGO */}
+                        {/* CÓDIGO - solo InventarioEnProceso */}
                         <td className="border p-2 min-w-[180px]">
                           <Select value={prod.item_id || ''} disabled={esFinalizado} onValueChange={v => handleConsumoCueroChange(idx, 'item_id', v)}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                            <SelectContent>{catalogoCombinado.map(item => <SelectItem key={item.id} value={item.id}>{item.codigo} - {item.descripcion}</SelectItem>)}</SelectContent>
+                            <SelectContent>
+                              {inventarioEnProceso.filter(i => i.codigo).map(i => (
+                                <SelectItem key={i.id} value={i.id}>{i.codigo} - {i.descripcion}</SelectItem>
+                              ))}
+                            </SelectContent>
                           </Select>
-                          {prod.codigo && <div className="text-xs text-gray-400 mt-0.5">{prod.codigo}</div>}
+                          {prod.codigo && <div className="text-xs text-indigo-500 mt-0.5">{prod.codigo}</div>}
                         </td>
-                        {/* DESCRIPCIÓN */}
-                        <td className="border p-2 min-w-[140px]"><Input value={prod.descripcion || ''} readOnly className="bg-gray-50 h-8 text-xs" /></td>
+                        <td className="border p-2 min-w-[130px]"><Input value={prod.descripcion || ''} readOnly className="bg-gray-50 h-8 text-xs" /></td>
+                        {/* UNIDAD DE MEDIDA */}
+                        <td className="border p-2 w-20"><Input value={prod.unidad_medida || 'HOJA'} readOnly className="bg-gray-50 h-8 text-xs text-center" /></td>
                         {/* TIPO DE ACABADO */}
-                        <td className="border p-2 min-w-[200px]">
+                        <td className="border p-2 min-w-[190px]">
                           <Select value={prod.tipo_acabado || ''} disabled={esFinalizado} onValueChange={v => handleConsumoCueroChange(idx, 'tipo_acabado', v)}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar *" /></SelectTrigger>
-                            <SelectContent>
-                              {TIPOS_ACABADO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                            </SelectContent>
+                            <SelectContent>{TIPOS_ACABADO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                           </Select>
                         </td>
                         {/* CANTIDAD HOJAS */}
                         <td className="border p-2 w-24">
                           <Input type="number" value={prod.cantidad_hojas} min="0" step="1" disabled={esFinalizado}
-                            onChange={e => handleConsumoCueroChange(idx, 'cantidad_hojas', e.target.value)} className="h-8 text-xs text-right" />
-                          {prod.cantidad_disponible > 0 && <div className="text-gray-400 text-xs mt-1 text-right">Disp: {prod.cantidad_disponible}</div>}
+                            onChange={e => {
+                              const val = parseFloat(e.target.value) || 0;
+                              if (val > stockDisp && stockDisp > 0) {
+                                alert(`⚠️ La cantidad a consumir (${val}) supera el stock disponible en inventario de productos en proceso (${stockDisp}).`);
+                              }
+                              handleConsumoCueroChange(idx, 'cantidad_hojas', e.target.value);
+                              setStockPanelIdx(idx);
+                            }}
+                            className={`h-8 text-xs text-right ${stockInsuficiente ? 'border-red-400 bg-red-50' : ''}`}
+                          />
+                          <button type="button" className="text-xs text-indigo-500 underline mt-0.5 block w-full text-right" onClick={() => setStockPanelIdx(stockPanelIdx === idx ? null : idx)}>
+                            Disp: {stockDisp}
+                          </button>
                         </td>
-                        {/* MERMA DE PRODUCCIÓN */}
+                        {/* COSTO PROMEDIO */}
+                        <td className="border p-2 w-28"><Input type="number" value={prod.costo_promedio || 0} readOnly className="h-8 text-xs text-right bg-blue-50 font-bold" /></td>
+                        {/* COSTO TOTAL */}
+                        <td className="border p-2 w-28"><Input type="number" value={(prod.costo_total_cuero || 0).toFixed(0)} readOnly className="h-8 text-xs text-right bg-green-50 font-bold text-green-700" /></td>
+                        {/* MERMA */}
                         <td className="border p-2 w-24">
                           <Input type="number" value={prod.merma_produccion || 0} min="0" max={prod.cantidad_hojas} step="1" disabled={esFinalizado}
                             onChange={e => {
@@ -627,30 +668,47 @@ export default function Pintura() {
                               handleConsumoCueroChange(idx, 'merma_produccion', e.target.value);
                             }} className="h-8 text-xs text-right bg-red-50" />
                         </td>
-                        {/* HOJAS BUENAS (auto) */}
-                        <td className="border p-2 w-24">
-                          <Input type="number" value={prod.hojas_buenas || 0} readOnly className="h-8 text-xs text-right bg-green-50 font-bold text-green-700" />
-                        </td>
+                        {/* HOJAS BUENAS */}
+                        <td className="border p-2 w-24"><Input type="number" value={prod.hojas_buenas || 0} readOnly className="h-8 text-xs text-right bg-green-50 font-bold text-green-700" /></td>
                         {/* TIPO DE ACABADO REAL */}
-                        <td className="border p-2 min-w-[160px]">
+                        <td className="border p-2 min-w-[150px]">
                           <Select value={prod.tipo_acabado_real || ''} disabled={esFinalizado} onValueChange={v => handleConsumoCueroChange(idx, 'tipo_acabado_real', v)}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar *" /></SelectTrigger>
-                            <SelectContent>
-                              {TIPOS_ACABADO_REAL.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                            </SelectContent>
+                            <SelectContent>{TIPOS_ACABADO_REAL.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                           </Select>
                         </td>
                         <td className="border p-2 text-center">
                           {!esFinalizado && <Button type="button" variant="ghost" size="sm" onClick={() => eliminarConsumoCuero(idx)}><X className="w-4 h-4 text-red-500" /></Button>}
                         </td>
                       </tr>
-                    ))}
+                      {/* PANEL DE STOCK */}
+                      {stockPanelIdx === idx && prod.item_id && (
+                        <tr className="bg-indigo-50">
+                          <td colSpan={12} className="border p-3">
+                            <div className="flex flex-wrap gap-4 items-center text-xs">
+                              <span className="font-bold text-indigo-700">📦 Validación de Stock:</span>
+                              <span><b>Código:</b> {prod.codigo}</span>
+                              <span><b>Descripción:</b> {prod.descripcion}</span>
+                              <span className="text-blue-700 font-bold"><b>Stock disponible:</b> {stockDisp} {prod.unidad_medida || 'HOJA'}</span>
+                              <span className="text-purple-700 font-bold"><b>A consumir:</b> {cantConsumir}</span>
+                              <span className={`font-bold ${diferencia < 0 ? 'text-red-600' : 'text-green-600'}`}><b>Diferencia:</b> {diferencia}</span>
+                              {diferencia < 0 && <span className="text-red-600 font-bold">⚠️ STOCK INSUFICIENTE</span>}
+                              {diferencia >= 0 && cantConsumir > 0 && <span className="text-green-600 font-bold">✓ Disponible</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
+                      );
+                    })}
                   </tbody>
                   {consumoCueroItems.length > 0 && (
                     <tfoot className="bg-purple-100 font-bold text-xs">
                       <tr>
-                        <td colSpan={4} className="border p-2 text-right">TOTALES:</td>
+                        <td colSpan={5} className="border p-2 text-right">TOTALES:</td>
                         <td className="border p-2 text-right">{totalHojasDeCuero}</td>
+                        <td className="border p-2"></td>
+                        <td className="border p-2 text-right text-green-700">{formatCurrency(consumoCueroItems.reduce((s, c) => s + (c.costo_total_cuero || 0), 0))}</td>
                         <td className="border p-2 text-right text-red-700">{consumoCueroItems.reduce((s, c) => s + (parseFloat(c.merma_produccion) || 0), 0)}</td>
                         <td className="border p-2 text-right text-green-700">{consumoCueroItems.reduce((s, c) => s + (parseFloat(c.hojas_buenas) || 0), 0)}</td>
                         <td colSpan={2} className="border p-2"></td>
