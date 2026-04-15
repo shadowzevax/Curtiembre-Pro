@@ -437,7 +437,10 @@ export default function CompraInsumos() {
       {showForm && (
         <DocumentoComercialForm
           open={showForm}
-          onOpenChange={setShowForm}
+          onOpenChange={(open) => {
+            setShowForm(open);
+            if (!open) loadData(); // Recargar lista al cerrar el modal
+          }}
           onSubmit={handleSubmit}
           documento={editingOrder}
           terceros={proveedores}

@@ -1215,6 +1215,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                         <SelectItem value="servicio">Servicio</SelectItem>
                         <SelectItem value="activo_fijo">Activo Fijo</SelectItem>
                         <SelectItem value="gastos_administrativos">Gastos Administrativos</SelectItem>
+                        <SelectItem value="material_en_proceso">Material en Proceso</SelectItem>
+                        <SelectItem value="servicios_publicos">Servicios Públicos</SelectItem>
+                        <SelectItem value="otros">Otros</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1374,22 +1377,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                   <div><Label>Fecha de Recepción Conforme</Label><Input type="date" value={formData.fecha_recepcion_conforme || ''} onChange={e => handleInputChange('fecha_recepcion_conforme', e.target.value)} /></div>
                 )}
                 
-                {tipoDocumento === 'compra' && (
-                    <>
-                         <div><Label>Tipo de Compra</Label>
-                            <Select value={formData.tipo_compra} onValueChange={v => handleInputChange('tipo_compra', v)}>
-                                <SelectTrigger><SelectValue placeholder="Seleccionar"/></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="insumos">Insumos</SelectItem>
-                                    <SelectItem value="hojas">Hojas</SelectItem>
-                                    <SelectItem value="servicios_publicos">Servicios Públicos</SelectItem>
-                                    <SelectItem value="gastos_generales">Gastos Generales</SelectItem>
-                                    <SelectItem value="otras_compras">Otras Compras</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </>
-                )}
+
 
                 <div><Label>Fecha Vencimiento</Label><Input type="date" value={formData.fecha_vencimiento} onChange={e => handleInputChange('fecha_vencimiento', e.target.value)} /></div>
                 

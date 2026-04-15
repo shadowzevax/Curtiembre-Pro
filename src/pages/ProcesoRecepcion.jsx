@@ -39,6 +39,10 @@ export default function ProcesoRecepcion() {
   const [costoPromedioProducto, setCostoPromedioProducto] = useState(0);
   const [subloteSeleccionadoTerminado, setSubloteSeleccionadoTerminado] = useState('');
   const [subloteSeleccionadoPendiente, setSubloteSeleccionadoPendiente] = useState('');
+  const [stockDisponible, setStockDisponible] = useState(null);
+  const [stockUnidad, setStockUnidad] = useState('');
+  const [ordenCompraSearch, setOrdenCompraSearch] = useState('');
+  const [productoSearch, setProductoSearch] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -146,6 +150,10 @@ export default function ProcesoRecepcion() {
       });
     }
     setSublotes(Array.isArray(item?.sublotes) ? item.sublotes : []);
+    setStockDisponible(null);
+    setStockUnidad('');
+    setOrdenCompraSearch('');
+    setProductoSearch('');
     setShowModal(true);
   };
 
@@ -179,10 +187,12 @@ export default function ProcesoRecepcion() {
         }
     }
 
-    // Validar que Dividir Lote esté marcado
-    if (!currentItem.dividir_lote) {
-        alert('⚠️ El campo "Dividir Lote" es obligatorio para guardar la recepción.');
+    // Validar stock disponible si hay producto y cantidad
+    if (!isEditing && currentItem.codigo_producto && currentItem.cantidad_total_lote_hojas > 0 && stockDisponible !== null) {
+      if (currentItem.cantidad_total_lote_hojas > stockDisponible) {
+        alert(`⚠️ La cantidad ingresada (${currentItem.cantidad_total_lote_hojas}) supera el stock disponible en inventario (${stockDisponible} ${stockUnidad}). Por favor verifique.`);
         return;
+      }
     }
 
     try {
@@ -406,28 +416,71 @@ export default function ProcesoRecepcion() {
           <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label>ID Orden de Compra Origen</Label>
-                <Select value={currentItem?.id_orden_compra_origen || ''} onValueChange={v => {
-                  const ordenCompra = ordenesCompra.find(oc => oc.id === v);
-                  setCurrentItem({
-                    ...currentItem, 
-                    id_orden_compra_origen: v,
-                    no_documento: ordenCompra?.numero_documento || currentItem?.no_documento || '',
-                    proveedor_id: ordenCompra?.proveedor_id || currentItem?.proveedor_id || ''
-                  });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar orden" /></SelectTrigger>
-                  <SelectContent>
-                    {ordenesCompra
-                      .filter(oc => oc.id)
-                      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
-                      .map(oc => (
-                        <SelectItem key={oc.id} value={oc.id}>
-                          {oc.numero_id || `${oc.prefijo_documento}-${oc.numero_documento}`} | {proveedores.find(p => p.id === oc.proveedor_id)?.nombre || 'N/A'} | {formatCurrency(oc.total)}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <Label>ID Orden de Compra Origen <span className="text-xs text-slate-400">(opcional)</span></Label>
+                <div className="space-y-1">
+                  <Input
+                    placeholder="Buscar por ID, proveedor o material..."
+                    value={ordenCompraSearch}
+                    onChange={e => setOrdenCompraSearch(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Select value={currentItem?.id_orden_compra_origen || ''} onValueChange={v => {
+                    if (v === '__clear__') {
+                      setCurrentItem({ ...currentItem, id_orden_compra_origen: '' });
+                      setOrdenCompraSearch('');
+                      return;
+                    }
+                    const ordenCompra = ordenesCompra.find(oc => oc.id === v);
+                    const prov = proveedores.find(p => p.id === ordenCompra?.proveedor_id);
+                    setCurrentItem({
+                      ...currentItem, 
+                      id_orden_compra_origen: v,
+                      no_documento: ordenCompra?.numero_documento || currentItem?.no_documento || '',
+                      proveedor_id: ordenCompra?.proveedor_id || currentItem?.proveedor_id || ''
+                    });
+                    setOrdenCompraSearch('');
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar orden (opcional)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__clear__">— Sin orden de compra —</SelectItem>
+                      {ordenesCompra
+                        .filter(oc => oc.id)
+                        .filter(oc => {
+                          if (!ordenCompraSearch) return true;
+                          const s = ordenCompraSearch.toLowerCase();
+                          const prov = proveedores.find(p => p.id === oc.proveedor_id);
+                          return (
+                            (oc.numero_id || '').toLowerCase().includes(s) ||
+                            (oc.numero_documento || '').toLowerCase().includes(s) ||
+                            (prov?.nombre || '').toLowerCase().includes(s) ||
+                            (oc.tipo_item || '').toLowerCase().includes(s)
+                          );
+                        })
+                        .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
+                        .map(oc => {
+                          const prov = proveedores.find(p => p.id === oc.proveedor_id);
+                          return (
+                            <SelectItem key={oc.id} value={oc.id}>
+                              {oc.numero_id || `${oc.prefijo_documento}-${oc.numero_documento}`} | {prov?.nombre || 'N/A'} | {oc.tipo_item || ''}
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                  {currentItem?.id_orden_compra_origen && (() => {
+                    const oc = ordenesCompra.find(o => o.id === currentItem.id_orden_compra_origen);
+                    const prov = proveedores.find(p => p.id === oc?.proveedor_id);
+                    if (!oc) return null;
+                    return (
+                      <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs space-y-0.5">
+                        <p><span className="font-semibold">Proveedor:</span> {prov?.nombre || 'N/A'}</p>
+                        <p><span className="font-semibold">Material:</span> {oc.tipo_item || 'N/A'}</p>
+                        <p><span className="font-semibold">Fecha:</span> {oc.fecha_emision_documento || oc.fecha_orden || 'N/A'}</p>
+                        <p><span className="font-semibold">Total:</span> {formatCurrency(oc.total)}</p>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
               <div>
                 <Label>Código de Lote (automático) *</Label>
@@ -459,36 +512,64 @@ export default function ProcesoRecepcion() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Código PCTO. *</Label>
-                <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
-                  const catalogoProd = productos.find(p => p.codigo === v);
-                  const costoP = catalogoProd?.costo_promedio || 0;
-                  setCostoPromedioProducto(costoP);
-                  const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
-                  setCurrentItem({
-                    ...currentItem, 
-                    codigo_producto: v,
-                    descripcion_producto: catalogoProd ? catalogoProd.descripcion : '',
-                    costo_promedio: costoP,
-                    costo_total: hojas * costoP
-                  });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
-                  <SelectContent>
-                    {productos
-                      .filter(prod => prod.codigo)
-                      .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
-                      .map(prod => (
-                        <SelectItem key={prod.id} value={prod.codigo}>
-                          {prod.codigo}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <Input
+                    placeholder="Buscar por código o descripción..."
+                    value={productoSearch}
+                    onChange={e => setProductoSearch(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
+                    const catalogoProd = productos.find(p => p.codigo === v);
+                    const costoP = catalogoProd?.costo_promedio || 0;
+                    const stockActual = catalogoProd?.stock_actual ?? null;
+                    const unidad = catalogoProd?.unidad_medida || '';
+                    setCostoPromedioProducto(costoP);
+                    setStockDisponible(stockActual);
+                    setStockUnidad(unidad);
+                    setProductoSearch('');
+                    const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+                    setCurrentItem({
+                      ...currentItem, 
+                      codigo_producto: v,
+                      descripcion_producto: catalogoProd ? catalogoProd.descripcion : '',
+                      costo_promedio: costoP,
+                      costo_total: hojas * costoP
+                    });
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
+                    <SelectContent>
+                      {productos
+                        .filter(prod => prod.codigo)
+                        .filter(prod => {
+                          if (!productoSearch) return true;
+                          const s = productoSearch.toLowerCase();
+                          return (prod.codigo || '').toLowerCase().includes(s) || (prod.descripcion || '').toLowerCase().includes(s);
+                        })
+                        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
+                        .map(prod => (
+                          <SelectItem key={prod.id} value={prod.codigo}>
+                            {prod.codigo} — {prod.descripcion}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  {stockDisponible !== null && currentItem?.codigo_producto && (
+                    <div className={`text-xs px-2 py-1 rounded font-medium ${stockDisponible > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                      📦 Disponible en inventario: <strong>{stockDisponible} {stockUnidad}</strong>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <Label>Nombre del Producto *</Label>
                 <Select value={currentItem?.descripcion_producto || ''} onValueChange={v => {
                   const catalogoProd = productos.find(p => p.descripcion === v);
+                  if (catalogoProd) {
+                    setStockDisponible(catalogoProd.stock_actual ?? null);
+                    setStockUnidad(catalogoProd.unidad_medida || '');
+                    setCostoPromedioProducto(catalogoProd.costo_promedio || 0);
+                  }
                   setCurrentItem({
                     ...currentItem, 
                     codigo_producto: catalogoProd ? catalogoProd.codigo : currentItem.codigo_producto,
@@ -534,7 +615,7 @@ export default function ProcesoRecepcion() {
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>
             <div className="flex items-center space-x-2">
               <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => setCurrentItem({...currentItem, dividir_lote: v})} id="dividir" />
-              <Label htmlFor="dividir">Dividir Lote <span className="text-red-500">*</span> (obligatorio)</Label>
+              <Label htmlFor="dividir">Dividir Lote <span className="text-xs text-slate-400">(opcional)</span></Label>
             </div>
             {currentItem?.dividir_lote && (
               <div className="space-y-2">
