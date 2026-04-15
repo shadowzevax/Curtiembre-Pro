@@ -20,6 +20,8 @@ export default function ProcesoRecurtido() {
   const [insumos, setInsumos] = useState([]);
   const [productos, setProductos] = useState([]);
   const [lotesEnProceso, setLotesEnProceso] = useState([]);
+  const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
+  const [searchEnProceso, setSearchEnProceso] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -32,16 +34,17 @@ export default function ProcesoRecurtido() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, todosLosProcesos] = await Promise.all([
+      const [procesosData, insumosData, productosData, todosLosProcesos, invEnProceso] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recurtido' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        ProcesoProduccion.list()
+        ProcesoProduccion.list(),
+        InventarioEnProceso.list()
       ]);
       
-      // Filtrar solo los lotes que NO están completados y tienen un código de lote definido
       const lotesActivos = todosLosProcesos.filter(p => p.estado !== 'completado' && p.codigo_lote);
       setLotesEnProceso(lotesActivos);
+      setInventarioEnProceso(Array.isArray(invEnProceso) ? invEnProceso : []);
       
       setProcesos(procesosData);
       setInsumos(insumosData);
@@ -76,6 +79,7 @@ export default function ProcesoRecurtido() {
       estado: 'pendiente',
       finalizar_recurtido: false // Added this field
     });
+    setSearchEnProceso('');
     setShowModal(true);
   };
 
@@ -355,18 +359,46 @@ export default function ProcesoRecurtido() {
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-4 gap-4">
-              <div>
-                <Label>Código Lote *</Label>
-                <Select value={currentItem?.codigo_lote || ''} onValueChange={v => setCurrentItem({...currentItem, codigo_lote: v})}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar lote en proceso" /></SelectTrigger>
+              <div className="col-span-2">
+                <Label>Código en Proceso *</Label>
+                <Input
+                  placeholder="Buscar por código, lote o descripción..."
+                  value={searchEnProceso}
+                  onChange={e => setSearchEnProceso(e.target.value)}
+                  className="mb-1 h-8 text-xs"
+                />
+                <Select value={currentItem?.inv_proceso_id || ''} onValueChange={v => {
+                  const inv = inventarioEnProceso.find(i => i.id === v);
+                  if (inv) {
+                    setSearchEnProceso('');
+                    setCurrentItem(prev => ({
+                      ...prev,
+                      inv_proceso_id: inv.id,
+                      codigo_lote: inv.codigo_lote || inv.codigo || '',
+                      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles
+                    }));
+                  }
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar registro en proceso..." /></SelectTrigger>
                   <SelectContent>
-                    {lotesEnProceso.map(lote => (
-                      <SelectItem key={lote.id} value={lote.codigo_lote || `lote-${lote.id}`}>
-                        {lote.codigo_lote || 'Sin código'} - {lote.tipo_proceso} ({lote.estado})
-                      </SelectItem>
-                    ))}
+                    {inventarioEnProceso
+                      .filter(inv => {
+                        if (!searchEnProceso) return true;
+                        const s = searchEnProceso.toLowerCase();
+                        return (inv.codigo || '').toLowerCase().includes(s) ||
+                               (inv.codigo_lote || '').toLowerCase().includes(s) ||
+                               (inv.descripcion || '').toLowerCase().includes(s);
+                      })
+                      .map(inv => (
+                        <SelectItem key={inv.id} value={inv.id}>
+                          {inv.codigo_lote || inv.codigo} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas)
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
+                {currentItem?.codigo_lote && (
+                  <p className="text-xs text-blue-600 mt-1 font-medium">Lote: {currentItem.codigo_lote}</p>
+                )}
               </div>
               <div>
                 <Label>Código Color Base</Label>

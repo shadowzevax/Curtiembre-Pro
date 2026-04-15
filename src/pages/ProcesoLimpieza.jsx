@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, ProductoTerminado, MovimientoInventario } from '@/entities/all';
+import { ProcesoProduccion, Insumo, ProductoTerminado, MovimientoInventario, InventarioEnProceso } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,8 @@ export default function ProcesoLimpieza() {
   const [productos, setProductos] = useState([]);
   const [lotesEnProceso, setLotesEnProceso] = useState([]);
   const [sublotesDisponibles, setSublotesDisponibles] = useState([]);
+  const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
+  const [searchEnProceso, setSearchEnProceso] = useState('');
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -33,16 +35,17 @@ export default function ProcesoLimpieza() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, todosLosProcesos] = await Promise.all([
+      const [procesosData, insumosData, productosData, todosLosProcesos, invEnProceso] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'limpieza' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        ProcesoProduccion.list()
+        ProcesoProduccion.list(),
+        InventarioEnProceso.list()
       ]);
       
-      // Filtrar solo los lotes que NO están completados (para código lote)
       const lotesActivos = todosLosProcesos.filter(p => p.estado !== 'completado' && p.tipo_proceso === 'recepcion');
       setLotesEnProceso(lotesActivos);
+      setInventarioEnProceso(Array.isArray(invEnProceso) ? invEnProceso : []);
       
       setProcesos(procesosData);
       setInsumos(insumosData);
@@ -76,7 +79,8 @@ export default function ProcesoLimpieza() {
       finalizar_remojo: false, // New field
       finalizar_pelambre: false // New field
     });
-    setSublotesDisponibles([]); // Clear sublotes when opening modal
+    setSublotesDisponibles([]);
+    setSearchEnProceso('');
     setShowModal(true);
   };
 
@@ -386,32 +390,48 @@ export default function ProcesoLimpieza() {
             <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Limpieza</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-4 gap-4">
-              <div>
-                <Label>Código Lote *</Label>
-                <Select value={currentItem?.codigo_lote || ''} onValueChange={handleLoteChange}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar lote en proceso" /></SelectTrigger>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-1">
+                <Label>Código en Proceso *</Label>
+                <Input
+                  placeholder="Buscar por código, lote o descripción..."
+                  value={searchEnProceso}
+                  onChange={e => setSearchEnProceso(e.target.value)}
+                  className="mb-1 h-8 text-xs"
+                />
+                <Select value={currentItem?.inv_proceso_id || ''} onValueChange={v => {
+                  const inv = inventarioEnProceso.find(i => i.id === v);
+                  if (inv) {
+                    setSearchEnProceso('');
+                    setCurrentItem(prev => ({
+                      ...prev,
+                      inv_proceso_id: inv.id,
+                      codigo_lote: inv.codigo_lote || inv.codigo || '',
+                      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles
+                    }));
+                    handleLoteChange(inv.codigo_lote || inv.codigo || '');
+                  }
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar registro en proceso..." /></SelectTrigger>
                   <SelectContent>
-                    {lotesEnProceso.map(lote => (
-                      <SelectItem key={lote.id} value={lote.codigo_lote}>
-                        {lote.codigo_lote} ({lote.estado})
-                      </SelectItem>
-                    ))}
+                    {inventarioEnProceso
+                      .filter(inv => {
+                        if (!searchEnProceso) return true;
+                        const s = searchEnProceso.toLowerCase();
+                        return (inv.codigo || '').toLowerCase().includes(s) ||
+                               (inv.codigo_lote || '').toLowerCase().includes(s) ||
+                               (inv.descripcion || '').toLowerCase().includes(s);
+                      })
+                      .map(inv => (
+                        <SelectItem key={inv.id} value={inv.id}>
+                          {inv.codigo_lote || inv.codigo} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas)
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <Label>Código Sublote (opcional)</Label>
-                <Select value={currentItem?.codigo_sublote || ''} onValueChange={handleSubloteChange} disabled={sublotesDisponibles.length === 0}>
-                  <SelectTrigger><SelectValue placeholder={sublotesDisponibles.length === 0 ? "Sin sublotes disponibles" : "Seleccionar sublote"} /></SelectTrigger>
-                  <SelectContent>
-                    {sublotesDisponibles.map((sub, idx) => (
-                      <SelectItem key={idx} value={sub.codigo}>
-                        {sub.codigo} (Cant: {sub.cantidad})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {currentItem?.codigo_lote && (
+                  <p className="text-xs text-blue-600 mt-1 font-medium">Lote: {currentItem.codigo_lote}</p>
+                )}
               </div>
               <div><Label>Cantidad Hojas</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_pieles || ''} onChange={e => {
                 const val = e.target.value.replace(/[^0-9]/g, '');
