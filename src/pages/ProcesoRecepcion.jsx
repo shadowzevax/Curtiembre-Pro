@@ -31,14 +31,10 @@ export default function ProcesoRecepcion() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyData, setHistoryData] = useState({});
   const [sublotes, setSublotes] = useState([]);
-  const [nextLoteNumber, setNextLoteNumber] = useState(1);
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
-  const [lotesCompras, setLotesCompras] = useState([]);
   const [ordenesCompra, setOrdenesCompra] = useState([]);
   const [costoPromedioProducto, setCostoPromedioProducto] = useState(0);
-  const [subloteSeleccionadoTerminado, setSubloteSeleccionadoTerminado] = useState('');
-  const [subloteSeleccionadoPendiente, setSubloteSeleccionadoPendiente] = useState('');
   const [stockDisponible, setStockDisponible] = useState(null);
   const [stockUnidad, setStockUnidad] = useState('');
   const [ordenCompraSearch, setOrdenCompraSearch] = useState('');
@@ -54,44 +50,14 @@ export default function ProcesoRecepcion() {
         Proveedor.list(),
         OrdenCompra.list()
       ]);
-      
-      // VALIDACIÓN CRÍTICA: Asegurar que todos los datos son arrays válidos
-      const recepcionesValidas = Array.isArray(recepcionesData) ? recepcionesData : [];
-      const insumosValidos = Array.isArray(insumosData) ? insumosData : [];
-      const productosValidos = Array.isArray(productosData) ? productosData : [];
-      const proveedoresValidos = Array.isArray(proveedoresData) ? proveedoresData : [];
-      const comprasValidas = Array.isArray(comprasData) ? comprasData : [];
-      
-      setRecepciones(recepcionesValidas);
-      setInsumos(insumosValidos);
-      setProductos(productosValidos);
-      setProveedores(proveedoresValidos);
-      setOrdenesCompra(comprasValidas);
-      
-      // Extraer códigos de lote únicos de compras
-      const lotes = comprasValidas
-        .filter(c => c && c.codigo_lote_inventario)
-        .map(c => c.codigo_lote_inventario);
-      setLotesCompras([...new Set(lotes)]);
-      
-      // Calcular el siguiente número de lote
-      if (recepcionesValidas.length > 0) {
-        const lotes = recepcionesValidas.map(r => {
-          const match = r?.codigo_lote?.match(/L(\d+)/);
-          return match ? parseInt(match[1]) : 0;
-        });
-        const maxLote = Math.max(...lotes, 0);
-        setNextLoteNumber(maxLote + 1);
-      }
+      setRecepciones(Array.isArray(recepcionesData) ? recepcionesData : []);
+      setInsumos(Array.isArray(insumosData) ? insumosData : []);
+      setProductos(Array.isArray(productosData) ? productosData : []);
+      setProveedores(Array.isArray(proveedoresData) ? proveedoresData : []);
+      setOrdenesCompra(Array.isArray(comprasData) ? comprasData : []);
     } catch (error) {
       console.error('Error loading data:', error);
-      // Inicializar con arrays vacíos en caso de error
-      setRecepciones([]);
-      setInsumos([]);
-      setProductos([]);
-      setProveedores([]);
-      setOrdenesCompra([]);
-      setLotesCompras([]);
+      setRecepciones([]); setInsumos([]); setProductos([]); setProveedores([]); setOrdenesCompra([]);
     } finally {
       setLoading(false);
     }
@@ -102,7 +68,6 @@ export default function ProcesoRecepcion() {
   const handleOpenModal = (item = null) => {
     setIsEditing(!!item);
     if (!item) {
-      // Generar código automático L-AAAA-XXX
       const year = new Date().getFullYear();
       const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
       const recepcionesDelAnio = recepcionesSeguras.filter(r => r && r.codigo_lote?.startsWith(`L-${year}`));
@@ -112,7 +77,6 @@ export default function ProcesoRecepcion() {
       });
       const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
       const codigoLote = `L-${year}-${String(nextConsecutivo).padStart(3, '0')}`;
-      
       setCurrentItem({
         tipo_proceso: 'recepcion',
         codigo_lote: codigoLote,
@@ -129,31 +93,16 @@ export default function ProcesoRecepcion() {
         dividir_lote: false,
         num_sublotes: 0,
         sublotes: [],
-        insumos_utilizados: [],
-        servicios_maquinaria: [],
-        servicios_mano_obra: [],
-        otros_costos: [],
-        otros_conceptos: [],
         observaciones: '',
         nombre_curtidor: '',
         estado: 'pendiente'
       });
     } else {
-      setCurrentItem({
-        ...item,
-        sublotes: Array.isArray(item.sublotes) ? item.sublotes : [],
-        insumos_utilizados: Array.isArray(item.insumos_utilizados) ? item.insumos_utilizados : [],
-        servicios_maquinaria: Array.isArray(item.servicios_maquinaria) ? item.servicios_maquinaria : [],
-        servicios_mano_obra: Array.isArray(item.servicios_mano_obra) ? item.servicios_mano_obra : [],
-        otros_costos: Array.isArray(item.otros_costos) ? item.otros_costos : [],
-        otros_conceptos: Array.isArray(item.otros_conceptos) ? item.otros_conceptos : []
-      });
+      setCurrentItem({ ...item, sublotes: Array.isArray(item.sublotes) ? item.sublotes : [] });
     }
     setSublotes(Array.isArray(item?.sublotes) ? item.sublotes : []);
-    setStockDisponible(null);
-    setStockUnidad('');
-    setOrdenCompraSearch('');
-    setProductoSearch('');
+    setStockDisponible(null); setStockUnidad('');
+    setOrdenCompraSearch(''); setProductoSearch('');
     setShowModal(true);
   };
 
@@ -176,39 +125,39 @@ export default function ProcesoRecepcion() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    
-    // Validar duplicado de código lote
-    if (!isEditing) {
-        const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
-        const exists = recepcionesSeguras.some(r => r && r.codigo_lote === currentItem.codigo_lote);
-        if (exists) {
-            alert('El CÓDIGO DE LOTE YA EXISTE. POR FAVOR, VERIFIQUE.');
-            return;
-        }
+
+    // Validar que si el lote está dividido, los sublotes tengan cantidades
+    if (currentItem.dividir_lote && sublotes.length > 0) {
+      const totalSublotes = sublotes.reduce((s, sub) => s + (parseFloat(sub.cantidad) || 0), 0);
+      if (totalSublotes === 0) {
+        alert('⚠️ Debe asignar cantidades a los sublotes antes de guardar.');
+        return;
+      }
     }
 
-    // Validar stock disponible si hay producto y cantidad
+    if (!isEditing) {
+      const recepcionesSeguras = Array.isArray(recepciones) ? recepciones : [];
+      const exists = recepcionesSeguras.some(r => r && r.codigo_lote === currentItem.codigo_lote);
+      if (exists) { alert('El CÓDIGO DE LOTE YA EXISTE.'); return; }
+    }
+
     if (!isEditing && currentItem.codigo_producto && currentItem.cantidad_total_lote_hojas > 0 && stockDisponible !== null) {
       if (currentItem.cantidad_total_lote_hojas > stockDisponible) {
-        alert(`⚠️ La cantidad ingresada (${currentItem.cantidad_total_lote_hojas}) supera el stock disponible en inventario (${stockDisponible} ${stockUnidad}). Por favor verifique.`);
+        alert(`⚠️ Cantidad (${currentItem.cantidad_total_lote_hojas}) supera el stock (${stockDisponible} ${stockUnidad}).`);
         return;
       }
     }
 
     try {
-      // Asegurar que TODOS los arrays estén inicializados para evitar errores en producción
       const dataToSave = {
         ...currentItem,
         sublotes: (currentItem.dividir_lote && Array.isArray(sublotes)) ? sublotes : [],
-        insumos_utilizados: Array.isArray(currentItem.insumos_utilizados) ? currentItem.insumos_utilizados : [],
-        servicios_maquinaria: Array.isArray(currentItem.servicios_maquinaria) ? currentItem.servicios_maquinaria : [],
-        servicios_mano_obra: Array.isArray(currentItem.servicios_mano_obra) ? currentItem.servicios_mano_obra : [],
-        otros_costos: Array.isArray(currentItem.otros_costos) ? currentItem.otros_costos : [],
-        otros_conceptos: Array.isArray(currentItem.otros_conceptos) ? currentItem.otros_conceptos : [],
-        numero_proceso: currentItem.codigo_lote
+        numero_proceso: currentItem.codigo_lote,
+        // Estado del lote: DIVIDIDO si tiene sublotes, EN_PROCESO si no
+        estado: currentItem.dividir_lote && sublotes.length > 0 ? 'dividido' : 'pendiente',
+        etapa_actual: 'recepcion'
       };
-      
-      // Guardar el proceso de recepción
+
       let procesoId;
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
@@ -217,22 +166,13 @@ export default function ProcesoRecepcion() {
         const created = await ProcesoProduccion.create(dataToSave);
         procesoId = created.id;
       }
-      
+
       // AFECTAR INVENTARIO DE MATERIA PRIMA (restar cantidad de hojas)
       if (!isEditing && currentItem.cantidad_total_lote_hojas > 0 && currentItem.codigo_producto) {
-        // Buscar el producto en materia prima por código
-        const productosMP = await ProductoTerminado.filter({ 
-          codigo: currentItem.codigo_producto, 
-          categoria: 'pieles' 
-        });
-        
-        // VALIDACIÓN CRÍTICA: Verificar que productosMP es un array válido
+        const productosMP = await ProductoTerminado.filter({ codigo: currentItem.codigo_producto, categoria: 'pieles' });
         const productosMPValidos = Array.isArray(productosMP) ? productosMP : [];
-        
         if (productosMPValidos.length > 0) {
           const producto = productosMPValidos[0];
-          
-          // Crear movimiento de salida (negativo)
           await base44.entities.MovimientoInventario.create({
             tipo_movimiento: 'salida',
             insumo_id: producto.id,
@@ -243,59 +183,57 @@ export default function ProcesoRecepcion() {
             observaciones: `Salida por recepción de lote ${currentItem.codigo_lote}`,
             usuario_id: 'system'
           });
-          
-          // Actualizar stock en ProductoTerminado
           const movimientos = await MovimientoInventario.filter({ insumo_id: producto.id });
-          // VALIDACIÓN CRÍTICA: Asegurar que movimientos es un array antes de usar reduce
-          const movimientosValidos = Array.isArray(movimientos) ? movimientos : [];
-          const nuevoStock = movimientosValidos.reduce((sum, m) => sum + (parseFloat(m?.cantidad) || 0), 0) - currentItem.cantidad_total_lote_hojas;
-          
-          await ProductoTerminado.update(producto.id, {
-            stock_actual: nuevoStock
-          });
-          
-          console.log(`✅ Inventario actualizado: -${currentItem.cantidad_total_lote_hojas} hojas de ${currentItem.codigo_producto}`);
-          
-          // CREAR REGISTRO EN INVENTARIO EN PROCESO
-          if (currentItem.dividir_lote && sublotes.length > 0) {
-            // Si se dividió el lote, crear un registro por cada sublote
-            for (const sublote of sublotes) {
-              await base44.entities.InventarioEnProceso.create({
-                codigo: currentItem.codigo_producto,
-                descripcion: currentItem.descripcion_producto,
-                codigo_lote: sublote.codigo,
-                origen_modulo: 'recepcion',
-                etapa_actual: 'recepcion',
-                estado_proceso: 'listo_para_limpieza',
-                cantidad_hojas: sublote.cantidad,
-                fecha_ingreso_proceso: currentItem.fecha_inicio,
-                proceso_origen_id: procesoId
-              });
-            }
-          } else {
-            // Si no se dividió, crear un solo registro con el lote original
-            await base44.entities.InventarioEnProceso.create({
-              codigo: currentItem.codigo_producto,
-              descripcion: currentItem.descripcion_producto,
-              codigo_lote: currentItem.codigo_lote,
+          const nuevoStock = (Array.isArray(movimientos) ? movimientos : []).reduce((sum, m) => sum + (parseFloat(m?.cantidad) || 0), 0);
+          await ProductoTerminado.update(producto.id, { stock_actual: nuevoStock });
+        }
+
+        // CREAR REGISTROS EN INVENTARIO EN PROCESO (tabla central)
+        if (currentItem.dividir_lote && sublotes.length > 0) {
+          // Un registro por cada sublote — Estado: EN_PROCESO, Etapa: RECEPCION
+          for (const sublote of sublotes) {
+            await InventarioEnProceso.create({
+              codigo: currentItem.codigo_lote,
+              descripcion: `${currentItem.descripcion_producto} — ${sublote.codigo}`,
+              codigo_lote: sublote.codigo,
+              codigo_lote_padre: currentItem.codigo_lote,
+              tipo: 'SUBLOTE',
               origen_modulo: 'recepcion',
               etapa_actual: 'recepcion',
-              estado_proceso: 'listo_para_limpieza',
-              cantidad_hojas: currentItem.cantidad_total_lote_hojas,
+              estado_proceso: 'piel_recibida',
+              estado_actual: 'EN_PROCESO',
+              cantidad_hojas: parseFloat(sublote.cantidad) || 0,
+              cantidad_pieles: parseFloat(sublote.cantidad) || 0,
+              peso_actual: ((parseFloat(currentItem.peso_total) || 0) / (sublotes.length || 1)),
+              costo_acumulado: ((parseFloat(currentItem.costo_total) || 0) / (sublotes.length || 1)),
               fecha_ingreso_proceso: currentItem.fecha_inicio,
               proceso_origen_id: procesoId
             });
           }
-          
-          console.log(`✅ Inventario En Proceso creado para lote ${currentItem.codigo_lote}`);
+        } else {
+          // Lote sin división — Estado: EN_PROCESO, Etapa: RECEPCION
+          await InventarioEnProceso.create({
+            codigo: currentItem.codigo_lote,
+            descripcion: currentItem.descripcion_producto || '',
+            codigo_lote: currentItem.codigo_lote,
+            tipo: 'LOTE',
+            origen_modulo: 'recepcion',
+            etapa_actual: 'recepcion',
+            estado_proceso: 'piel_recibida',
+            estado_actual: 'EN_PROCESO',
+            cantidad_hojas: currentItem.cantidad_total_lote_hojas || 0,
+            cantidad_pieles: currentItem.cantidad_total_lote_pieles || 0,
+            peso_actual: parseFloat(currentItem.peso_total) || 0,
+            costo_acumulado: parseFloat(currentItem.costo_total) || 0,
+            fecha_ingreso_proceso: currentItem.fecha_inicio,
+            proceso_origen_id: procesoId
+          });
         }
+        console.log(`✅ Tabla central (InventarioEnProceso) actualizada para lote ${currentItem.codigo_lote}`);
       }
-      
-      // Cerrar modal y mostrar mensaje de éxito
+
       setShowModal(false);
       setCurrentItem(null);
-      
-      // Recargar datos inmediatamente y luego mostrar mensaje
       await loadData();
       alert('Recepción guardada con éxito.');
     } catch (error) {
@@ -310,94 +248,81 @@ export default function ProcesoRecepcion() {
       await ProcesoProduccion.delete(id);
       loadData();
       alert('Recepción eliminada.');
-    } catch (error) {
-      console.error('Error deleting:', error);
-      alert('Error al eliminar.');
-    }
+    } catch (error) { console.error('Error deleting:', error); }
   };
 
-  const handleViewDetails = (item) => {
-    setSelectedItem(item);
-    setShowDetailModal(true);
-  };
+  const handleViewDetails = (item) => { setSelectedItem(item); setShowDetailModal(true); };
 
   const handleViewHistory = async (item) => {
     setLoading(true);
     try {
-        // Buscar todos los procesos relacionados con este lote
-        const allProcesos = await ProcesoProduccion.filter({ codigo_lote: item.codigo_lote });
-        
-        // VALIDACIÓN CRÍTICA: Asegurar que allProcesos es un array antes de usar filter
-        const procesosValidos = Array.isArray(allProcesos) ? allProcesos : [];
-        
-        // Agrupar por etapa
-        const history = {
-            recepcion: procesosValidos.filter(p => p && p.tipo_proceso === 'recepcion'),
-            remojo: procesosValidos.filter(p => p && p.tipo_proceso === 'limpieza' && p.seccion === 'remojo'),
-            pelambre: procesosValidos.filter(p => p && p.tipo_proceso === 'limpieza' && p.seccion === 'pelambre'),
-            curtido: procesosValidos.filter(p => p && p.tipo_proceso === 'curtido'),
-            recurtido: procesosValidos.filter(p => p && p.tipo_proceso === 'recurtido'),
-            acabado: procesosValidos.filter(p => p && p.tipo_proceso === 'acabado'),
-        };
-        
-        setHistoryData(history);
-        setSelectedItem(item);
-        setShowHistoryModal(true);
+      const [allProcesos, invEnProceso] = await Promise.all([
+        ProcesoProduccion.filter({ codigo_lote: item.codigo_lote }),
+        InventarioEnProceso.list()
+      ]);
+      const procesosValidos = Array.isArray(allProcesos) ? allProcesos : [];
+      const history = {
+        recepcion: procesosValidos.filter(p => p && p.tipo_proceso === 'recepcion'),
+        remojo: procesosValidos.filter(p => p && p.tipo_proceso === 'limpieza' && p.seccion === 'remojo'),
+        pelambre: procesosValidos.filter(p => p && p.tipo_proceso === 'limpieza' && p.seccion === 'pelambre'),
+        curtido: procesosValidos.filter(p => p && p.tipo_proceso === 'curtido'),
+        recurtido: procesosValidos.filter(p => p && p.tipo_proceso === 'recurtido'),
+      };
+      // Estado actual en tabla central
+      const registrosCentral = (Array.isArray(invEnProceso) ? invEnProceso : [])
+        .filter(i => i.codigo_lote === item.codigo_lote || i.codigo_lote_padre === item.codigo_lote);
+      history.tabla_central = registrosCentral;
+      setHistoryData(history);
+      setSelectedItem(item);
+      setShowHistoryModal(true);
     } catch (e) {
-        console.error(e);
-        alert("Error cargando historial");
-    } finally {
-        setLoading(false);
-    }
+      console.error(e);
+      alert("Error cargando historial");
+    } finally { setLoading(false); }
   };
-
-  const handleExport = () => alert('Función de exportar en desarrollo.');
-  const handlePrint = () => window.print();
-
-  // Combinar insumos y productos para el selector
-  const todosLosItems = [
-    ...insumos.map(i => ({ ...i, tipo: 'insumo', displayName: i.nombre || i.descripcion })),
-    ...productos.map(p => ({ ...p, tipo: 'producto', displayName: p.descripcion || p.nombre }))
-  ];
 
   const headers = ['Código Lote', 'Fecha', 'Proveedor', 'Código', 'Descripción', 'Cant. Hojas', 'Cant. Pieles', 'Peso Total', 'Estado', 'Acciones'];
   const renderRow = (item) => {
     const proveedor = proveedores.find(p => p.id === item.proveedor_id);
     return (
-    <tr key={item.id}>
-      <td>{item.codigo_lote}</td>
-      <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
-      <td>{proveedor?.nombre || 'N/A'}</td>
-      <td>{item.codigo_producto || 'N/A'}</td>
-      <td>{item.descripcion_producto || item.nombre_inventario || 'N/A'}</td>
-      <td>{item.cantidad_total_lote_hojas || item.cantidad_total_lote || 0}</td>
-      <td>{item.cantidad_total_lote_pieles || item.cantidad_pieles || 0}</td>
-      <td>{item.peso_total} kg</td>
-      <td><span className="capitalize">{item.estado}</span></td>
-      <td>
-        <div className="flex space-x-2">
-          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }} title="Ver Consolidado Costos"><Table className="w-4 h-4 text-emerald-600" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)} title="Ver Detalle"><Eye className="w-4 h-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleViewHistory(item)} title="Ver Seguimiento"><FileText className="w-4 h-4 text-blue-600" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} title="Editar"><Edit className="w-4 h-4" /></Button>
-          <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)} title="Eliminar"><Trash2 className="w-4 h-4" /></Button>
-        </div>
-      </td>
-    </tr>
-  )};
-  
+      <tr key={item.id}>
+        <td className="font-mono font-bold">{item.codigo_lote}</td>
+        <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
+        <td>{proveedor?.nombre || 'N/A'}</td>
+        <td>{item.codigo_producto || 'N/A'}</td>
+        <td>{item.descripcion_producto || item.nombre_inventario || 'N/A'}</td>
+        <td>{item.cantidad_total_lote_hojas || item.cantidad_total_lote || 0}</td>
+        <td>{item.cantidad_total_lote_pieles || item.cantidad_pieles || 0}</td>
+        <td>{item.peso_total} kg</td>
+        <td>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+            item.estado === 'dividido' ? 'bg-orange-100 text-orange-700' :
+            item.estado === 'completado' ? 'bg-green-100 text-green-700' :
+            'bg-blue-100 text-blue-700'
+          }`}>{item.dividir_lote ? 'DIVIDIDO' : (item.estado || 'pendiente').toUpperCase()}</span>
+        </td>
+        <td>
+          <div className="flex space-x-1">
+            <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }} title="Ver Consolidado Costos"><Table className="w-4 h-4 text-emerald-600" /></Button>
+            <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)} title="Ver Detalle"><Eye className="w-4 h-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => handleViewHistory(item)} title="Ver Seguimiento"><FileText className="w-4 h-4 text-blue-600" /></Button>
+            <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)} title="Editar"><Edit className="w-4 h-4" /></Button>
+            <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)} title="Eliminar"><Trash2 className="w-4 h-4" /></Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="p-6">
       <PageHeader
         title="Recepción de Materia Prima"
-        description="Gestiona el ingreso de pieles y otros materiales."
-        onExportExcel={handleExport}
-        onPrint={handlePrint}
+        description="Gestiona el ingreso de pieles. Los lotes registrados aquí alimentan la tabla central de producción."
+        onPrint={() => window.print()}
         actionButton={
           <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Recepción
+            <Plus className="w-4 h-4 mr-2" />Nueva Recepción
           </Button>
         }
       />
@@ -408,90 +333,44 @@ export default function ProcesoRecepcion() {
         </CardContent>
       </Card>
 
+      {/* MODAL CREAR/EDITAR */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Recepción</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label>ID Orden de Compra Origen <span className="text-xs text-slate-400">(opcional)</span></Label>
+                <Label>ID Orden de Compra <span className="text-xs text-slate-400">(opcional)</span></Label>
                 <div className="space-y-1">
-                  <Input
-                    placeholder="Buscar por ID, proveedor o material..."
-                    value={ordenCompraSearch}
-                    onChange={e => setOrdenCompraSearch(e.target.value)}
-                    className="h-8 text-xs"
-                  />
+                  <Input placeholder="Buscar orden..." value={ordenCompraSearch} onChange={e => setOrdenCompraSearch(e.target.value)} className="h-8 text-xs" />
                   <Select value={currentItem?.id_orden_compra_origen || ''} onValueChange={v => {
-                    if (v === '__clear__') {
-                      setCurrentItem({ ...currentItem, id_orden_compra_origen: '' });
-                      setOrdenCompraSearch('');
-                      return;
-                    }
-                    const ordenCompra = ordenesCompra.find(oc => oc.id === v);
-                    const prov = proveedores.find(p => p.id === ordenCompra?.proveedor_id);
-                    setCurrentItem({
-                      ...currentItem, 
-                      id_orden_compra_origen: v,
-                      no_documento: ordenCompra?.numero_documento || currentItem?.no_documento || '',
-                      proveedor_id: ordenCompra?.proveedor_id || currentItem?.proveedor_id || ''
-                    });
+                    if (v === '__clear__') { setCurrentItem({ ...currentItem, id_orden_compra_origen: '' }); setOrdenCompraSearch(''); return; }
+                    const oc = ordenesCompra.find(o => o.id === v);
+                    setCurrentItem({ ...currentItem, id_orden_compra_origen: v, no_documento: oc?.numero_documento || '', proveedor_id: oc?.proveedor_id || '' });
                     setOrdenCompraSearch('');
                   }}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar orden (opcional)" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar (opcional)" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__clear__">— Sin orden de compra —</SelectItem>
-                      {ordenesCompra
-                        .filter(oc => oc.id)
-                        .filter(oc => {
-                          if (!ordenCompraSearch) return true;
-                          const s = ordenCompraSearch.toLowerCase();
-                          const prov = proveedores.find(p => p.id === oc.proveedor_id);
-                          return (
-                            (oc.numero_id || '').toLowerCase().includes(s) ||
-                            (oc.numero_documento || '').toLowerCase().includes(s) ||
-                            (prov?.nombre || '').toLowerCase().includes(s) ||
-                            (oc.tipo_item || '').toLowerCase().includes(s)
-                          );
-                        })
-                        .sort((a, b) => new Date(b.created_date) - new Date(a.created_date))
-                        .map(oc => {
-                          const prov = proveedores.find(p => p.id === oc.proveedor_id);
-                          return (
-                            <SelectItem key={oc.id} value={oc.id}>
-                              {oc.numero_id || `${oc.prefijo_documento}-${oc.numero_documento}`} | {prov?.nombre || 'N/A'} | {oc.tipo_item || ''}
-                            </SelectItem>
-                          );
-                        })}
+                      <SelectItem value="__clear__">— Sin orden —</SelectItem>
+                      {ordenesCompra.filter(oc => oc.id).filter(oc => {
+                        if (!ordenCompraSearch) return true;
+                        const s = ordenCompraSearch.toLowerCase();
+                        const prov = proveedores.find(p => p.id === oc.proveedor_id);
+                        return (oc.numero_id || '').toLowerCase().includes(s) || (prov?.nombre || '').toLowerCase().includes(s);
+                      }).map(oc => {
+                        const prov = proveedores.find(p => p.id === oc.proveedor_id);
+                        return <SelectItem key={oc.id} value={oc.id}>{oc.numero_id || oc.numero_documento} | {prov?.nombre || 'N/A'}</SelectItem>;
+                      })}
                     </SelectContent>
                   </Select>
-                  {currentItem?.id_orden_compra_origen && (() => {
-                    const oc = ordenesCompra.find(o => o.id === currentItem.id_orden_compra_origen);
-                    const prov = proveedores.find(p => p.id === oc?.proveedor_id);
-                    if (!oc) return null;
-                    return (
-                      <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs space-y-0.5">
-                        <p><span className="font-semibold">Proveedor:</span> {prov?.nombre || 'N/A'}</p>
-                        <p><span className="font-semibold">Material:</span> {oc.tipo_item || 'N/A'}</p>
-                        <p><span className="font-semibold">Fecha:</span> {oc.fecha_emision_documento || oc.fecha_orden || 'N/A'}</p>
-                        <p><span className="font-semibold">Total:</span> {formatCurrency(oc.total)}</p>
-                      </div>
-                    );
-                  })()}
                 </div>
               </div>
               <div>
                 <Label>Código de Lote (automático) *</Label>
-                <Input 
-                  value={currentItem?.codigo_lote || ''} 
-                  readOnly
-                  required 
-                  placeholder="Autogenerado L-AAAA-XXX"
-                  className="bg-gray-100 font-mono font-bold text-blue-700"
-                />
-                <p className="text-xs text-slate-500 mt-1">Código único generado automáticamente por el sistema</p>
+                <Input value={currentItem?.codigo_lote || ''} readOnly className="bg-gray-100 font-mono font-bold text-blue-700" />
+                <p className="text-xs text-slate-500 mt-1">Código único autogenerado</p>
               </div>
               <div><Label>Fecha de Recepción</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div>
@@ -499,200 +378,104 @@ export default function ProcesoRecepcion() {
                 <Select value={currentItem?.proveedor_id || ''} onValueChange={v => setCurrentItem({...currentItem, proveedor_id: v})}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar proveedor" /></SelectTrigger>
                   <SelectContent>
-                    {proveedores.filter(prov => prov.id).map(prov => (
-                      <SelectItem key={prov.id} value={prov.id}>
-                        {prov.nombre}
-                      </SelectItem>
-                    ))}
+                    {proveedores.filter(p => p.id).map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+              <div className="col-span-2"><Label>No. de Documento</Label><Input value={currentItem?.no_documento || ''} onChange={e => setCurrentItem({...currentItem, no_documento: e.target.value})} /></div>
             </div>
-            <div><Label>No. de Documento</Label><Input value={currentItem?.no_documento || ''} onChange={e => setCurrentItem({...currentItem, no_documento: e.target.value})} placeholder="Número de factura o documento" /></div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Código PCTO. *</Label>
-                <div className="space-y-1">
-                  <Input
-                    placeholder="Buscar por código o descripción..."
-                    value={productoSearch}
-                    onChange={e => setProductoSearch(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                  <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
-                    const catalogoProd = productos.find(p => p.codigo === v);
-                    const costoP = catalogoProd?.costo_promedio || 0;
-                    const stockActual = catalogoProd?.stock_actual ?? null;
-                    const unidad = catalogoProd?.unidad_medida || '';
-                    setCostoPromedioProducto(costoP);
-                    setStockDisponible(stockActual);
-                    setStockUnidad(unidad);
-                    setProductoSearch('');
-                    const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
-                    setCurrentItem({
-                      ...currentItem, 
-                      codigo_producto: v,
-                      descripcion_producto: catalogoProd ? catalogoProd.descripcion : '',
-                      costo_promedio: costoP,
-                      costo_total: hojas * costoP
-                    });
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
-                    <SelectContent>
-                      {productos
-                        .filter(prod => prod.codigo)
-                        .filter(prod => {
-                          if (!productoSearch) return true;
-                          const s = productoSearch.toLowerCase();
-                          return (prod.codigo || '').toLowerCase().includes(s) || (prod.descripcion || '').toLowerCase().includes(s);
-                        })
-                        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
-                        .map(prod => (
-                          <SelectItem key={prod.id} value={prod.codigo}>
-                            {prod.codigo} — {prod.descripcion}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  {stockDisponible !== null && currentItem?.codigo_producto && (
-                    <div className={`text-xs px-2 py-1 rounded font-medium ${stockDisponible > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                      📦 Disponible en inventario: <strong>{stockDisponible} {stockUnidad}</strong>
-                    </div>
-                  )}
-                </div>
+                <Input placeholder="Buscar..." value={productoSearch} onChange={e => setProductoSearch(e.target.value)} className="h-8 text-xs mb-1" />
+                <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
+                  const p = productos.find(pr => pr.codigo === v);
+                  setCostoPromedioProducto(p?.costo_promedio || 0);
+                  setStockDisponible(p?.stock_actual ?? null);
+                  setStockUnidad(p?.unidad_medida || '');
+                  setProductoSearch('');
+                  const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+                  setCurrentItem({ ...currentItem, codigo_producto: v, descripcion_producto: p?.descripcion || '', costo_promedio: p?.costo_promedio || 0, costo_total: hojas * (p?.costo_promedio || 0) });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
+                  <SelectContent>
+                    {productos.filter(p => p.codigo).filter(p => !productoSearch || (p.codigo || '').toLowerCase().includes(productoSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(productoSearch.toLowerCase()))
+                      .map(p => <SelectItem key={p.id} value={p.codigo}>{p.codigo} — {p.descripcion}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {stockDisponible !== null && <div className={`text-xs px-2 py-1 rounded mt-1 font-medium ${stockDisponible > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>📦 Disponible: <strong>{stockDisponible} {stockUnidad}</strong></div>}
               </div>
               <div>
                 <Label>Nombre del Producto *</Label>
                 <Select value={currentItem?.descripcion_producto || ''} onValueChange={v => {
-                  const catalogoProd = productos.find(p => p.descripcion === v);
-                  if (catalogoProd) {
-                    setStockDisponible(catalogoProd.stock_actual ?? null);
-                    setStockUnidad(catalogoProd.unidad_medida || '');
-                    setCostoPromedioProducto(catalogoProd.costo_promedio || 0);
-                  }
-                  setCurrentItem({
-                    ...currentItem, 
-                    codigo_producto: catalogoProd ? catalogoProd.codigo : currentItem.codigo_producto,
-                    descripcion_producto: v
-                  });
+                  const p = productos.find(pr => pr.descripcion === v);
+                  if (p) { setStockDisponible(p.stock_actual ?? null); setStockUnidad(p.unidad_medida || ''); setCostoPromedioProducto(p.costo_promedio || 0); }
+                  setCurrentItem({ ...currentItem, codigo_producto: p ? p.codigo : currentItem.codigo_producto, descripcion_producto: v });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Buscar por nombre" /></SelectTrigger>
                   <SelectContent>
-                    {productos
-                      .filter(prod => prod.descripcion)
-                      .sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || ''))
-                      .map(prod => (
-                        <SelectItem key={prod.id} value={prod.descripcion}>
-                          {prod.descripcion}
-                        </SelectItem>
-                      ))}
+                    {productos.filter(p => p.descripcion).sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || '')).map(p => <SelectItem key={p.id} value={p.descripcion}>{p.descripcion}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-4">
-              <div><Label>Cantidad Total Lote en Hojas</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_total_lote_hojas || ''} onChange={e => {
-                const val = e.target.value.replace(/[^0-9]/g, '');
-                const hojas = parseInt(val) || 0;
-                const costo = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
-                setCurrentItem({...currentItem, cantidad_total_lote_hojas: hojas, costo_total: hojas * costo});
-              }} /></div>
-              <div><Label>Costo Promedio</Label><Input type="number" value={currentItem?.costo_promedio || 0} readOnly className="bg-blue-50 font-bold" title="Traído de Inventario de Materia Prima" /></div>
-              <div><Label>Costo Total</Label><Input type="number" value={currentItem?.costo_total || 0} readOnly className="bg-green-50 font-bold text-green-700" title="Cantidad Hojas × Costo Promedio" /></div>
-              <div><Label>Cantidad Total Lote en Pieles</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_total_lote_pieles || ''} onChange={e => {
-                const val = e.target.value.replace(/[^0-9]/g, '');
-                setCurrentItem({...currentItem, cantidad_total_lote_pieles: parseInt(val) || 0});
-              }} /></div>
-              <div><Label>Peso Total Hojas (kg)</Label><Input type="text" inputMode="decimal" value={currentItem?.peso_total || ''} onChange={e => {
-                const val = e.target.value.replace(/[^0-9.]/g, '');
-                const peso = parseFloat(val) || 0;
-                const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 1;
-                setCurrentItem({...currentItem, peso_total: peso, peso_promedio_estandar_por_piel: peso / hojas});
-              }} /></div>
-              <div><Label>Peso Promedio Estándar por Hoja (kg)</Label><Input type="text" value={currentItem?.peso_promedio_estandar_por_piel?.toFixed(2) || ''} readOnly className="bg-blue-50" title="Auto-calculado: Peso Total / Cantidad Hojas" /></div>
-            </div>
-            <div><Label>Nombre Curtidor</Label><Input value={currentItem?.nombre_curtidor || ''} onChange={e => setCurrentItem({...currentItem, nombre_curtidor: e.target.value})} placeholder="Nombre del curtidor responsable" /></div>
-            <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>
-            <div className="flex items-center space-x-2">
-              <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => setCurrentItem({...currentItem, dividir_lote: v})} id="dividir" />
-              <Label htmlFor="dividir">Dividir Lote <span className="text-xs text-slate-400">(opcional)</span></Label>
-            </div>
-            {currentItem?.dividir_lote && (
-              <div className="space-y-2">
-                <div className="flex gap-2 items-end">
-                  <div className="flex-grow"><Label>¿Cuántos sublotes?</Label><Input type="number" value={currentItem?.num_sublotes || ''} onChange={e => setCurrentItem({...currentItem, num_sublotes: parseInt(e.target.value) || 0})} /></div>
-                  <Button type="button" onClick={handleGenerateSublotes}>Generar Sublotes</Button>
-                  {sublotes.length > 0 && <Button type="button" variant="outline" onClick={() => setShowSublotesModal(true)}>Ver Sublotes ({sublotes.length})</Button>}
-                </div>
-              </div>
-            )}
-            {/* ── CUADRO RESUMEN DE SUBLOTES ─────────────────────────── */}
-            {sublotes.length > 0 && (
-              <div className="border rounded-lg p-4 bg-slate-50 mt-4">
-                <h3 className="font-bold text-base mb-3 text-slate-700">Cuadro Resumen de Sublotes</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* HOJAS TERMINADAS */}
-                  <div>
-                    <Label className="text-emerald-700 font-bold mb-2 block">Hojas Terminadas en Recepción</Label>
-                    <div className="border rounded overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead className="bg-emerald-100">
-                          <tr><th className="border p-1">Código</th><th className="border p-1">Cantidad</th><th className="border p-1">Costo Prom.</th><th className="border p-1">Costo Total</th></tr>
-                        </thead>
-                        <tbody>
-                          {sublotes.map((sub, idx) => {
-                            const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
-                            const cant = parseFloat(sub.cantidad) || 0;
-                            return (
-                              <tr key={idx} className={`border-t cursor-pointer ${subloteSeleccionadoTerminado === sub.codigo ? 'bg-emerald-100 font-bold' : 'hover:bg-emerald-50'}`}
-                                onClick={() => setSubloteSeleccionadoTerminado(subloteSeleccionadoTerminado === sub.codigo ? '' : sub.codigo)}>
-                                <td className="border p-1 font-mono">{sub.codigo}</td>
-                                <td className="border p-1 text-right">{cant}</td>
-                                <td className="border p-1 text-right">{formatCurrency(costoP)}</td>
-                                <td className="border p-1 text-right">{formatCurrency(cant * costoP)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    {subloteSeleccionadoTerminado && (
-                      <p className="text-xs text-emerald-700 mt-1 font-semibold">✔ Seleccionado: {subloteSeleccionadoTerminado}</p>
-                    )}
-                  </div>
 
-                  {/* HOJAS PENDIENTES */}
-                  <div>
-                    <Label className="text-orange-700 font-bold mb-2 block">Hojas Pendientes en Recepción</Label>
+            <div className="grid grid-cols-4 gap-4">
+              <div><Label>Cantidad Hojas</Label><Input type="text" inputMode="numeric" value={currentItem?.cantidad_total_lote_hojas || ''} onChange={e => {
+                const val = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                const costo = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+                setCurrentItem({...currentItem, cantidad_total_lote_hojas: val, costo_total: val * costo});
+              }} /></div>
+              <div><Label>Costo Promedio</Label><Input type="number" value={currentItem?.costo_promedio || 0} readOnly className="bg-blue-50 font-bold" /></div>
+              <div><Label>Costo Total</Label><Input type="number" value={currentItem?.costo_total || 0} readOnly className="bg-green-50 font-bold text-green-700" /></div>
+              <div><Label>Cantidad Pieles</Label><Input type="text" inputMode="numeric" value={currentItem?.cantidad_total_lote_pieles || ''} onChange={e => setCurrentItem({...currentItem, cantidad_total_lote_pieles: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0})} /></div>
+              <div><Label>Peso Total Hojas (kg)</Label><Input type="text" inputMode="decimal" value={currentItem?.peso_total || ''} onChange={e => {
+                const val = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0;
+                const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 1;
+                setCurrentItem({...currentItem, peso_total: val, peso_promedio_estandar_por_piel: val / hojas});
+              }} /></div>
+              <div><Label>Peso Promedio/Hoja (kg)</Label><Input value={(currentItem?.peso_promedio_estandar_por_piel || 0).toFixed(2)} readOnly className="bg-blue-50" /></div>
+            </div>
+
+            <div><Label>Nombre Curtidor</Label><Input value={currentItem?.nombre_curtidor || ''} onChange={e => setCurrentItem({...currentItem, nombre_curtidor: e.target.value})} /></div>
+            <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center space-x-2 mb-2">
+                <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => setCurrentItem({...currentItem, dividir_lote: v})} id="dividir" />
+                <Label htmlFor="dividir" className="font-semibold cursor-pointer">Dividir Lote <span className="text-xs text-slate-400">(opcional)</span></Label>
+              </div>
+              {currentItem?.dividir_lote && (
+                <div className="space-y-2">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-grow"><Label>¿Cuántos sublotes?</Label><Input type="number" value={currentItem?.num_sublotes || ''} onChange={e => setCurrentItem({...currentItem, num_sublotes: parseInt(e.target.value) || 0})} /></div>
+                    <Button type="button" onClick={handleGenerateSublotes}>Generar Sublotes</Button>
+                    {sublotes.length > 0 && <Button type="button" variant="outline" onClick={() => setShowSublotesModal(true)}>Editar Sublotes ({sublotes.length})</Button>}
+                  </div>
+                  {sublotes.length > 0 && (
                     <div className="border rounded overflow-hidden">
                       <table className="w-full text-xs">
-                        <thead className="bg-orange-100">
-                          <tr><th className="border p-1">Código</th><th className="border p-1">Cantidad</th><th className="border p-1">Costo Prom.</th><th className="border p-1">Costo Total</th></tr>
-                        </thead>
+                        <thead className="bg-amber-100"><tr><th className="border p-1">Código</th><th className="border p-1">Cantidad</th><th className="border p-1">Costo Total</th></tr></thead>
                         <tbody>
                           {sublotes.map((sub, idx) => {
                             const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
-                            const cant = parseFloat(sub.cantidad) || 0;
                             return (
-                              <tr key={idx} className={`border-t cursor-pointer ${subloteSeleccionadoPendiente === sub.codigo ? 'bg-orange-100 font-bold' : 'hover:bg-orange-50'}`}
-                                onClick={() => setSubloteSeleccionadoPendiente(subloteSeleccionadoPendiente === sub.codigo ? '' : sub.codigo)}>
-                                <td className="border p-1 font-mono">{sub.codigo}</td>
-                                <td className="border p-1 text-right">{cant}</td>
-                                <td className="border p-1 text-right">{formatCurrency(costoP)}</td>
-                                <td className="border p-1 text-right">{formatCurrency(cant * costoP)}</td>
+                              <tr key={idx} className="border-t">
+                                <td className="border p-1 font-mono font-bold">{sub.codigo}</td>
+                                <td className="border p-1 text-right">{sub.cantidad}</td>
+                                <td className="border p-1 text-right">{formatCurrency((parseFloat(sub.cantidad) || 0) * costoP)}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
                     </div>
-                    {subloteSeleccionadoPendiente && (
-                      <p className="text-xs text-orange-700 mt-1 font-semibold">✔ Seleccionado: {subloteSeleccionadoPendiente}</p>
-                    )}
-                  </div>
+                  )}
+                  <p className="text-xs text-amber-700 font-medium">⚠️ Al guardar con sublotes, SOLO los sublotes podrán usarse en los procesos siguientes.</p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
@@ -702,190 +485,117 @@ export default function ProcesoRecepcion() {
         </DialogContent>
       </Dialog>
 
+      {/* MODAL SUBLOTES */}
       <Dialog open={showSublotesModal} onOpenChange={setShowSublotesModal}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Configurar Sublotes</DialogTitle></DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {sublotes.map((sub, index) => {
               const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
               const cantidad = parseFloat(sub.cantidad) || 0;
-              const costoTotalSub = cantidad * costoP;
               return (
-              <div key={index} className="grid grid-cols-4 gap-2 p-2 border rounded">
-                <div><Label>Código</Label><Input value={sub.codigo} onChange={e => handleSubloteChange(index, 'codigo', e.target.value)} /></div>
-                <div><Label>Cantidad</Label><Input type="number" value={sub.cantidad} onChange={e => {
-                  const val = parseFloat(e.target.value) || 0;
-                  const updated = [...sublotes];
-                  updated[index].cantidad = val;
-                  updated[index].costo_promedio = costoP;
-                  updated[index].costo_total = val * costoP;
-                  setSublotes(updated);
-                }} /></div>
-                <div><Label>Costo Promedio</Label><Input type="number" value={costoP} readOnly className="bg-blue-50 font-bold text-sm" /></div>
-                <div><Label>Costo Total</Label><Input type="number" value={costoTotalSub.toFixed(0)} readOnly className="bg-green-50 font-bold text-green-700 text-sm" /></div>
-              </div>
+                <div key={index} className="grid grid-cols-4 gap-2 p-2 border rounded">
+                  <div><Label>Código</Label><Input value={sub.codigo} onChange={e => handleSubloteChange(index, 'codigo', e.target.value)} /></div>
+                  <div><Label>Cantidad</Label><Input type="number" value={sub.cantidad} onChange={e => {
+                    const updated = [...sublotes];
+                    updated[index].cantidad = parseFloat(e.target.value) || 0;
+                    setSublotes(updated);
+                  }} /></div>
+                  <div><Label>Costo Prom.</Label><Input value={formatCurrency(costoP)} readOnly className="bg-blue-50 text-xs" /></div>
+                  <div><Label>Costo Total</Label><Input value={formatCurrency(cantidad * costoP)} readOnly className="bg-green-50 text-xs" /></div>
+                </div>
               );
             })}
           </div>
-          <div className="flex justify-end pt-4">
-            <Button onClick={() => setShowSublotesModal(false)}>Cerrar</Button>
-          </div>
+          <div className="flex justify-end pt-4"><Button onClick={() => setShowSublotesModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
+      {/* MODAL DETALLE */}
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
         <DialogContent>
           <DialogHeader><DialogTitle>Detalle de Recepción</DialogTitle></DialogHeader>
           {selectedItem && (
-           <div className="space-y-3 text-sm">
-             <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
-             <p><span className="font-semibold">Fecha:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
-             <p><span className="font-semibold">Código:</span> {selectedItem.codigo_producto || 'N/A'}</p>
-             <p><span className="font-semibold">Descripción:</span> {selectedItem.descripcion_producto || selectedItem.nombre_inventario || 'N/A'}</p>
-             <p><span className="font-semibold">Cantidad:</span> {selectedItem.cantidad_total_lote}</p>
-             <p><span className="font-semibold">Peso Total:</span> {selectedItem.peso_total} kg</p>
-             <p><span className="font-semibold">Estado:</span> {selectedItem.estado}</p>
-             {selectedItem.sublotes && selectedItem.sublotes.length > 0 && (
-               <div>
-                 <p className="font-semibold">Sublotes:</p>
-                 <ul className="list-disc pl-5">
-                   {selectedItem.sublotes.map((sub, idx) => (
-                     <li key={idx}>{sub.codigo} - Cantidad: {sub.cantidad}</li>
-                   ))}
-                 </ul>
-               </div>
-             )}
-             {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
-           </div>
+            <div className="space-y-3 text-sm">
+              <p><span className="font-semibold">Código Lote:</span> <span className="font-mono font-bold">{selectedItem.codigo_lote}</span></p>
+              <p><span className="font-semibold">Fecha:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
+              <p><span className="font-semibold">Producto:</span> {selectedItem.descripcion_producto || 'N/A'}</p>
+              <p><span className="font-semibold">Cant. Hojas:</span> {selectedItem.cantidad_total_lote_hojas}</p>
+              <p><span className="font-semibold">Peso Total:</span> {selectedItem.peso_total} kg</p>
+              <p><span className="font-semibold">Estado:</span> {selectedItem.dividir_lote ? 'DIVIDIDO' : selectedItem.estado}</p>
+              {selectedItem.sublotes?.length > 0 && (
+                <div>
+                  <p className="font-semibold">Sublotes ({selectedItem.sublotes.length}):</p>
+                  <ul className="list-disc pl-5 text-xs">
+                    {selectedItem.sublotes.map((sub, idx) => <li key={idx}>{sub.codigo} — Cant: {sub.cantidad}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
-          <div className="flex justify-end pt-4">
-            <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
-          </div>
+          <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
+      {/* MODAL HISTORIAL */}
       <Dialog open={showHistoryModal} onOpenChange={setShowHistoryModal}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Seguimiento de Lote: {selectedItem?.codigo_lote}</DialogTitle></DialogHeader>
-            <div className="space-y-6">
-                
-                {/* Sección Recepción */}
-                <div>
-                    <h3 className="font-bold text-lg border-b pb-1 mb-2 bg-gray-100 p-1">Recepción</h3>
-                    <table className="w-full text-sm border">
-                        <thead><tr className="bg-gray-50"><th>Fecha</th><th>Cantidad</th><th>Peso</th><th>Estado</th></tr></thead>
-                        <tbody>
-                            {historyData.recepcion?.map(p => (
-                                <tr key={p.id} className="border-t">
-                                    <td className="p-2 text-center">{new Date(p.fecha_inicio).toLocaleDateString()}</td>
-                                    <td className="p-2 text-center">{p.cantidad_total_lote}</td>
-                                    <td className="p-2 text-center">{p.peso_total} kg</td>
-                                    <td className="p-2 text-center">{p.estado}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Sección Remojo */}
-                <div>
-                    <h3 className="font-bold text-lg border-b pb-1 mb-2 bg-blue-50 p-1">Remojo</h3>
-                    {historyData.remojo?.length > 0 ? (
-                    <table className="w-full text-sm border">
-                        <thead><tr className="bg-blue-50"><th>Fecha</th><th>Sublote</th><th>Peso Actual</th><th>Costo</th><th>Estado</th></tr></thead>
-                        <tbody>
-                            {historyData.remojo?.map(p => (
-                                <tr key={p.id} className="border-t">
-                                    <td className="p-2 text-center">{new Date(p.fecha_inicio).toLocaleDateString()}</td>
-                                    <td className="p-2 text-center">{p.codigo_sublote || 'Lote Completo'}</td>
-                                    <td className="p-2 text-center">{p.peso_actual} kg</td>
-                                    <td className="p-2 text-center">${p.costo_remojo?.toLocaleString()}</td>
-                                    <td className="p-2 text-center">{p.estado}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    ) : <p className="text-gray-500 italic text-sm">No hay registros de remojo.</p>}
-                </div>
-
-                {/* Sección Pelambre */}
-                <div>
-                    <h3 className="font-bold text-lg border-b pb-1 mb-2 bg-yellow-50 p-1">Pelambre</h3>
-                    {historyData.pelambre?.length > 0 ? (
-                    <table className="w-full text-sm border">
-                        <thead><tr className="bg-yellow-50"><th>Fecha</th><th>Sublote</th><th>Peso Actual</th><th>Costo</th><th>Estado</th></tr></thead>
-                        <tbody>
-                            {historyData.pelambre?.map(p => (
-                                <tr key={p.id} className="border-t">
-                                    <td className="p-2 text-center">{new Date(p.fecha_inicio).toLocaleDateString()}</td>
-                                    <td className="p-2 text-center">{p.codigo_sublote || 'Lote Completo'}</td>
-                                    <td className="p-2 text-center">{p.peso_actual} kg</td>
-                                    <td className="p-2 text-center">${p.costo_pelambre?.toLocaleString()}</td>
-                                    <td className="p-2 text-center">{p.estado}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    ) : <p className="text-gray-500 italic text-sm">No hay registros de pelambre.</p>}
-                </div>
-
-                {/* Sección Curtido */}
-                <div>
-                    <h3 className="font-bold text-lg border-b pb-1 mb-2 bg-emerald-50 p-1">Curtido</h3>
-                    {historyData.curtido?.length > 0 ? (
-                    <table className="w-full text-sm border">
-                        <thead><tr className="bg-emerald-50"><th>Fecha</th><th>Sublote</th><th>Peso</th><th>Costo Total</th><th>Estado</th></tr></thead>
-                        <tbody>
-                            {historyData.curtido?.map(p => (
-                                <tr key={p.id} className="border-t">
-                                    <td className="p-2 text-center">{new Date(p.fecha_inicio).toLocaleDateString()}</td>
-                                    <td className="p-2 text-center">{p.codigo_sublote || 'Lote Completo'}</td>
-                                    <td className="p-2 text-center">{p.peso_actual} kg</td>
-                                    <td className="p-2 text-center">${p.costo_total_curtido?.toLocaleString()}</td>
-                                    <td className="p-2 text-center">{p.estado}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    ) : <p className="text-gray-500 italic text-sm">No hay registros de curtido.</p>}
-                </div>
-
-                {/* Sección Recurtido */}
-                <div>
-                    <h3 className="font-bold text-lg border-b pb-1 mb-2 bg-purple-50 p-1">Recurtido</h3>
-                    {historyData.recurtido?.length > 0 ? (
-                    <table className="w-full text-sm border">
-                        <thead><tr className="bg-purple-50"><th>Fecha</th><th>Color</th><th>Actividad</th><th>Subtotal</th><th>Estado</th></tr></thead>
-                        <tbody>
-                            {historyData.recurtido?.map(p => (
-                                <tr key={p.id} className="border-t">
-                                    <td className="p-2 text-center">{new Date(p.fecha_inicio).toLocaleDateString()}</td>
-                                    <td className="p-2 text-center">{p.nombre_color}</td>
-                                    <td className="p-2 text-center capitalize">{p.actividad}</td>
-                                    <td className="p-2 text-center">
-                                        ${( (p.subtotal_humectacion||0) + (p.subtotal_recromado||0) + (p.subtotal_recurtido||0) ).toLocaleString()}
-                                    </td>
-                                    <td className="p-2 text-center">{p.estado}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    ) : <p className="text-gray-500 italic text-sm">No hay registros de recurtido.</p>}
-                </div>
-
+          <DialogHeader><DialogTitle>Seguimiento de Lote: {selectedItem?.codigo_lote}</DialogTitle></DialogHeader>
+          <div className="space-y-5">
+            {/* TABLA CENTRAL */}
+            <div>
+              <h3 className="font-bold text-base border-b pb-1 mb-2 bg-indigo-50 p-2">📋 Tabla Central (InventarioEnProceso)</h3>
+              {historyData.tabla_central?.length > 0 ? (
+                <table className="w-full text-xs border">
+                  <thead><tr className="bg-indigo-50"><th className="p-1 border">Código Lote</th><th className="p-1 border">Tipo</th><th className="p-1 border">Etapa</th><th className="p-1 border">Estado</th><th className="p-1 border">Cant. Hojas</th><th className="p-1 border">Peso</th></tr></thead>
+                  <tbody>
+                    {historyData.tabla_central.map(r => (
+                      <tr key={r.id} className="border-t">
+                        <td className="p-1 border font-mono font-bold">{r.codigo_lote}</td>
+                        <td className="p-1 border">{r.tipo || 'LOTE'}</td>
+                        <td className="p-1 border font-semibold text-blue-700">{(r.etapa_actual || '').toUpperCase()}</td>
+                        <td className="p-1 border"><span className={`px-1 rounded text-xs ${r.estado_actual === 'FINALIZADO' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.estado_actual || r.estado_proceso}</span></td>
+                        <td className="p-1 border text-right">{r.cantidad_hojas}</td>
+                        <td className="p-1 border text-right">{r.peso_actual} kg</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : <p className="text-gray-400 text-xs italic">Sin registros en tabla central.</p>}
             </div>
-            <div className="flex justify-end pt-4">
-                <Button onClick={() => setShowHistoryModal(false)}>Cerrar</Button>
-            </div>
+
+            {[
+              { key: 'recepcion', label: 'Recepción', color: 'bg-gray-50' },
+              { key: 'remojo', label: 'Remojo', color: 'bg-blue-50' },
+              { key: 'pelambre', label: 'Pelambre', color: 'bg-yellow-50' },
+              { key: 'curtido', label: 'Curtido', color: 'bg-emerald-50' },
+              { key: 'recurtido', label: 'Recurtido', color: 'bg-purple-50' },
+            ].map(({ key, label, color }) => (
+              <div key={key}>
+                <h3 className={`font-bold text-base border-b pb-1 mb-2 ${color} p-2`}>{label}</h3>
+                {historyData[key]?.length > 0 ? (
+                  <table className="w-full text-xs border">
+                    <thead><tr className={color}><th className="p-1 border">Fecha</th><th className="p-1 border">Estado</th><th className="p-1 border">Info</th></tr></thead>
+                    <tbody>
+                      {historyData[key].map(p => (
+                        <tr key={p.id} className="border-t">
+                          <td className="p-1 border">{new Date(p.fecha_inicio).toLocaleDateString()}</td>
+                          <td className="p-1 border">{p.estado}</td>
+                          <td className="p-1 border text-xs">{p.seccion ? `Sección: ${p.seccion}` : ''} {p.nombre_color ? `Color: ${p.nombre_color}` : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : <p className="text-gray-400 text-xs italic">Sin registros.</p>}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end pt-4"><Button onClick={() => setShowHistoryModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
       {showConsolidadoModal && (
-          <LoteDetalleConsolidado 
-              open={showConsolidadoModal}
-              onOpenChange={setShowConsolidadoModal}
-              codigoLote={loteConsolidado}
-          />
+        <LoteDetalleConsolidado open={showConsolidadoModal} onOpenChange={setShowConsolidadoModal} codigoLote={loteConsolidado} />
       )}
     </div>
   );

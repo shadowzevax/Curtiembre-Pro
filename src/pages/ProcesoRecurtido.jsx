@@ -15,11 +15,16 @@ import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolid
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
 
+const COLORES_MAP = {
+  'PR001': 'NEGRO', 'PR002': 'CAFE', 'PR003': 'MIEL', 'PR004': 'QUEBRACHO',
+  'PR005': 'BLANCO', 'PR006': 'AZUL', 'PR007': 'ROJO', 'PR008': 'VERDE'
+};
+const COLORES_INV = Object.fromEntries(Object.entries(COLORES_MAP).map(([k, v]) => [v, k]));
+
 export default function ProcesoRecurtido() {
   const [procesos, setProcesos] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [lotesEnProceso, setLotesEnProceso] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [searchEnProceso, setSearchEnProceso] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,25 +35,24 @@ export default function ProcesoRecurtido() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
+  const [invSeleccionado, setInvSeleccionado] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, todosLosProcesos, invEnProceso] = await Promise.all([
+      const [procesosData, insumosData, productosData, invEnProceso] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recurtido' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        ProcesoProduccion.list(),
         InventarioEnProceso.list()
       ]);
-      
-      const lotesActivos = todosLosProcesos.filter(p => p.estado !== 'completado' && p.codigo_lote);
-      setLotesEnProceso(lotesActivos);
-      setInventarioEnProceso(Array.isArray(invEnProceso) ? invEnProceso : []);
-      
-      setProcesos(procesosData);
-      setInsumos(insumosData);
-      setProductos(productosData);
+      setProcesos(Array.isArray(procesosData) ? procesosData : []);
+      setInsumos(Array.isArray(insumosData) ? insumosData : []);
+      setProductos(Array.isArray(productosData) ? productosData : []);
+      // FILTRO: solo registros en estado EN_PROCESO y etapa = curtido
+      const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
+        .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'curtido');
+      setInventarioEnProceso(filtrados);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -63,6 +67,7 @@ export default function ProcesoRecurtido() {
     setCurrentItem(item || {
       tipo_proceso: 'recurtido',
       codigo_lote: '',
+      inv_proceso_id: '',
       codigo_color: '',
       nombre_color: '',
       cantidad_pieles: 0,
@@ -77,141 +82,104 @@ export default function ProcesoRecurtido() {
       observaciones: '',
       insumos_utilizados: [],
       estado: 'pendiente',
-      finalizar_recurtido: false // Added this field
+      finalizar_recurtido: false
     });
+    setInvSeleccionado(null);
     setSearchEnProceso('');
     setShowModal(true);
   };
 
-  const handleViewDetails = (item) => {
-    setSelectedItem(item);
-    setShowDetailModal(true);
+  const handleSelectInvProceso = (id) => {
+    const inv = inventarioEnProceso.find(i => i.id === id);
+    if (!inv) return;
+    setInvSeleccionado(inv);
+    setSearchEnProceso('');
+    setCurrentItem(prev => ({
+      ...prev,
+      inv_proceso_id: inv.id,
+      codigo_lote: inv.codigo_lote || inv.codigo || '',
+      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles,
+      peso_actual: inv.peso_actual || prev.peso_actual
+    }));
   };
 
   const addInsumo = () => {
     setCurrentItem(prev => ({
       ...prev,
       insumos_utilizados: [...(prev.insumos_utilizados || []), {
-        insumo_id: '',
-        codigo: '',
-        producto: '',
-        dosificacion: 0,
-        cantidad: 0,
-        costo_unitario: 0,
-        iva: 0.19,
-        valor_total: 0
+        insumo_id: '', codigo: '', producto: '', dosificacion: 0,
+        cantidad: 0, costo_unitario: 0, iva: 0.19, valor_total: 0
       }]
     }));
   };
 
   const removeInsumo = (index) => {
     const updated = currentItem.insumos_utilizados.filter((_, i) => i !== index);
-    setCurrentItem(prev => ({
-      ...prev,
-      insumos_utilizados: updated
-    }));
+    setCurrentItem(prev => ({ ...prev, insumos_utilizados: updated }));
     recalculateSubtotals(updated, currentItem.actividad);
   };
 
   const handleInsumoChange = (index, field, value) => {
     const updated = [...currentItem.insumos_utilizados];
     updated[index][field] = value;
-    
-    // Si cambia el código (insumo_id), traer automáticamente el producto y costo
     if (field === 'insumo_id') {
       const item = [...insumos, ...productos].find(i => i.id === value);
-      if (item) {
-        updated[index].codigo = item.codigo || item.referencia || '';
-        updated[index].producto = item.nombre || item.descripcion || '';
-        updated[index].costo_unitario = item.costo_promedio || 0;
-      }
+      if (item) { updated[index].codigo = item.codigo || ''; updated[index].producto = item.nombre || item.descripcion || ''; updated[index].costo_unitario = item.costo_promedio || 0; }
     }
-    
-    // Si cambia el % dosificación, recalcular cantidad automáticamente
     if (field === 'dosificacion') {
-      const dosificacion = parseFloat(value) || 0;
-      const pesoActual = parseFloat(currentItem.peso_actual) || 0;
-      updated[index].cantidad = (pesoActual * dosificacion) / 100;
+      updated[index].cantidad = ((parseFloat(currentItem.peso_actual) || 0) * (parseFloat(value) || 0)) / 100;
     }
-    
-    // Calcular valor total = costo_unitario * cantidad + IVA
     const cantidad = parseFloat(updated[index].cantidad) || 0;
     const costoUnitario = parseFloat(updated[index].costo_unitario) || 0;
     const iva = parseFloat(updated[index].iva) || 0;
     const subtotal = cantidad * costoUnitario;
     updated[index].valor_total = subtotal + (subtotal * iva);
-    
     setCurrentItem(prev => ({ ...prev, insumos_utilizados: updated }));
     recalculateSubtotals(updated, currentItem.actividad);
   };
 
-  const recalculateSubtotals = (insumos, actividad) => {
-    // Sumar todos los valores totales de los items
-    const total = insumos.reduce((sum, item) => sum + (item.valor_total || 0), 0);
-    
-    // Actualizar el subtotal correspondiente según la actividad
-    if (actividad === 'humectacion') {
-      setCurrentItem(prev => ({ ...prev, subtotal_humectacion: total }));
-    } else if (actividad === 'recromado') {
-      setCurrentItem(prev => ({ ...prev, subtotal_recromado: total }));
-    } else if (actividad === 'recurtido') {
-      setCurrentItem(prev => ({ ...prev, subtotal_recurtido: total }));
-    }
+  const recalculateSubtotals = (ins, actividad) => {
+    const total = ins.reduce((sum, i) => sum + (i.valor_total || 0), 0);
+    if (actividad === 'humectacion') setCurrentItem(prev => ({ ...prev, subtotal_humectacion: total }));
+    else if (actividad === 'recromado') setCurrentItem(prev => ({ ...prev, subtotal_recromado: total }));
+    else if (actividad === 'recurtido') setCurrentItem(prev => ({ ...prev, subtotal_recurtido: total }));
   };
 
-  // Recalcular cantidades si cambia el peso actual
   const handlePesoActualChange = (newPeso) => {
     setCurrentItem(prev => {
       const pesoActual = parseFloat(newPeso) || 0;
       const cantidadPieles = parseFloat(prev.cantidad_pieles) || 1;
       const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
-
       const updatedInsumos = (prev.insumos_utilizados || []).map(item => {
         const dosificacion = parseFloat(item.dosificacion) || 0;
         const cantidad = (pesoActual * dosificacion) / 100;
         const costoUnitario = parseFloat(item.costo_unitario) || 0;
         const iva = parseFloat(item.iva) || 0;
         const subtotal = cantidad * costoUnitario;
-        const valorTotal = subtotal + (subtotal * iva);
-        return { ...item, cantidad, valor_total: valorTotal };
+        return { ...item, cantidad, valor_total: subtotal + (subtotal * iva) };
       });
-      
-      const total = updatedInsumos.reduce((sum, item) => sum + (item.valor_total || 0), 0);
-      let newSubtotals = { ...prev };
-      if (prev.actividad === 'humectacion') {
-        newSubtotals.subtotal_humectacion = total;
-      } else if (prev.actividad === 'recromado') {
-        newSubtotals.subtotal_recromado = total;
-      } else if (prev.actividad === 'recurtido') {
-        newSubtotals.subtotal_recurtido = total;
-      }
-      
-      return {
-        ...newSubtotals,
-        peso_actual: pesoActual,
-        peso_promedio: pesoPromedio,
-        insumos_utilizados: updatedInsumos
-      };
+      const total = updatedInsumos.reduce((sum, i) => sum + (i.valor_total || 0), 0);
+      const newState = { ...prev, peso_actual: pesoActual, peso_promedio: pesoPromedio, insumos_utilizados: updatedInsumos };
+      if (prev.actividad === 'humectacion') newState.subtotal_humectacion = total;
+      else if (prev.actividad === 'recromado') newState.subtotal_recromado = total;
+      else if (prev.actividad === 'recurtido') newState.subtotal_recurtido = total;
+      return newState;
     });
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!currentItem.inv_proceso_id && !isEditing) {
+      alert('⚠️ Debe seleccionar un "Código en Proceso" de la tabla central.');
+      return;
+    }
     try {
       const dataToSave = {
         ...currentItem,
         numero_proceso: `${currentItem.codigo_lote}-RCT`,
+        estado: currentItem.finalizar_recurtido ? 'completado' : 'pendiente',
+        fecha_fin: currentItem.finalizar_recurtido && !currentItem.fecha_fin ? new Date().toISOString().split('T')[0] : currentItem.fecha_fin
       };
-
-      // If 'finalizar_recurtido' is checked, update the status and set fecha_fin
-      if (dataToSave.finalizar_recurtido) {
-        dataToSave.estado = 'completado';
-        if (!dataToSave.fecha_fin) {
-          dataToSave.fecha_fin = new Date().toISOString().split('T')[0];
-        }
-      } else {
-        dataToSave.estado = 'pendiente';
-      }
 
       let procesoId;
       if (isEditing) {
@@ -222,64 +190,54 @@ export default function ProcesoRecurtido() {
         procesoId = created.id;
       }
 
-      // Al finalizar recurtido → transferir datos al Inventario de Productos en Proceso
-      if (dataToSave.finalizar_recurtido && dataToSave.codigo_lote) {
-        try {
-          // Verificar si ya existe un registro para este lote + color en InventarioEnProceso
-          const existentes = await InventarioEnProceso.filter({ codigo_lote: dataToSave.codigo_lote, origen_modulo: 'recurtido' });
-          if (!existentes || existentes.length === 0) {
-            await InventarioEnProceso.create({
-              codigo: dataToSave.codigo_color || dataToSave.codigo_lote,
-              descripcion: dataToSave.nombre_color || '',
-              codigo_lote: dataToSave.codigo_lote,
-              cantidad_hojas: dataToSave.cantidad_pieles || 0,
-              color_base: dataToSave.nombre_color || '',
-              origen_modulo: 'recurtido',
-              estado_proceso: 'piel_recurtida',
-              fecha_ingreso_proceso: dataToSave.fecha_fin || dataToSave.fecha_inicio,
-              proceso_origen_id: procesoId
-            });
-            console.log('✅ Inventario En Proceso actualizado desde Recurtido');
-          }
-        } catch (e) {
-          console.error('Error transfiriendo a InventarioEnProceso:', e);
-        }
-      }
-      
-      // AFECTAR INVENTARIO DE INSUMOS Y QUÍMICOS (descontar insumos utilizados)
-      if (!isEditing && dataToSave.insumos_utilizados && dataToSave.insumos_utilizados.length > 0) {
+      // Descontar insumos del inventario
+      if (!isEditing && dataToSave.insumos_utilizados?.length > 0) {
         for (const insumo of dataToSave.insumos_utilizados) {
           if (insumo.insumo_id && insumo.cantidad > 0) {
-            // Buscar el insumo por ID
             const insumoData = insumos.find(i => i.id === insumo.insumo_id);
-            
             if (insumoData) {
-              // Crear movimiento de salida (negativo)
               await MovimientoInventario.create({
-                tipo_movimiento: 'salida',
-                insumo_id: insumo.insumo_id,
-                cantidad: -(insumo.cantidad),
-                costo_unitario: insumoData.costo_promedio || 0,
+                tipo_movimiento: 'salida', insumo_id: insumo.insumo_id,
+                cantidad: -(insumo.cantidad), costo_unitario: insumoData.costo_promedio || 0,
                 fecha_movimiento: dataToSave.fecha_inicio,
                 referencia: `RECURTIDO-${dataToSave.codigo_lote}-${dataToSave.nombre_color}`,
-                observaciones: `Consumo en proceso de recurtido (${dataToSave.actividad}) - Lote ${dataToSave.codigo_lote} - Color ${dataToSave.nombre_color}`,
+                observaciones: `Consumo recurtido (${dataToSave.actividad}) - Lote ${dataToSave.codigo_lote}`,
                 usuario_id: 'system'
               });
-              
-              // Actualizar stock en Insumo
               const movimientos = await MovimientoInventario.filter({ insumo_id: insumo.insumo_id });
-              const nuevoStock = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0) - insumo.cantidad;
-              
-              await Insumo.update(insumo.insumo_id, {
-                stock_actual: nuevoStock
-              });
-              
-              console.log(`✅ Inventario actualizado: -${insumo.cantidad} kg de ${insumo.producto}`);
+              const nuevoStock = (Array.isArray(movimientos) ? movimientos : []).reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+              await Insumo.update(insumo.insumo_id, { stock_actual: nuevoStock });
             }
           }
         }
       }
-      
+
+      // ACTUALIZAR TABLA CENTRAL Y CREAR EN INVENTARIO EN PROCESO AL FINALIZAR
+      if (dataToSave.finalizar_recurtido && currentItem.inv_proceso_id) {
+        const invActual = inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id);
+        const costoProceso = (dataToSave.subtotal_humectacion || 0) + (dataToSave.subtotal_recromado || 0) + (dataToSave.subtotal_recurtido || 0);
+        const costoTotal = (invActual?.costo_acumulado || 0) + costoProceso;
+        const cantidadHojas = dataToSave.cantidad_pieles || invActual?.cantidad_hojas || 0;
+        const costoPromedio = cantidadHojas > 0 ? costoTotal / cantidadHojas : 0;
+
+        // Actualizar registro en tabla central: FINALIZADO
+        await InventarioEnProceso.update(currentItem.inv_proceso_id, {
+          etapa_actual: 'recurtido',
+          estado_actual: 'FINALIZADO',
+          estado_proceso: 'piel_recurtida',
+          peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
+          costo_acumulado: costoTotal,
+          color_base: dataToSave.nombre_color || '',
+          codigo_color: dataToSave.codigo_color || ''
+        });
+        console.log(`✅ Tabla central actualizada: etapa → recurtido, estado → FINALIZADO`);
+
+        // Verificar consolidación de sublotes si aplica
+        if (invActual?.codigo_lote_padre) {
+          await verificarConsolidacion(invActual.codigo_lote_padre, costoTotal, cantidadHojas, dataToSave, procesoId);
+        }
+      }
+
       setShowModal(false);
       setCurrentItem(null);
       await loadData();
@@ -290,40 +248,78 @@ export default function ProcesoRecurtido() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar este proceso?')) return;
+  // REINTEGRACIÓN AUTOMÁTICA: si todos los sublotes están FINALIZADOS
+  const verificarConsolidacion = async (codigoPadre, costoUltimoSublote, cantUltimoSublote, dataToSave, procesoId) => {
     try {
-      await ProcesoProduccion.delete(id);
-      loadData();
-      alert('Proceso eliminado.');
-    } catch (error) {
-      console.error('Error deleting:', error);
+      const todos = await InventarioEnProceso.list();
+      const sublotesDelLote = (Array.isArray(todos) ? todos : []).filter(i => i.codigo_lote_padre === codigoPadre);
+      const todosFinalizados = sublotesDelLote.length > 0 && sublotesDelLote.every(s => s.estado_actual === 'FINALIZADO');
+
+      if (todosFinalizados) {
+        // Sumar totales
+        const cantidadTotal = sublotesDelLote.reduce((sum, s) => sum + (s.cantidad_hojas || 0), 0);
+        const pesoTotal = sublotesDelLote.reduce((sum, s) => sum + (s.peso_actual || 0), 0);
+        const costoTotal = sublotesDelLote.reduce((sum, s) => sum + (s.costo_acumulado || 0), 0);
+        const costoPromedioFinal = cantidadTotal > 0 ? costoTotal / cantidadTotal : 0;
+
+        // Crear registro consolidado FINAL en InventarioEnProceso
+        const existeConsolidado = (Array.isArray(todos) ? todos : []).some(i => i.codigo_lote === `${codigoPadre}-FINAL`);
+        if (!existeConsolidado) {
+          await InventarioEnProceso.create({
+            codigo: codigoPadre,
+            descripcion: `Consolidado final de ${codigoPadre}`,
+            codigo_lote: `${codigoPadre}-FINAL`,
+            codigo_lote_padre: codigoPadre,
+            tipo: 'LOTE',
+            origen_modulo: 'recurtido',
+            etapa_actual: 'recurtido',
+            estado_proceso: 'piel_recurtida',
+            estado_actual: 'EN_PROCESO',
+            cantidad_hojas: cantidadTotal,
+            cantidad_pieles: cantidadTotal,
+            peso_actual: pesoTotal,
+            costo_acumulado: costoTotal,
+            costo_promedio: costoPromedioFinal,
+            color_base: dataToSave.nombre_color || '',
+            fecha_ingreso_proceso: dataToSave.fecha_fin || new Date().toISOString().split('T')[0],
+            proceso_origen_id: procesoId
+          });
+          console.log(`✅ Lote consolidado ${codigoPadre}-FINAL creado. Total hojas: ${cantidadTotal}`);
+        }
+
+        // Marcar sublotes como CONSOLIDADO
+        for (const sub of sublotesDelLote) {
+          await InventarioEnProceso.update(sub.id, { estado_actual: 'CONSOLIDADO' });
+        }
+
+        alert(`✅ Todos los sublotes del lote ${codigoPadre} han finalizado. Se creó el lote consolidado ${codigoPadre}-FINAL en Inventario en Proceso.`);
+      }
+    } catch (err) {
+      console.error('Error en consolidación:', err);
     }
   };
 
-  const handleExport = () => alert('Función de exportar en desarrollo.');
-  const handlePrint = () => window.print();
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Eliminar este proceso?')) return;
+    try { await ProcesoProduccion.delete(id); loadData(); } catch (error) { console.error(error); }
+  };
 
-  // Combinar insumos y productos para el selector
-  const todosLosItems = [
-    ...insumos.map(i => ({ ...i, tipo: 'insumo' })),
-    ...productos.map(p => ({ ...p, tipo: 'producto' }))
-  ];
+  const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
 
   const headers = ['Lote', 'Color', 'Actividad', 'Cantidad', 'Fecha Inicio', 'Peso Actual', 'Estado', 'Acciones'];
   const renderRow = (item) => (
     <tr key={item.id}>
-      <td>{item.codigo_lote}</td>
+      <td className="font-mono font-bold">{item.codigo_lote}</td>
       <td>{item.nombre_color || 'N/A'}</td>
       <td className="capitalize">{item.actividad}</td>
       <td>{item.cantidad_pieles}</td>
       <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
       <td>{item.peso_actual} kg</td>
-      <td><span className="capitalize">{item.estado}</span></td>
+      <td><span className={`px-2 py-0.5 rounded text-xs ${item.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{item.estado}</span></td>
       <td>
-        <div className="flex space-x-2">
-          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }} title="Ver Consolidado"><Table className="w-4 h-4 text-emerald-600" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)}><Eye className="w-4 h-4" /></Button>
+        <div className="flex space-x-1">
+          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
+          <Button variant="outline" size="sm" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Eye className="w-4 h-4" /></Button>
           <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
           <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
         </div>
@@ -331,138 +327,91 @@ export default function ProcesoRecurtido() {
     </tr>
   );
 
+  const invFiltrados = inventarioEnProceso.filter(inv => {
+    if (!searchEnProceso) return true;
+    const s = searchEnProceso.toLowerCase();
+    return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
+  });
+
   return (
     <div className="p-6">
-      <PageHeader
-        title="Proceso de Recurtido"
-        description="Gestiona las etapas del proceso de recurtido."
-        onExportExcel={handleExport}
-        onPrint={handlePrint}
-        actionButton={
-          <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
-            <Plus className="w-4 h-4 mr-2" />
-            Nuevo Recurtido
-          </Button>
-        }
+      <PageHeader title="Proceso de Recurtido" description="Filtra lotes con etapa=CURTIDO y estado=EN_PROCESO. Al finalizar actualiza tabla central."
+        onPrint={() => window.print()}
+        actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" />Nuevo Recurtido</Button>}
       />
       <Card id="tabla-imprimible">
         <CardHeader><CardTitle>Listado de Procesos de Recurtido</CardTitle></CardHeader>
-        <CardContent>
-          {loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}
-        </CardContent>
+        <CardContent>{loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}</CardContent>
       </Card>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Recurtido</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Recurtido</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
+
+            {/* SELECTOR CÓDIGO EN PROCESO */}
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <Label className="font-bold text-purple-800">Código en Proceso * <span className="font-normal text-xs">(Etapa: CURTIDO | Estado: EN_PROCESO)</span></Label>
+              <Input placeholder="Buscar por código lote o descripción..." value={searchEnProceso} onChange={e => setSearchEnProceso(e.target.value)} className="my-1 h-8 text-xs" />
+              <Select value={currentItem?.inv_proceso_id || ''} onValueChange={handleSelectInvProceso}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar lote/sublote en proceso..." /></SelectTrigger>
+                <SelectContent>
+                  {invFiltrados.length === 0 && <SelectItem value="__empty__" disabled>No hay lotes disponibles (etapa=curtido)</SelectItem>}
+                  {invFiltrados.map(inv => (
+                    <SelectItem key={inv.id} value={inv.id}>
+                      {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas) [{inv.tipo || 'LOTE'}]
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {invSeleccionado && (
+                <div className="mt-2 grid grid-cols-4 gap-2 text-xs bg-white p-2 rounded border">
+                  <div><span className="font-semibold">Lote:</span> <span className="font-mono">{invSeleccionado.codigo_lote}</span></div>
+                  <div><span className="font-semibold">Hojas:</span> {invSeleccionado.cantidad_hojas}</div>
+                  <div><span className="font-semibold">Peso:</span> {invSeleccionado.peso_actual} kg</div>
+                  <div><span className="font-semibold">Costo acum.:</span> {formatCurrency(invSeleccionado.costo_acumulado)}</div>
+                </div>
+              )}
+              {currentItem?.codigo_lote && <p className="text-xs text-purple-700 mt-1 font-medium">✔ Lote asignado: {currentItem.codigo_lote}</p>}
+            </div>
+
             <div className="grid grid-cols-4 gap-4">
-              <div className="col-span-2">
-                <Label>Código en Proceso *</Label>
-                <Input
-                  placeholder="Buscar por código, lote o descripción..."
-                  value={searchEnProceso}
-                  onChange={e => setSearchEnProceso(e.target.value)}
-                  className="mb-1 h-8 text-xs"
-                />
-                <Select value={currentItem?.inv_proceso_id || ''} onValueChange={v => {
-                  const inv = inventarioEnProceso.find(i => i.id === v);
-                  if (inv) {
-                    setSearchEnProceso('');
-                    setCurrentItem(prev => ({
-                      ...prev,
-                      inv_proceso_id: inv.id,
-                      codigo_lote: inv.codigo_lote || inv.codigo || '',
-                      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles
-                    }));
-                  }
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar registro en proceso..." /></SelectTrigger>
-                  <SelectContent>
-                    {inventarioEnProceso
-                      .filter(inv => {
-                        if (!searchEnProceso) return true;
-                        const s = searchEnProceso.toLowerCase();
-                        return (inv.codigo || '').toLowerCase().includes(s) ||
-                               (inv.codigo_lote || '').toLowerCase().includes(s) ||
-                               (inv.descripcion || '').toLowerCase().includes(s);
-                      })
-                      .map(inv => (
-                        <SelectItem key={inv.id} value={inv.id}>
-                          {inv.codigo_lote || inv.codigo} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas)
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                {currentItem?.codigo_lote && (
-                  <p className="text-xs text-blue-600 mt-1 font-medium">Lote: {currentItem.codigo_lote}</p>
-                )}
-              </div>
               <div>
                 <Label>Código Color Base</Label>
-                <Select value={currentItem?.codigo_color || ''} onValueChange={v => {
-                  const colores = {
-                    'PR001': 'NEGRO',
-                    'PR002': 'CAFE',
-                    'PR003': 'MIEL',
-                    'PR004': 'QUEBRACHO',
-                    'PR005': 'BLANCO',
-                    'PR006': 'AZUL',
-                    'PR007': 'ROJO',
-                    'PR008': 'VERDE'
-                  };
-                  setCurrentItem({...currentItem, codigo_color: v, nombre_color: colores[v] || ''});
-                }}>
+                <Select value={currentItem?.codigo_color || ''} onValueChange={v => setCurrentItem({...currentItem, codigo_color: v, nombre_color: COLORES_MAP[v] || ''})}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PR001">PR001</SelectItem>
-                    <SelectItem value="PR002">PR002</SelectItem>
-                    <SelectItem value="PR003">PR003</SelectItem>
-                    <SelectItem value="PR004">PR004</SelectItem>
-                    <SelectItem value="PR005">PR005</SelectItem>
-                    <SelectItem value="PR006">PR006</SelectItem>
-                    <SelectItem value="PR007">PR007</SelectItem>
-                    <SelectItem value="PR008">PR008</SelectItem>
+                    {Object.entries(COLORES_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{k} — {v}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Nombre Color Base</Label>
-                <Select value={currentItem?.nombre_color || ''} onValueChange={v => {
-                  const coloresInv = {
-                    'NEGRO': 'PR001',
-                    'CAFE': 'PR002',
-                    'MIEL': 'PR003',
-                    'QUEBRACHO': 'PR004',
-                    'BLANCO': 'PR005',
-                    'AZUL': 'PR006',
-                    'ROJO': 'PR007',
-                    'VERDE': 'PR008'
-                  };
-                  setCurrentItem({...currentItem, nombre_color: v, codigo_color: coloresInv[v] || ''});
-                }}>
+                <Select value={currentItem?.nombre_color || ''} onValueChange={v => setCurrentItem({...currentItem, nombre_color: v, codigo_color: COLORES_INV[v] || ''})}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="NEGRO">NEGRO</SelectItem>
-                    <SelectItem value="CAFE">CAFE</SelectItem>
-                    <SelectItem value="MIEL">MIEL</SelectItem>
-                    <SelectItem value="QUEBRACHO">QUEBRACHO</SelectItem>
-                    <SelectItem value="BLANCO">BLANCO</SelectItem>
-                    <SelectItem value="AZUL">AZUL</SelectItem>
-                    <SelectItem value="ROJO">ROJO</SelectItem>
-                    <SelectItem value="VERDE">VERDE</SelectItem>
+                    {Object.values(COLORES_MAP).map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
                 const cant = parseFloat(e.target.value) || 0;
                 const peso = parseFloat(currentItem.peso_actual) || 0;
-                const prom = cant > 0 ? peso / cant : 0;
-                setCurrentItem({...currentItem, cantidad_pieles: cant, peso_promedio: prom});
+                setCurrentItem({...currentItem, cantidad_pieles: cant, peso_promedio: cant > 0 ? peso / cant : 0});
               }} /></div>
+              <div>
+                <Label>Actividad</Label>
+                <Select value={currentItem?.actividad || 'humectacion'} onValueChange={v => setCurrentItem({...currentItem, actividad: v})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="humectacion">Humectación</SelectItem>
+                    <SelectItem value="recromado">Recromado</SelectItem>
+                    <SelectItem value="recurtido">Recurtido</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+
             <div className="grid grid-cols-4 gap-4">
               <div><Label>Fecha Inicio</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div><Label>Fecha Final</Label><Input type="date" value={currentItem?.fecha_fin || ''} onChange={e => setCurrentItem({...currentItem, fecha_fin: e.target.value})} /></div>
@@ -470,6 +419,7 @@ export default function ProcesoRecurtido() {
               <div><Label>Peso Promedio (kg/piel)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio || ''} onChange={e => setCurrentItem({...currentItem, peso_promedio: parseFloat(e.target.value) || 0})} /></div>
             </div>
 
+            {/* ÍTEMS */}
             <div className="border rounded-lg p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-lg">Ítems / Productos</h3>
@@ -479,14 +429,10 @@ export default function ProcesoRecurtido() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="p-2 text-left">Código</th>
-                      <th className="p-2 text-left">Producto</th>
-                      <th className="p-2 text-right">% Dosificación</th>
-                      <th className="p-2 text-right">Cantidad (kg)</th>
-                      <th className="p-2 text-right">Costo Unit. ($/kg)</th>
-                      <th className="p-2 text-right">IVA</th>
-                      <th className="p-2 text-right">Valor Total</th>
-                      <th className="p-2"></th>
+                      <th className="p-2 text-left">Código</th><th className="p-2 text-left">Producto</th>
+                      <th className="p-2 text-right">% Dosif.</th><th className="p-2 text-right">Cantidad (kg)</th>
+                      <th className="p-2 text-right">Costo Unit.</th><th className="p-2 text-right">IVA</th>
+                      <th className="p-2 text-right">Valor Total</th><th className="p-2"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -496,25 +442,19 @@ export default function ProcesoRecurtido() {
                           <Select value={item.insumo_id} onValueChange={v => handleInsumoChange(index, 'insumo_id', v)}>
                             <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                             <SelectContent>
-                              {todosLosItems.map(ins => (
-                                <SelectItem key={ins.id} value={ins.id}>
-                                  {ins.codigo || ins.referencia} - {ins.nombre || ins.descripcion}
-                                </SelectItem>
-                              ))}
+                              {todosLosItems.map(ins => <SelectItem key={ins.id} value={ins.id}>{ins.codigo || ins.referencia} - {ins.nombre || ins.descripcion}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </td>
                         <td className="p-2"><Input value={item.producto} readOnly className="bg-gray-50" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" value={item.dosificacion} onChange={e => handleInsumoChange(index, 'dosificacion', e.target.value)} className="text-right" placeholder="%" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" title="Auto-calculado: Peso Actual * % Dosificación" /></td>
+                        <td className="p-2"><Input type="number" step="0.01" value={item.dosificacion} onChange={e => handleInsumoChange(index, 'dosificacion', e.target.value)} className="text-right" /></td>
+                        <td className="p-2"><Input value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" /></td>
                         <td className="p-2"><Input type="number" step="0.01" value={item.costo_unitario} onChange={e => handleInsumoChange(index, 'costo_unitario', e.target.value)} className="text-right" /></td>
                         <td className="p-2">
                           <Select value={String(item.iva)} onValueChange={v => handleInsumoChange(index, 'iva', parseFloat(v))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0.19">19%</SelectItem>
-                              <SelectItem value="0.05">5%</SelectItem>
-                              <SelectItem value="0">0%</SelectItem>
+                              <SelectItem value="0.19">19%</SelectItem><SelectItem value="0.05">5%</SelectItem><SelectItem value="0">0%</SelectItem>
                             </SelectContent>
                           </Select>
                         </td>
@@ -527,56 +467,47 @@ export default function ProcesoRecurtido() {
               </div>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div>
-                <Label>Subtotal Recurtido</Label>
-                <div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">
-                  {formatCurrency(currentItem?.subtotal_humectacion || 0)}
-                </div>
-              </div>
+            <div className="bg-gray-50 p-4 rounded-lg grid grid-cols-3 gap-4">
+              <div><Label>Subtotal Humectación</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_humectacion || 0)}</div></div>
+              <div><Label>Subtotal Recromado</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_recromado || 0)}</div></div>
+              <div><Label>Subtotal Recurtido</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_recurtido || 0)}</div></div>
             </div>
 
-            <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>
+            <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
-            {/* Checkbox + Tabla Resumen de Recurtido */}
-            <div className="p-4 bg-blue-50 rounded-lg space-y-4">
+            <div className="p-4 bg-purple-50 rounded-lg space-y-3">
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="finalizar_recurtido" 
-                  checked={currentItem?.finalizar_recurtido || false} 
-                  onCheckedChange={v => setCurrentItem({...currentItem, finalizar_recurtido: v})} 
-                />
+                <Checkbox id="finalizar_recurtido" checked={currentItem?.finalizar_recurtido || false} onCheckedChange={v => setCurrentItem({...currentItem, finalizar_recurtido: v})} />
                 <Label htmlFor="finalizar_recurtido" className="font-semibold cursor-pointer">Finalizar Recurtido</Label>
               </div>
+              {currentItem?.finalizar_recurtido && (
+                <div className="text-xs text-purple-700 font-medium bg-white p-2 rounded border border-purple-200">
+                  <p>✅ Al finalizar:</p>
+                  <p>• Tabla central: estado → FINALIZADO, etapa → RECURTIDO</p>
+                  <p>• Si todos los sublotes del lote padre están finalizados → se crea registro consolidado automáticamente</p>
+                </div>
+              )}
 
-              {/* Tabla Resumen de Recurtido */}
-              <div className="bg-white rounded-lg border p-3">
-                <h4 className="font-semibold text-sm mb-2 text-slate-700">Resumen de Recurtido</h4>
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="p-2 text-left">Código base</th>
-                      <th className="p-2 text-left">Color base</th>
-                      <th className="p-2 text-left">Código lote</th>
-                      <th className="p-2 text-right">Cantidad hojas</th>
-                      <th className="p-2 text-left">Origen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentItem?.codigo_lote ? (
+              {/* Resumen de Recurtido */}
+              {currentItem?.codigo_lote && (
+                <div className="bg-white rounded-lg border p-3">
+                  <h4 className="font-semibold text-sm mb-2 text-slate-700">Resumen</h4>
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-100">
+                      <tr><th className="p-1 border">Código base</th><th className="p-1 border">Color</th><th className="p-1 border">Código lote</th><th className="p-1 border text-right">Hojas</th><th className="p-1 border text-right">Costo acum.</th></tr>
+                    </thead>
+                    <tbody>
                       <tr className="border-t">
-                        <td className="p-2 font-mono font-bold">{currentItem.codigo_color || '—'}</td>
-                        <td className="p-2">{currentItem.nombre_color || '—'}</td>
-                        <td className="p-2 font-mono">{currentItem.codigo_lote}</td>
-                        <td className="p-2 text-right font-bold">{currentItem.cantidad_pieles || 0}</td>
-                        <td className="p-2">recurtido</td>
+                        <td className="p-1 border font-mono font-bold">{currentItem.codigo_color || '—'}</td>
+                        <td className="p-1 border">{currentItem.nombre_color || '—'}</td>
+                        <td className="p-1 border font-mono">{currentItem.codigo_lote}</td>
+                        <td className="p-1 border text-right font-bold">{currentItem.cantidad_pieles || 0}</td>
+                        <td className="p-1 border text-right">{formatCurrency((invSeleccionado?.costo_acumulado || 0) + (currentItem.subtotal_humectacion || 0) + (currentItem.subtotal_recromado || 0) + (currentItem.subtotal_recurtido || 0))}</td>
                       </tr>
-                    ) : (
-                      <tr><td colSpan={5} className="p-2 text-center text-gray-400">Seleccione un lote para ver el resumen</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
@@ -593,44 +524,23 @@ export default function ProcesoRecurtido() {
           {selectedItem && (
             <div className="space-y-3 text-sm">
               <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
-              <p><span className="font-semibold">Código Color:</span> {selectedItem.codigo_color || 'N/A'}</p>
-              <p><span className="font-semibold">Nombre Color:</span> {selectedItem.nombre_color || 'N/A'}</p>
+              <p><span className="font-semibold">Color:</span> {selectedItem.codigo_color} — {selectedItem.nombre_color}</p>
               <p><span className="font-semibold">Actividad:</span> <span className="capitalize">{selectedItem.actividad}</span></p>
               <p><span className="font-semibold">Cantidad Pieles:</span> {selectedItem.cantidad_pieles}</p>
               <p><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
               {selectedItem.fecha_fin && <p><span className="font-semibold">Fecha Fin:</span> {new Date(selectedItem.fecha_fin).toLocaleDateString()}</p>}
               <p><span className="font-semibold">Peso Actual:</span> {selectedItem.peso_actual} kg</p>
-              <p><span className="font-semibold">Peso Promedio:</span> {selectedItem.peso_promedio} kg</p>
               <p><span className="font-semibold">Subtotal Humectación:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.subtotal_humectacion)}</span></p>
               <p><span className="font-semibold">Subtotal Recromado:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.subtotal_recromado)}</span></p>
               <p><span className="font-semibold">Subtotal Recurtido:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.subtotal_recurtido)}</span></p>
               <p><span className="font-semibold">Estado:</span> <span className="capitalize">{selectedItem.estado}</span></p>
-              {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
-              {selectedItem.insumos_utilizados && selectedItem.insumos_utilizados.length > 0 && (
-                <div className="mt-4">
-                  <p className="font-semibold mb-2">Costos Unitarios de Insumos:</p>
-                  <div className="bg-gray-50 p-2 rounded max-h-40 overflow-y-auto">
-                    {selectedItem.insumos_utilizados.map((insumo, idx) => (
-                      <p key={idx} className="text-xs">• {insumo.producto}: {formatCurrency(insumo.costo_unitario)}/kg</p>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
-          <div className="flex justify-end pt-4">
-            <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
-          </div>
+          <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
-      {showConsolidadoModal && (
-          <LoteDetalleConsolidado 
-              open={showConsolidadoModal}
-              onOpenChange={setShowConsolidadoModal}
-              codigoLote={loteConsolidado}
-          />
-      )}
+      {showConsolidadoModal && <LoteDetalleConsolidado open={showConsolidadoModal} onOpenChange={setShowConsolidadoModal} codigoLote={loteConsolidado} />}
     </div>
   );
 }

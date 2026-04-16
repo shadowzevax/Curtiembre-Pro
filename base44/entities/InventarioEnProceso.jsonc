@@ -1,0 +1,132 @@
+{
+  "name": "InventarioEnProceso",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo del producto"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n del producto"
+    },
+    "codigo_lote": {
+      "type": "string",
+      "description": "C\u00f3digo de lote o sublote"
+    },
+    "codigo_lote_padre": {
+      "type": "string",
+      "description": "C\u00f3digo del lote padre (null si es lote principal)"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "LOTE",
+        "SUBLOTE"
+      ],
+      "default": "LOTE",
+      "description": "Tipo: LOTE o SUBLOTE"
+    },
+    "origen_modulo": {
+      "type": "string",
+      "enum": [
+        "recepcion",
+        "limpieza",
+        "curtido",
+        "recurtido",
+        "pintura",
+        "compras"
+      ],
+      "description": "M\u00f3dulo de origen"
+    },
+    "etapa_actual": {
+      "type": "string",
+      "enum": [
+        "recepcion",
+        "limpieza",
+        "curtido",
+        "recurtido",
+        "pintura"
+      ],
+      "description": "Etapa actual en el flujo de producci\u00f3n"
+    },
+    "estado_actual": {
+      "type": "string",
+      "enum": [
+        "EN_PROCESO",
+        "FINALIZADO",
+        "DIVIDIDO",
+        "CONSOLIDADO",
+        "CERRADO"
+      ],
+      "default": "EN_PROCESO",
+      "description": "Estado actual del registro en la tabla central"
+    },
+    "estado_proceso": {
+      "type": "string",
+      "enum": [
+        "piel_recibida",
+        "piel_limpia",
+        "piel_curtida",
+        "piel_recurtida",
+        "crosta",
+        "en_proceso_pintura",
+        "listo_para_limpieza"
+      ],
+      "description": "Estado descriptivo del proceso productivo"
+    },
+    "cantidad_hojas": {
+      "type": "number",
+      "default": 0,
+      "description": "Cantidad de hojas en este estado"
+    },
+    "cantidad_pieles": {
+      "type": "number",
+      "default": 0,
+      "description": "Cantidad de pieles"
+    },
+    "peso_actual": {
+      "type": "number",
+      "default": 0,
+      "description": "Peso actual en kg"
+    },
+    "costo_acumulado": {
+      "type": "number",
+      "default": 0,
+      "description": "Costo acumulado total a lo largo del proceso"
+    },
+    "costo_promedio": {
+      "type": "number",
+      "default": 0,
+      "description": "Costo promedio por hoja"
+    },
+    "color_base": {
+      "type": "string",
+      "description": "Color base del cuero (asignado en recurtido)"
+    },
+    "codigo_color": {
+      "type": "string",
+      "description": "C\u00f3digo del color base"
+    },
+    "fecha_ingreso_proceso": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de ingreso al proceso"
+    },
+    "submodulo_origen": {
+      "type": "string",
+      "description": "Subm\u00f3dulo espec\u00edfico de origen"
+    },
+    "proceso_origen_id": {
+      "type": "string",
+      "description": "ID del proceso de producci\u00f3n que gener\u00f3 este registro"
+    }
+  },
+  "required": [
+    "codigo",
+    "descripcion",
+    "codigo_lote",
+    "origen_modulo",
+    "etapa_actual"
+  ]
+}

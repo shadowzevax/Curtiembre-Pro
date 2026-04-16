@@ -19,8 +19,6 @@ export default function ProcesoLimpieza() {
   const [procesos, setProcesos] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [lotesEnProceso, setLotesEnProceso] = useState([]);
-  const [sublotesDisponibles, setSublotesDisponibles] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [searchEnProceso, setSearchEnProceso] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,25 +29,24 @@ export default function ProcesoLimpieza() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
+  const [invSeleccionado, setInvSeleccionado] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, todosLosProcesos, invEnProceso] = await Promise.all([
+      const [procesosData, insumosData, productosData, invEnProceso] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'limpieza' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        ProcesoProduccion.list(),
         InventarioEnProceso.list()
       ]);
-      
-      const lotesActivos = todosLosProcesos.filter(p => p.estado !== 'completado' && p.tipo_proceso === 'recepcion');
-      setLotesEnProceso(lotesActivos);
-      setInventarioEnProceso(Array.isArray(invEnProceso) ? invEnProceso : []);
-      
-      setProcesos(procesosData);
-      setInsumos(insumosData);
-      setProductos(productosData);
+      setProcesos(Array.isArray(procesosData) ? procesosData : []);
+      setInsumos(Array.isArray(insumosData) ? insumosData : []);
+      setProductos(Array.isArray(productosData) ? productosData : []);
+      // FILTRO: solo registros en estado EN_PROCESO y etapa = recepcion
+      const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
+        .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'recepcion');
+      setInventarioEnProceso(filtrados);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -64,7 +61,7 @@ export default function ProcesoLimpieza() {
     setCurrentItem(item || {
       tipo_proceso: 'limpieza',
       codigo_lote: '',
-      codigo_sublote: '',
+      inv_proceso_id: '',
       cantidad_pieles: 0,
       seccion: 'remojo',
       fecha_inicio: new Date().toISOString().split('T')[0],
@@ -76,50 +73,25 @@ export default function ProcesoLimpieza() {
       observaciones: '',
       insumos_utilizados: [],
       estado: 'pendiente',
-      finalizar_remojo: false, // New field
-      finalizar_pelambre: false // New field
+      finalizar_remojo: false,
+      finalizar_pelambre: false
     });
-    setSublotesDisponibles([]);
+    setInvSeleccionado(null);
     setSearchEnProceso('');
     setShowModal(true);
   };
 
-  const handleViewDetails = (item) => {
-    setSelectedItem(item);
-    setShowDetailModal(true);
-  };
-
-  const handleLoteChange = (codigoLote) => {
-    // Buscar el lote seleccionado
-    const loteSeleccionado = lotesEnProceso.find(l => l.codigo_lote === codigoLote);
-    
-    if (loteSeleccionado && loteSeleccionado.dividir_lote && loteSeleccionado.sublotes && loteSeleccionado.sublotes.length > 0) {
-      // Filtrar sublotes que NO estén completados
-      const sublotesActivos = loteSeleccionado.sublotes.filter(s => {
-        // Buscar si este sublote ya fue procesado y completado
-        const procesoSublote = procesos.find(p => p.codigo_sublote === s.codigo && p.estado === 'completado');
-        return !procesoSublote;
-      });
-      setSublotesDisponibles(sublotesActivos);
-    } else {
-      setSublotesDisponibles([]);
-    }
-    
-    setCurrentItem(prev => ({ 
-      ...prev, 
-      codigo_lote: codigoLote,
-      codigo_sublote: ''
-    }));
-  };
-
-  const handleSubloteChange = (codigoSublote) => {
-    // Buscar la cantidad de pieles del sublote seleccionado
-    const subloteSeleccionado = sublotesDisponibles.find(s => s.codigo === codigoSublote);
-    
-    setCurrentItem(prev => ({ 
-      ...prev, 
-      codigo_sublote: codigoSublote,
-      cantidad_pieles: subloteSeleccionado ? subloteSeleccionado.cantidad : 0
+  const handleSelectInvProceso = (id) => {
+    const inv = inventarioEnProceso.find(i => i.id === id);
+    if (!inv) return;
+    setInvSeleccionado(inv);
+    setSearchEnProceso('');
+    setCurrentItem(prev => ({
+      ...prev,
+      inv_proceso_id: inv.id,
+      codigo_lote: inv.codigo_lote || inv.codigo || '',
+      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles,
+      peso_actual: inv.peso_actual || prev.peso_actual
     }));
   };
 
@@ -127,90 +99,42 @@ export default function ProcesoLimpieza() {
     setCurrentItem(prev => ({
       ...prev,
       insumos_utilizados: [...(prev.insumos_utilizados || []), {
-        insumo_id: '',
-        codigo: '',
-        producto: '',
-        dosificacion: 0,
-        cantidad: 0,
-        costo_unitario: 0,
-        iva: 0.19,
-        valor_total: 0,
-        seccion: prev.seccion // Asignar la sección actual
+        insumo_id: '', codigo: '', producto: '', dosificacion: 0,
+        cantidad: 0, costo_unitario: 0, iva: 0.19, valor_total: 0,
+        seccion: prev.seccion
       }]
     }));
   };
 
   const removeInsumo = (index) => {
     const updated = currentItem.insumos_utilizados.filter((_, i) => i !== index);
-    setCurrentItem(prev => ({
-      ...prev,
-      insumos_utilizados: updated
-    }));
+    setCurrentItem(prev => ({ ...prev, insumos_utilizados: updated }));
     recalculateAllCosts(updated);
   };
 
   const handleInsumoChange = (index, field, value) => {
     const updated = [...currentItem.insumos_utilizados];
     updated[index][field] = value;
-    
-    // Si cambia el código (insumo_id), traer automáticamente el producto y costo
     if (field === 'insumo_id') {
       const item = [...insumos, ...productos].find(i => i.id === value);
-      if (item) {
-        updated[index].codigo = item.codigo || item.referencia || '';
-        updated[index].producto = item.nombre || item.descripcion || '';
-        updated[index].costo_unitario = item.costo_promedio || 0;
-      }
+      if (item) { updated[index].codigo = item.codigo || ''; updated[index].producto = item.nombre || item.descripcion || ''; updated[index].costo_unitario = item.costo_promedio || 0; }
     }
-    
-    // Si cambia el % dosificación, recalcular cantidad automáticamente
     if (field === 'dosificacion') {
-      const dosificacion = parseFloat(value) || 0;
-      const pesoActual = parseFloat(currentItem.peso_actual) || 0;
-      updated[index].cantidad = (pesoActual * dosificacion) / 100;
+      updated[index].cantidad = ((parseFloat(currentItem.peso_actual) || 0) * (parseFloat(value) || 0)) / 100;
     }
-    
-    // Calcular valor total = costo_unitario * cantidad + IVA
     const cantidad = parseFloat(updated[index].cantidad) || 0;
     const costoUnitario = parseFloat(updated[index].costo_unitario) || 0;
     const iva = parseFloat(updated[index].iva) || 0;
     const subtotal = cantidad * costoUnitario;
     updated[index].valor_total = subtotal + (subtotal * iva);
-    
     setCurrentItem(prev => ({ ...prev, insumos_utilizados: updated }));
     recalculateAllCosts(updated);
   };
 
-  const recalculateAllCosts = (insumos) => {
-    // Calcular costos por sección
-    const costoRemojo = insumos
-      .filter(i => i.seccion === 'remojo')
-      .reduce((sum, item) => sum + (item.valor_total || 0), 0);
-    
-    const costoPelambre = insumos
-      .filter(i => i.seccion === 'pelambre')
-      .reduce((sum, item) => sum + (item.valor_total || 0), 0);
-    
-    setCurrentItem(prev => ({
-      ...prev,
-      costo_remojo: costoRemojo,
-      costo_pelambre: costoPelambre
-    }));
-  };
-
-  // Recalcular cantidades si cambia el peso actual
-  const handleCantidadPielesChange = (newCantidad) => {
-    setCurrentItem(prev => {
-      const cantidadPieles = parseFloat(newCantidad) || 0;
-      const pesoActual = parseFloat(prev.peso_actual) || 0;
-      const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
-      
-      return {
-        ...prev,
-        cantidad_pieles: cantidadPieles,
-        peso_promedio: pesoPromedio
-      };
-    });
+  const recalculateAllCosts = (ins) => {
+    const costoRemojo = ins.filter(i => i.seccion === 'remojo').reduce((sum, i) => sum + (i.valor_total || 0), 0);
+    const costoPelambre = ins.filter(i => i.seccion === 'pelambre').reduce((sum, i) => sum + (i.valor_total || 0), 0);
+    setCurrentItem(prev => ({ ...prev, costo_remojo: costoRemojo, costo_pelambre: costoPelambre }));
   };
 
   const handlePesoActualChange = (newPeso) => {
@@ -218,99 +142,77 @@ export default function ProcesoLimpieza() {
       const pesoActual = parseFloat(newPeso) || 0;
       const cantidadPieles = parseFloat(prev.cantidad_pieles) || 0;
       const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
-      
-      // Recalcular cantidades automáticamente basado en dosificación
       const updatedInsumos = (prev.insumos_utilizados || []).map(item => {
         const dosificacion = parseFloat(item.dosificacion) || 0;
         const cantidad = (pesoActual * dosificacion) / 100;
         const costoUnitario = parseFloat(item.costo_unitario) || 0;
         const iva = parseFloat(item.iva) || 0;
         const subtotal = cantidad * costoUnitario;
-        const valorTotal = subtotal + (subtotal * iva);
-        return { ...item, cantidad, valor_total: valorTotal };
+        return { ...item, cantidad, valor_total: subtotal + (subtotal * iva) };
       });
-      
-      const costoRemojo = updatedInsumos
-        .filter(i => i.seccion === 'remojo')
-        .reduce((sum, item) => sum + (item.valor_total || 0), 0);
-      
-      const costoPelambre = updatedInsumos
-        .filter(i => i.seccion === 'pelambre')
-        .reduce((sum, item) => sum + (item.valor_total || 0), 0);
-      
-      return {
-        ...prev,
-        peso_actual: pesoActual,
-        peso_promedio: pesoPromedio,
-        insumos_utilizados: updatedInsumos,
-        costo_remojo: costoRemojo,
-        costo_pelambre: costoPelambre
-      };
+      const costoRemojo = updatedInsumos.filter(i => i.seccion === 'remojo').reduce((sum, i) => sum + (i.valor_total || 0), 0);
+      const costoPelambre = updatedInsumos.filter(i => i.seccion === 'pelambre').reduce((sum, i) => sum + (i.valor_total || 0), 0);
+      return { ...prev, peso_actual: pesoActual, peso_promedio: pesoPromedio, insumos_utilizados: updatedInsumos, costo_remojo: costoRemojo, costo_pelambre: costoPelambre };
     });
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!currentItem.inv_proceso_id && !isEditing) {
+      alert('⚠️ Debe seleccionar un "Código en Proceso" de la tabla central.');
+      return;
+    }
     try {
+      const finalizando = currentItem.finalizar_remojo || currentItem.finalizar_pelambre;
       const dataToSave = {
         ...currentItem,
         numero_proceso: `${currentItem.codigo_lote}-LMP`,
+        estado: finalizando ? 'completado' : 'pendiente',
+        fecha_fin: finalizando && !currentItem.fecha_fin ? new Date().toISOString().split('T')[0] : currentItem.fecha_fin
       };
-      
-      // If either 'finalizar_remojo' or 'finalizar_pelambre' is true, set state to 'completado'
-      if (currentItem.finalizar_remojo || currentItem.finalizar_pelambre) {
-        dataToSave.estado = 'completado';
-        // If fecha_fin is empty and it's being completed, set it to today's date
-        if (!dataToSave.fecha_fin) {
-          dataToSave.fecha_fin = new Date().toISOString().split('T')[0];
-        }
-      } else {
-        dataToSave.estado = 'pendiente'; // Or whatever initial state is
-      }
 
-      let procesoId;
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
-        procesoId = currentItem.id;
       } else {
-        const created = await ProcesoProduccion.create(dataToSave);
-        procesoId = created.id;
+        await ProcesoProduccion.create(dataToSave);
       }
-      
-      // AFECTAR INVENTARIO DE INSUMOS Y QUÍMICOS (descontar insumos utilizados)
-      if (!isEditing && dataToSave.insumos_utilizados && dataToSave.insumos_utilizados.length > 0) {
+
+      // Descontar insumos del inventario
+      if (!isEditing && dataToSave.insumos_utilizados?.length > 0) {
         for (const insumo of dataToSave.insumos_utilizados) {
           if (insumo.insumo_id && insumo.cantidad > 0) {
-            // Buscar el insumo por ID
             const insumoData = insumos.find(i => i.id === insumo.insumo_id);
-            
             if (insumoData) {
-              // Crear movimiento de salida (negativo)
               await MovimientoInventario.create({
-                tipo_movimiento: 'salida',
-                insumo_id: insumo.insumo_id,
-                cantidad: -(insumo.cantidad),
-                costo_unitario: insumoData.costo_promedio || 0,
+                tipo_movimiento: 'salida', insumo_id: insumo.insumo_id,
+                cantidad: -(insumo.cantidad), costo_unitario: insumoData.costo_promedio || 0,
                 fecha_movimiento: dataToSave.fecha_inicio,
                 referencia: `LIMPIEZA-${dataToSave.codigo_lote}-${dataToSave.seccion}`,
-                observaciones: `Consumo en proceso de limpieza (${dataToSave.seccion}) - Lote ${dataToSave.codigo_lote}`,
+                observaciones: `Consumo limpieza (${dataToSave.seccion}) - Lote ${dataToSave.codigo_lote}`,
                 usuario_id: 'system'
               });
-              
-              // Actualizar stock en Insumo
               const movimientos = await MovimientoInventario.filter({ insumo_id: insumo.insumo_id });
-              const nuevoStock = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0) - insumo.cantidad;
-              
-              await Insumo.update(insumo.insumo_id, {
-                stock_actual: nuevoStock
-              });
-              
-              console.log(`✅ Inventario actualizado: -${insumo.cantidad} kg de ${insumo.producto}`);
+              const nuevoStock = (Array.isArray(movimientos) ? movimientos : []).reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+              await Insumo.update(insumo.insumo_id, { stock_actual: nuevoStock });
             }
           }
         }
       }
-      
+
+      // ACTUALIZAR TABLA CENTRAL: si se finaliza, avanzar etapa a 'limpieza'
+      if (finalizando && currentItem.inv_proceso_id) {
+        const costoProceso = (dataToSave.costo_remojo || 0) + (dataToSave.costo_pelambre || 0);
+        const invActual = inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id);
+        await InventarioEnProceso.update(currentItem.inv_proceso_id, {
+          etapa_actual: 'limpieza',
+          estado_actual: 'EN_PROCESO',
+          estado_proceso: 'piel_limpia',
+          peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
+          costo_acumulado: (invActual?.costo_acumulado || 0) + costoProceso
+        });
+        console.log(`✅ Tabla central actualizada: etapa → limpieza`);
+      }
+
       setShowModal(false);
       setCurrentItem(null);
       await loadData();
@@ -323,39 +225,25 @@ export default function ProcesoLimpieza() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Eliminar este proceso?')) return;
-    try {
-      await ProcesoProduccion.delete(id);
-      loadData();
-      alert('Proceso eliminado.');
-    } catch (error) {
-      console.error('Error deleting:', error);
-    }
+    try { await ProcesoProduccion.delete(id); loadData(); } catch (error) { console.error(error); }
   };
 
-  const handleExport = () => alert('Función de exportar en desarrollo.');
-  const handlePrint = () => window.print();
+  const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
 
-  // Combinar insumos y productos para el selector
-  const todosLosItems = [
-    ...insumos.map(i => ({ ...i, tipo: 'insumo' })),
-    ...productos.map(p => ({ ...p, tipo: 'producto' }))
-  ];
-
-  const headers = ['Lote', 'Sublote', 'Sección', 'Fecha Inicio', 'Peso Actual', 'Costo Remojo', 'Costo Pelambre', 'Estado', 'Acciones'];
+  const headers = ['Lote', 'Sección', 'Fecha Inicio', 'Peso Actual', 'Costo Remojo', 'Costo Pelambre', 'Estado', 'Acciones'];
   const renderRow = (item) => (
     <tr key={item.id}>
-      <td>{item.codigo_lote}</td>
-      <td>{item.codigo_sublote || 'N/A'}</td>
+      <td className="font-mono font-bold">{item.codigo_lote}</td>
       <td className="capitalize">{item.seccion}</td>
       <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
       <td>{item.peso_actual} kg</td>
       <td className="text-right">{formatCurrency(item.costo_remojo)}</td>
       <td className="text-right">{formatCurrency(item.costo_pelambre)}</td>
-      <td><span className="capitalize">{item.estado}</span></td>
+      <td><span className={`px-2 py-0.5 rounded text-xs ${item.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{item.estado}</span></td>
       <td>
-        <div className="flex space-x-2">
-          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }} title="Ver Consolidado"><Table className="w-4 h-4 text-emerald-600" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)}><Eye className="w-4 h-4" /></Button>
+        <div className="flex space-x-1">
+          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
+          <Button variant="outline" size="sm" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Eye className="w-4 h-4" /></Button>
           <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
           <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
         </div>
@@ -363,79 +251,59 @@ export default function ProcesoLimpieza() {
     </tr>
   );
 
+  const invFiltrados = inventarioEnProceso.filter(inv => {
+    if (!searchEnProceso) return true;
+    const s = searchEnProceso.toLowerCase();
+    return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s) || (inv.codigo || '').toLowerCase().includes(s);
+  });
+
   return (
     <div className="p-6">
-      <PageHeader
-        title="Proceso de Limpieza"
-        description="Gestiona las etapas de remojo y pelambre."
-        onExportExcel={handleExport}
-        onPrint={handlePrint}
-        actionButton={
-          <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Limpieza
-          </Button>
-        }
+      <PageHeader title="Proceso de Limpieza" description="Remojo y Pelambre. Filtra lotes con etapa=RECEPCIÓN y estado=EN_PROCESO."
+        onPrint={() => window.print()}
+        actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" />Nueva Limpieza</Button>}
       />
       <Card id="tabla-imprimible">
         <CardHeader><CardTitle>Listado de Procesos de Limpieza</CardTitle></CardHeader>
-        <CardContent>
-          {loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}
-        </CardContent>
+        <CardContent>{loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}</CardContent>
       </Card>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Limpieza</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Limpieza</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-1">
-                <Label>Código en Proceso *</Label>
-                <Input
-                  placeholder="Buscar por código, lote o descripción..."
-                  value={searchEnProceso}
-                  onChange={e => setSearchEnProceso(e.target.value)}
-                  className="mb-1 h-8 text-xs"
-                />
-                <Select value={currentItem?.inv_proceso_id || ''} onValueChange={v => {
-                  const inv = inventarioEnProceso.find(i => i.id === v);
-                  if (inv) {
-                    setSearchEnProceso('');
-                    setCurrentItem(prev => ({
-                      ...prev,
-                      inv_proceso_id: inv.id,
-                      codigo_lote: inv.codigo_lote || inv.codigo || '',
-                      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles
-                    }));
-                    handleLoteChange(inv.codigo_lote || inv.codigo || '');
-                  }
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar registro en proceso..." /></SelectTrigger>
-                  <SelectContent>
-                    {inventarioEnProceso
-                      .filter(inv => {
-                        if (!searchEnProceso) return true;
-                        const s = searchEnProceso.toLowerCase();
-                        return (inv.codigo || '').toLowerCase().includes(s) ||
-                               (inv.codigo_lote || '').toLowerCase().includes(s) ||
-                               (inv.descripcion || '').toLowerCase().includes(s);
-                      })
-                      .map(inv => (
-                        <SelectItem key={inv.id} value={inv.id}>
-                          {inv.codigo_lote || inv.codigo} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas)
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                {currentItem?.codigo_lote && (
-                  <p className="text-xs text-blue-600 mt-1 font-medium">Lote: {currentItem.codigo_lote}</p>
-                )}
-              </div>
-              <div><Label>Cantidad Hojas</Label><Input type="text" inputMode="numeric" pattern="[0-9]*" value={currentItem?.cantidad_pieles || ''} onChange={e => {
-                const val = e.target.value.replace(/[^0-9]/g, '');
-                handleCantidadPielesChange(val);
+
+            {/* SELECTOR CÓDIGO EN PROCESO */}
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <Label className="font-bold text-blue-800">Código en Proceso * <span className="font-normal text-xs">(Etapa: RECEPCIÓN | Estado: EN_PROCESO)</span></Label>
+              <Input placeholder="Buscar por código lote o descripción..." value={searchEnProceso} onChange={e => setSearchEnProceso(e.target.value)} className="my-1 h-8 text-xs" />
+              <Select value={currentItem?.inv_proceso_id || ''} onValueChange={handleSelectInvProceso}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar lote/sublote en proceso..." /></SelectTrigger>
+                <SelectContent>
+                  {invFiltrados.length === 0 && <SelectItem value="__empty__" disabled>No hay lotes disponibles (etapa=recepcion)</SelectItem>}
+                  {invFiltrados.map(inv => (
+                    <SelectItem key={inv.id} value={inv.id}>
+                      {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas) [{inv.tipo || 'LOTE'}]
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {invSeleccionado && (
+                <div className="mt-2 grid grid-cols-4 gap-2 text-xs bg-white p-2 rounded border">
+                  <div><span className="font-semibold">Lote:</span> <span className="font-mono">{invSeleccionado.codigo_lote}</span></div>
+                  <div><span className="font-semibold">Hojas:</span> {invSeleccionado.cantidad_hojas}</div>
+                  <div><span className="font-semibold">Peso:</span> {invSeleccionado.peso_actual} kg</div>
+                  <div><span className="font-semibold">Costo acum.:</span> {formatCurrency(invSeleccionado.costo_acumulado)}</div>
+                </div>
+              )}
+              {currentItem?.codigo_lote && <p className="text-xs text-blue-700 mt-1 font-medium">✔ Lote asignado: {currentItem.codigo_lote}</p>}
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
+                const val = parseInt(e.target.value) || 0;
+                const peso = parseFloat(currentItem.peso_actual) || 0;
+                setCurrentItem({...currentItem, cantidad_pieles: val, peso_promedio: val > 0 ? peso / val : 0});
               }} /></div>
               <div>
                 <Label>Sección *</Label>
@@ -447,17 +315,13 @@ export default function ProcesoLimpieza() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
               <div><Label>Fecha Inicio</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div><Label>Fecha Fin</Label><Input type="date" value={currentItem?.fecha_fin || ''} onChange={e => setCurrentItem({...currentItem, fecha_fin: e.target.value})} /></div>
-              <div><Label>Peso Actual (kg)</Label><Input type="text" inputMode="decimal" value={currentItem?.peso_actual || ''} onChange={e => {
-                const val = e.target.value.replace(/[^0-9.]/g, '');
-                handlePesoActualChange(val);
-              }} /></div>
-              <div><Label>Peso Promedio (kg/piel)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio || ''} readOnly className="bg-blue-50 font-medium" title="Auto-calculado: Peso Actual / Cantidad Pieles" /></div>
+              <div><Label>Peso Actual (kg)</Label><Input type="text" inputMode="decimal" value={currentItem?.peso_actual || ''} onChange={e => handlePesoActualChange(e.target.value.replace(/[^0-9.]/g, ''))} /></div>
+              <div><Label>Peso Promedio (kg/piel)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio || ''} readOnly className="bg-blue-50 font-medium" /></div>
             </div>
 
+            {/* ÍTEMS */}
             <div className="border rounded-lg p-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-lg">Ítems / Productos</h3>
@@ -467,14 +331,10 @@ export default function ProcesoLimpieza() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-100">
                     <tr>
-                      <th className="p-2 text-left">Código</th>
-                      <th className="p-2 text-left">Producto</th>
-                      <th className="p-2 text-right">% Dosificación</th>
-                      <th className="p-2 text-right">Cantidad (kg)</th>
-                      <th className="p-2 text-right">Costo Unit. ($/kg)</th>
-                      <th className="p-2 text-right">IVA</th>
-                      <th className="p-2 text-right">Valor Total</th>
-                      <th className="p-2"></th>
+                      <th className="p-2 text-left">Código</th><th className="p-2 text-left">Producto</th>
+                      <th className="p-2 text-right">% Dosif.</th><th className="p-2 text-right">Cantidad (kg)</th>
+                      <th className="p-2 text-right">Costo Unit.</th><th className="p-2 text-right">IVA</th>
+                      <th className="p-2 text-right">Valor Total</th><th className="p-2"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -484,28 +344,19 @@ export default function ProcesoLimpieza() {
                           <Select value={item.insumo_id} onValueChange={v => handleInsumoChange(index, 'insumo_id', v)}>
                             <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                             <SelectContent>
-                              {todosLosItems.map(ins => (
-                                <SelectItem key={ins.id} value={ins.id}>
-                                  {ins.codigo || ins.referencia} - {ins.nombre || ins.descripcion}
-                                </SelectItem>
-                              ))}
+                              {todosLosItems.map(ins => <SelectItem key={ins.id} value={ins.id}>{ins.codigo || ins.referencia} - {ins.nombre || ins.descripcion}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </td>
                         <td className="p-2"><Input value={item.producto} readOnly className="bg-gray-50" /></td>
-                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.dosificacion} onChange={e => {
-                         const val = e.target.value.replace(/[^0-9.]/g, '');
-                         handleInsumoChange(index, 'dosificacion', val);
-                        }} className="text-right" placeholder="%" /></td>
-                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" title="Auto-calculado: Peso Actual * % Dosificación" /></td>
+                        <td className="p-2"><Input type="text" inputMode="decimal" value={item.dosificacion} onChange={e => handleInsumoChange(index, 'dosificacion', e.target.value.replace(/[^0-9.]/g, ''))} className="text-right" /></td>
+                        <td className="p-2"><Input value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" /></td>
                         <td className="p-2"><Input type="number" step="0.01" value={item.costo_unitario} onChange={e => handleInsumoChange(index, 'costo_unitario', e.target.value)} className="text-right" /></td>
                         <td className="p-2">
                           <Select value={String(item.iva)} onValueChange={v => handleInsumoChange(index, 'iva', parseFloat(v))}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="0.19">19%</SelectItem>
-                              <SelectItem value="0.05">5%</SelectItem>
-                              <SelectItem value="0">0%</SelectItem>
+                              <SelectItem value="0.19">19%</SelectItem><SelectItem value="0.05">5%</SelectItem><SelectItem value="0">0%</SelectItem>
                             </SelectContent>
                           </Select>
                         </td>
@@ -519,39 +370,24 @@ export default function ProcesoLimpieza() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
-              <div>
-                <Label>Costo Remojo</Label>
-                <div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">
-                  {formatCurrency(currentItem?.costo_remojo || 0)}
-                </div>
-              </div>
-              <div>
-                <Label>Costo Pelambre</Label>
-                <div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">
-                  {formatCurrency(currentItem?.costo_pelambre || 0)}
-                </div>
-              </div>
+              <div><Label>Costo Remojo</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">{formatCurrency(currentItem?.costo_remojo || 0)}</div></div>
+              <div><Label>Costo Pelambre</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">{formatCurrency(currentItem?.costo_pelambre || 0)}</div></div>
             </div>
 
-            <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} /></div>
+            <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
             <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="finalizar_remojo" 
-                  checked={currentItem?.finalizar_remojo || false} 
-                  onCheckedChange={v => setCurrentItem({...currentItem, finalizar_remojo: v})} 
-                />
+                <Checkbox id="finalizar_remojo" checked={currentItem?.finalizar_remojo || false} onCheckedChange={v => setCurrentItem({...currentItem, finalizar_remojo: v})} />
                 <Label htmlFor="finalizar_remojo" className="font-semibold cursor-pointer">Finalizar Remojo</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="finalizar_pelambre" 
-                  checked={currentItem?.finalizar_pelambre || false} 
-                  onCheckedChange={v => setCurrentItem({...currentItem, finalizar_pelambre: v})} 
-                />
+                <Checkbox id="finalizar_pelambre" checked={currentItem?.finalizar_pelambre || false} onCheckedChange={v => setCurrentItem({...currentItem, finalizar_pelambre: v})} />
                 <Label htmlFor="finalizar_pelambre" className="font-semibold cursor-pointer">Finalizar Pelambre</Label>
               </div>
+              {(currentItem?.finalizar_remojo || currentItem?.finalizar_pelambre) && (
+                <p className="col-span-2 text-xs text-blue-700 font-medium">✅ Al finalizar, se actualizará la tabla central: etapa → LIMPIEZA</p>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
@@ -568,50 +404,21 @@ export default function ProcesoLimpieza() {
           {selectedItem && (
             <div className="space-y-3 text-sm">
               <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
-              <p><span className="font-semibold">Código Sublote:</span> {selectedItem.codigo_sublote || 'N/A'}</p>
               <p><span className="font-semibold">Sección:</span> <span className="capitalize">{selectedItem.seccion}</span></p>
               <p><span className="font-semibold">Cantidad Pieles:</span> {selectedItem.cantidad_pieles}</p>
               <p><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
               {selectedItem.fecha_fin && <p><span className="font-semibold">Fecha Fin:</span> {new Date(selectedItem.fecha_fin).toLocaleDateString()}</p>}
               <p><span className="font-semibold">Peso Actual:</span> {selectedItem.peso_actual} kg</p>
-              <p><span className="font-semibold">Peso Promedio:</span> {selectedItem.peso_promedio} kg/piel</p>
               <p><span className="font-semibold">Costo Remojo:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.costo_remojo)}</span></p>
               <p><span className="font-semibold">Costo Pelambre:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.costo_pelambre)}</span></p>
               <p><span className="font-semibold">Estado:</span> <span className="capitalize">{selectedItem.estado}</span></p>
-              {selectedItem.insumos_utilizados && selectedItem.insumos_utilizados.length > 0 && (
-                <div className="mt-4">
-                  <p className="font-semibold mb-2">Costos Unitarios de Insumos:</p>
-                  <div className="bg-gray-50 p-2 rounded max-h-40 overflow-y-auto">
-                    {selectedItem.insumos_utilizados.map((insumo, idx) => (
-                      <p key={idx} className="text-xs">• {insumo.producto}: {formatCurrency(insumo.costo_unitario)}/kg</p>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
-
-              {(selectedItem.finalizar_remojo || selectedItem.finalizar_pelambre) && (
-                <div className="bg-blue-50 p-3 rounded-lg mt-4">
-                  <p className="font-semibold text-blue-800">Cierre de etapa:</p>
-                  {selectedItem.finalizar_remojo && <p>Remojo: <span className="font-bold text-green-700">Finalizado</span></p>}
-                  {selectedItem.finalizar_pelambre && <p>Pelambre: <span className="font-bold text-green-700">Finalizado</span></p>}
-                </div>
-              )}
             </div>
           )}
-          <div className="flex justify-end pt-4">
-            <Button onClick={() => setShowDetailModal(false)}>Cerrar</Button>
-          </div>
+          <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
-      {showConsolidadoModal && (
-          <LoteDetalleConsolidado 
-              open={showConsolidadoModal}
-              onOpenChange={setShowConsolidadoModal}
-              codigoLote={loteConsolidado}
-          />
-      )}
+      {showConsolidadoModal && <LoteDetalleConsolidado open={showConsolidadoModal} onOpenChange={setShowConsolidadoModal} codigoLote={loteConsolidado} />}
     </div>
   );
 }
