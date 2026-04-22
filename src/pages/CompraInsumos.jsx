@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { OrdenCompra, Proveedor, Insumo } from "@/entities/all";
+import { OrdenCompra, Proveedor, Insumo, Tercero } from "@/entities/all";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,13 +105,20 @@ export default function CompraInsumos() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [ordenesData, proveedoresData, insumosData] = await Promise.all([
-        OrdenCompra.list(), // Traer todas las compras (unificadas)
+      // Usar Tercero (fuente unificada) filtrado por tipo_tercero=proveedor, con fallback a Proveedor
+      const [ordenesData, terceroData, proveedoresData, insumosData] = await Promise.all([
+        OrdenCompra.list(),
+        Tercero.filter({ tipo_tercero: 'proveedor' }),
         Proveedor.list(),
         Insumo.list()
       ]);
       setOrdenes(ordenesData);
-      setProveedores(proveedoresData);
+      // Combinar: priorizar Terceros con tipo proveedor, complementar con entidad Proveedor
+      const terceroIds = new Set(terceroData.map(t => t.id));
+      const proveedoresSolos = proveedoresData.filter(p => !terceroIds.has(p.id));
+      const combinados = [...terceroData, ...proveedoresSolos];
+      console.log('[CompraInsumos] Proveedores cargados:', combinados.length, combinados.map(p => ({ id: p.id, codigo: p.codigo, nombre: p.nombre })));
+      setProveedores(combinados);
       setInsumos(insumosData);
     } catch (error) {
       console.error("Error loading data:", error);

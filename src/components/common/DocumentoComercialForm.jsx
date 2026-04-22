@@ -187,11 +187,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
       
       if (field === 'proveedor_id') {
           const selectedTercero = terceros.find(t => t.id === value);
+          console.log('[DocumentoComercialForm] Proveedor seleccionado:', { id: value, tercero: selectedTercero });
           setFormData(prev => ({
               ...prev,
               proveedor_id: value,
-              codigo_proveedor: selectedTercero ? selectedTercero.codigo : '',
-              cc_nit_proveedor: selectedTercero ? (selectedTercero.numero_identificacion || selectedTercero.nit) : ''
+              codigo_proveedor: selectedTercero ? (selectedTercero.codigo || '') : '',
+              cc_nit_proveedor: selectedTercero ? (selectedTercero.numero_identificacion || selectedTercero.nit || '') : ''
           }));
       } else if (field === 'cliente_id') {
           const selectedTercero = terceros.find(t => t.id === value);
@@ -1242,14 +1243,23 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                   <div>
                     <Label>Código Proveedor</Label>
                     <Select value={formData.proveedor_id || ''} onValueChange={v => handleInputChange('proveedor_id', v)}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar por código" /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar por código">
+                          {formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id)
+                            ? (() => { const t = terceros.find(x => x.id === formData.proveedor_id); return `${t.codigo || 'S/C'} — ${t.nombre}`; })()
+                            : 'Seleccionar por código'}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
-                        {terceros.filter(t => t.codigo).sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
-                          <SelectItem key={t.id} value={t.id}>{t.codigo} — {t.nombre}</SelectItem>
+                        {terceros.length === 0 && <SelectItem value="__empty__" disabled>Sin proveedores registrados</SelectItem>}
+                        {terceros.sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.codigo || 'S/C'} — {t.nombre}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {formData.codigo_proveedor && <p className="text-xs text-slate-500 mt-0.5">Código: <span className="font-mono font-semibold">{formData.codigo_proveedor}</span></p>}
+                    {formData.codigo_proveedor && <p className="text-xs text-emerald-600 mt-0.5 font-medium">✔ Código: <span className="font-mono">{formData.codigo_proveedor}</span></p>}
+                    {!formData.codigo_proveedor && formData.proveedor_id && <p className="text-xs text-amber-600 mt-0.5">Proveedor sin código asignado</p>}
+                    <p className="text-xs text-slate-400 mt-0.5">{terceros.length} proveedores disponibles</p>
                   </div>
                 )}
                 {tipoDocumento === 'venta' && (

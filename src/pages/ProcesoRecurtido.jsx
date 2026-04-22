@@ -100,19 +100,32 @@ export default function ProcesoRecurtido() {
     setLoadingStock(true);
     try {
       const codigoEnProceso = inv.codigo_lote;
+      console.log('[Recurtido] Calculando stock para código en proceso:', codigoEnProceso);
+
       // Hojas en curtido (desde ProcesoProduccion tipo=curtido con este código)
       const curtidos = await ProcesoProduccion.filter({ tipo_proceso: 'curtido', codigo_lote: codigoEnProceso });
+      console.log('[Recurtido] Registros curtido encontrados:', curtidos.length, curtidos);
+      // Acepta cantidad_pieles o cantidad_hojas como campo de cantidad
       const totalCurtido = (Array.isArray(curtidos) ? curtidos : [])
-        .reduce((sum, c) => sum + (parseFloat(c.cantidad_pieles) || 0), 0);
+        .reduce((sum, c) => sum + (parseFloat(c.cantidad_pieles) || parseFloat(c.cantidad_hojas) || 0), 0);
+      console.log('[Recurtido] Total hojas en curtido:', totalCurtido);
+
       // Hojas ya registradas en recurtido con este código
       const recurtidos = await ProcesoProduccion.filter({ tipo_proceso: 'recurtido', codigo_lote: codigoEnProceso });
+      console.log('[Recurtido] Registros recurtido encontrados:', recurtidos.length, recurtidos);
       const totalRecurtido = (Array.isArray(recurtidos) ? recurtidos : [])
-        .reduce((sum, r) => sum + (parseFloat(r.cantidad_pieles) || 0), 0);
-      const stock = Math.max(0, totalCurtido - totalRecurtido);
+        .reduce((sum, r) => sum + (parseFloat(r.cantidad_pieles) || parseFloat(r.cantidad_hojas) || 0), 0);
+      console.log('[Recurtido] Total hojas ya recurtidas:', totalRecurtido);
+
+      // Fallback: si no hay registros en curtido, usar cantidad_hojas del inventario
+      const stockBase = totalCurtido > 0 ? totalCurtido : (parseFloat(inv.cantidad_hojas) || 0);
+      const stock = Math.max(0, stockBase - totalRecurtido);
+      console.log('[Recurtido] Stock disponible calculado:', stock, '(base:', stockBase, '- recurtido:', totalRecurtido, ')');
+
       setStockDisponible(stock);
-      setTrazabilidadData({ codigoEnProceso, totalCurtido, totalRecurtido, stock });
+      setTrazabilidadData({ codigoEnProceso, totalCurtido: stockBase, totalRecurtido, stock });
     } catch (err) {
-      console.error('Error calculando stock:', err);
+      console.error('[Recurtido] Error calculando stock:', err);
       setStockDisponible(null);
     } finally {
       setLoadingStock(false);
@@ -419,19 +432,27 @@ export default function ProcesoRecurtido() {
               {currentItem?.codigo_lote && <p className="text-xs text-purple-700 mt-1 font-medium">✔ Lote asignado: {currentItem.codigo_lote}</p>}
               {/* STOCK DISPONIBLE */}
               {invSeleccionado && (
-                <div className="mt-2 flex items-center gap-3">
+                <div className="mt-2">
                   {loadingStock ? (
-                    <span className="text-xs text-slate-500">Calculando stock...</span>
-                  ) : stockDisponible !== null ? (
-                    <>
-                      <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${stockDisponible > 0 ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
-                        📦 Disponible en inventario: <span className="text-lg">{stockDisponible}</span> hojas
+                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg text-sm text-slate-600">
+                      <span className="animate-spin">⏳</span> Calculando stock disponible...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className={`px-3 py-2 rounded-lg text-sm font-bold border ${stockDisponible === null ? 'bg-amber-100 text-amber-800 border-amber-300' : stockDisponible > 0 ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'}`}>
+                        📦 Disponible en inventario:{' '}
+                        <span className="text-lg">
+                          {stockDisponible === null ? '—' : stockDisponible}
+                        </span>{' '}
+                        hojas
                       </div>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setShowTrazabilidad(true)} className="text-xs">
-                        Ver Trazabilidad
-                      </Button>
-                    </>
-                  ) : null}
+                      {stockDisponible !== null && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setShowTrazabilidad(true)} className="text-xs">
+                          Ver Trazabilidad
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
