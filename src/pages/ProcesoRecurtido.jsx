@@ -36,6 +36,10 @@ export default function ProcesoRecurtido() {
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
   const [invSeleccionado, setInvSeleccionado] = useState(null);
+  const [stockDisponible, setStockDisponible] = useState(null);
+  const [loadingStock, setLoadingStock] = useState(false);
+  const [showTrazabilidad, setShowTrazabilidad] = useState(false);
+  const [trazabilidadData, setTrazabilidadData] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -86,7 +90,33 @@ export default function ProcesoRecurtido() {
     });
     setInvSeleccionado(null);
     setSearchEnProceso('');
+    setStockDisponible(null);
+    setTrazabilidadData(null);
     setShowModal(true);
+  };
+
+  const calcularStock = async (inv) => {
+    if (!inv) return;
+    setLoadingStock(true);
+    try {
+      const codigoEnProceso = inv.codigo_lote;
+      // Hojas en curtido (desde ProcesoProduccion tipo=curtido con este código)
+      const curtidos = await ProcesoProduccion.filter({ tipo_proceso: 'curtido', codigo_lote: codigoEnProceso });
+      const totalCurtido = (Array.isArray(curtidos) ? curtidos : [])
+        .reduce((sum, c) => sum + (parseFloat(c.cantidad_pieles) || 0), 0);
+      // Hojas ya registradas en recurtido con este código
+      const recurtidos = await ProcesoProduccion.filter({ tipo_proceso: 'recurtido', codigo_lote: codigoEnProceso });
+      const totalRecurtido = (Array.isArray(recurtidos) ? recurtidos : [])
+        .reduce((sum, r) => sum + (parseFloat(r.cantidad_pieles) || 0), 0);
+      const stock = Math.max(0, totalCurtido - totalRecurtido);
+      setStockDisponible(stock);
+      setTrazabilidadData({ codigoEnProceso, totalCurtido, totalRecurtido, stock });
+    } catch (err) {
+      console.error('Error calculando stock:', err);
+      setStockDisponible(null);
+    } finally {
+      setLoadingStock(false);
+    }
   };
 
   const handleSelectInvProceso = (id) => {
@@ -94,6 +124,7 @@ export default function ProcesoRecurtido() {
     if (!inv) return;
     setInvSeleccionado(inv);
     setSearchEnProceso('');
+    setStockDisponible(null);
     setCurrentItem(prev => ({
       ...prev,
       inv_proceso_id: inv.id,
@@ -101,6 +132,7 @@ export default function ProcesoRecurtido() {
       cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles,
       peso_actual: inv.peso_actual || prev.peso_actual
     }));
+    calcularStock(inv);
   };
 
   const addInsumo = () => {
@@ -172,6 +204,18 @@ export default function ProcesoRecurtido() {
     if (!currentItem.inv_proceso_id && !isEditing) {
       alert('⚠️ Debe seleccionar un "Código en Proceso" de la tabla central.');
       return;
+    }
+    // Validar stock disponible
+    if (!isEditing && stockDisponible !== null) {
+      const cantIngresada = parseFloat(currentItem.cantidad_pieles) || 0;
+      if (cantIngresada > stockDisponible) {
+        alert(`❌ La cantidad ingresada (${cantIngresada} hojas) supera el stock disponible para este código en proceso (${stockDisponible} hojas).`);
+        return;
+      }
+      if (stockDisponible === 0) {
+        alert('❌ No hay stock disponible para este código en proceso. Ya fue totalmente recurtido.');
+        return;
+      }
     }
     try {
       const dataToSave = {
@@ -373,6 +417,23 @@ export default function ProcesoRecurtido() {
                 </div>
               )}
               {currentItem?.codigo_lote && <p className="text-xs text-purple-700 mt-1 font-medium">✔ Lote asignado: {currentItem.codigo_lote}</p>}
+              {/* STOCK DISPONIBLE */}
+              {invSeleccionado && (
+                <div className="mt-2 flex items-center gap-3">
+                  {loadingStock ? (
+                    <span className="text-xs text-slate-500">Calculando stock...</span>
+                  ) : stockDisponible !== null ? (
+                    <>
+                      <div className={`px-3 py-1.5 rounded-lg text-sm font-bold ${stockDisponible > 0 ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>
+                        📦 Disponible en inventario: <span className="text-lg">{stockDisponible}</span> hojas
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setShowTrazabilidad(true)} className="text-xs">
+                        Ver Trazabilidad
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-4 gap-4">
@@ -394,11 +455,17 @@ export default function ProcesoRecurtido() {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
-                const cant = parseFloat(e.target.value) || 0;
-                const peso = parseFloat(currentItem.peso_actual) || 0;
-                setCurrentItem({...currentItem, cantidad_pieles: cant, peso_promedio: cant > 0 ? peso / cant : 0});
-              }} /></div>
+              <div>
+                <Label>Cantidad Hojas</Label>
+                <Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
+                  const cant = parseFloat(e.target.value) || 0;
+                  const peso = parseFloat(currentItem.peso_actual) || 0;
+                  setCurrentItem({...currentItem, cantidad_pieles: cant, peso_promedio: cant > 0 ? peso / cant : 0});
+                }} className={stockDisponible !== null && (parseFloat(currentItem?.cantidad_pieles) || 0) > stockDisponible ? 'border-red-500 bg-red-50' : ''} />
+                {stockDisponible !== null && (parseFloat(currentItem?.cantidad_pieles) || 0) > stockDisponible && (
+                  <p className="text-xs text-red-600 mt-1 font-medium">⚠️ Supera el stock disponible ({stockDisponible} hojas)</p>
+                )}
+              </div>
               <div>
                 <Label>Actividad</Label>
                 <Select value={currentItem?.actividad || 'humectacion'} onValueChange={v => setCurrentItem({...currentItem, actividad: v})}>
@@ -541,6 +608,37 @@ export default function ProcesoRecurtido() {
       </Dialog>
 
       {showConsolidadoModal && <LoteDetalleConsolidado open={showConsolidadoModal} onOpenChange={setShowConsolidadoModal} codigoLote={loteConsolidado} />}
+
+      {/* MODAL TRAZABILIDAD */}
+      <Dialog open={showTrazabilidad} onOpenChange={setShowTrazabilidad}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Trazabilidad — {trazabilidadData?.codigoEnProceso}</DialogTitle></DialogHeader>
+          {trazabilidadData && (
+            <div className="space-y-3 text-sm">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Hojas desde Curtido:</span>
+                  <span className="font-bold text-blue-700">{trazabilidadData.totalCurtido} hojas</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Ya Recurtidas:</span>
+                  <span className="font-bold text-orange-600">− {trazabilidadData.totalRecurtido} hojas</span>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span className="font-semibold">Stock Disponible:</span>
+                  <span className={`font-bold text-lg ${trazabilidadData.stock > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {trazabilidadData.stock} hojas
+                  </span>
+                </div>
+              </div>
+              {trazabilidadData.stock === 0 && (
+                <p className="text-xs text-red-600 font-medium text-center">⚠️ Este lote ya fue completamente recurtido.</p>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end pt-2"><Button onClick={() => setShowTrazabilidad(false)}>Cerrar</Button></div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

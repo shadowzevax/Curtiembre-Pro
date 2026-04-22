@@ -1241,7 +1241,15 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                 {tipoDocumento === 'compra' && (
                   <div>
                     <Label>Código Proveedor</Label>
-                    <Input value={formData.codigo_proveedor || ''} readOnly className="bg-gray-100" />
+                    <Select value={formData.proveedor_id || ''} onValueChange={v => handleInputChange('proveedor_id', v)}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar por código" /></SelectTrigger>
+                      <SelectContent>
+                        {terceros.filter(t => t.codigo).sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.codigo} — {t.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formData.codigo_proveedor && <p className="text-xs text-slate-500 mt-0.5">Código: <span className="font-mono font-semibold">{formData.codigo_proveedor}</span></p>}
                   </div>
                 )}
                 {tipoDocumento === 'venta' && (
@@ -1366,14 +1374,52 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                 </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div><Label>Fecha Emisión Documento *</Label><Input type="date" value={formData.fecha_emision_documento || formData.fecha_orden} onChange={e => handleInputChange('fecha_emision_documento', e.target.value)} required /></div>
+                <div>
+                  <Label>Fecha Emisión Documento *</Label>
+                  <Input
+                    type="date"
+                    value={formData.fecha_emision_documento || formData.fecha_orden}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const hoy = new Date().toISOString().split('T')[0];
+                      if (val > hoy) { alert('⚠️ La Fecha de Emisión no puede ser futura.'); return; }
+                      handleInputChange('fecha_emision_documento', val);
+                    }}
+                    required
+                  />
+                </div>
                 {tipoDocumento === 'compra' && (
-                  <div><Label>Fecha de Recepción Conforme</Label><Input type="date" value={formData.fecha_recepcion_conforme || ''} onChange={e => handleInputChange('fecha_recepcion_conforme', e.target.value)} /></div>
+                  <div>
+                    <Label>Fecha de Recepción Conforme</Label>
+                    <Input
+                      type="date"
+                      value={formData.fecha_recepcion_conforme || ''}
+                      min={formData.fecha_emision_documento || formData.fecha_orden}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const emision = formData.fecha_emision_documento || formData.fecha_orden;
+                        if (emision && val < emision) { alert('⚠️ La Fecha de Recepción Conforme no puede ser anterior a la Fecha de Emisión.'); return; }
+                        handleInputChange('fecha_recepcion_conforme', val);
+                      }}
+                    />
+                  </div>
                 )}
-                
 
-
-                <div><Label>Fecha Vencimiento</Label><Input type="date" value={formData.fecha_vencimiento} onChange={e => handleInputChange('fecha_vencimiento', e.target.value)} /></div>
+                <div>
+                  <Label>Fecha Vencimiento</Label>
+                  <Input
+                    type="date"
+                    value={formData.fecha_vencimiento}
+                    min={formData.fecha_emision_documento || formData.fecha_orden}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const emision = formData.fecha_emision_documento || formData.fecha_orden;
+                      if (emision && val < emision) { alert('⚠️ La Fecha de Vencimiento no puede ser anterior a la Fecha de Emisión.'); return; }
+                      handleInputChange('fecha_vencimiento', val);
+                    }}
+                  />
+                </div>
                 
                 {tipoDocumento === 'venta' && (
                   <>
