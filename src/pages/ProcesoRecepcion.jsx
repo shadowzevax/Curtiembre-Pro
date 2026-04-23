@@ -424,11 +424,27 @@ export default function ProcesoRecepcion() {
             <div className="grid grid-cols-4 gap-4">
               <div><Label>Cantidad Hojas</Label><Input type="text" inputMode="numeric" value={currentItem?.cantidad_total_lote_hojas || ''} onChange={e => {
                 const val = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
-                const costo = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+                const costo = parseFloat(currentItem?.costo_promedio) || 0;
                 setCurrentItem({...currentItem, cantidad_total_lote_hojas: val, costo_total: val * costo});
               }} /></div>
-              <div><Label>Costo Promedio</Label><Input type="number" value={currentItem?.costo_promedio || 0} readOnly className="bg-blue-50 font-bold" /></div>
-              <div><Label>Costo Total</Label><Input type="number" value={currentItem?.costo_total || 0} readOnly className="bg-green-50 font-bold text-green-700" /></div>
+              <div>
+                <Label>Costo Unitario</Label>
+                <Input type="number" min="0" step="0.01"
+                  value={currentItem?.costo_promedio || ''}
+                  onChange={e => {
+                    const costo = parseFloat(e.target.value) || 0;
+                    const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+                    setCurrentItem({...currentItem, costo_promedio: costo, costo_total: hojas * costo});
+                  }}
+                  className="font-bold"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <Label>Costo Total <span className="text-xs text-slate-400">(calculado)</span></Label>
+                <Input type="number" value={currentItem?.costo_total || 0} readOnly className="bg-green-50 font-bold text-green-700" />
+                <p className="text-xs text-slate-400 mt-0.5">Hojas × Costo Unitario</p>
+              </div>
               <div><Label>Cantidad Pieles</Label><Input type="text" inputMode="numeric" value={currentItem?.cantidad_total_lote_pieles || ''} onChange={e => setCurrentItem({...currentItem, cantidad_total_lote_pieles: parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0})} /></div>
               <div><Label>Peso Total Hojas (kg)</Label><Input type="text" inputMode="decimal" value={currentItem?.peso_total || ''} onChange={e => {
                 const val = parseFloat(e.target.value.replace(/[^0-9.]/g, '')) || 0;
@@ -501,7 +517,7 @@ export default function ProcesoRecepcion() {
                     updated[index].cantidad = parseFloat(e.target.value) || 0;
                     setSublotes(updated);
                   }} /></div>
-                  <div><Label>Costo Prom.</Label><Input value={formatCurrency(costoP)} readOnly className="bg-blue-50 text-xs" /></div>
+                  <div><Label>Costo Unit.</Label><Input value={formatCurrency(costoP)} readOnly className="bg-blue-50 text-xs" /></div>
                   <div><Label>Costo Total</Label><Input value={formatCurrency(cantidad * costoP)} readOnly className="bg-green-50 text-xs" /></div>
                 </div>
               );

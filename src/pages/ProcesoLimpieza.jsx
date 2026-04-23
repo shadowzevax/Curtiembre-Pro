@@ -369,9 +369,61 @@ export default function ProcesoLimpieza() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
-              <div><Label>Costo Remojo</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">{formatCurrency(currentItem?.costo_remojo || 0)}</div></div>
-              <div><Label>Costo Pelambre</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-lg text-emerald-700">{formatCurrency(currentItem?.costo_pelambre || 0)}</div></div>
+            {/* TABLA DESGLOSE DE COSTOS POR SECCIÓN */}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-slate-700 text-white px-4 py-2 font-bold text-sm">Resumen de Costos por Sección</div>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="p-2 text-left border-b">Sección</th>
+                    <th className="p-2 text-right border-b">Costo Base (sin IVA)</th>
+                    <th className="p-2 text-right border-b">IVA</th>
+                    <th className="p-2 text-right border-b font-bold">Costo Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['remojo', 'pelambre'].map(seccion => {
+                    const items = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === seccion);
+                    const costoBase = items.reduce((sum, i) => {
+                      const cantidad = parseFloat(i.cantidad) || 0;
+                      const costoUnit = parseFloat(i.costo_unitario) || 0;
+                      return sum + (cantidad * costoUnit);
+                    }, 0);
+                    const ivaTotal = items.reduce((sum, i) => {
+                      const cantidad = parseFloat(i.cantidad) || 0;
+                      const costoUnit = parseFloat(i.costo_unitario) || 0;
+                      const iva = parseFloat(i.iva) || 0;
+                      return sum + (cantidad * costoUnit * iva);
+                    }, 0);
+                    const costoTotal = costoBase + ivaTotal;
+                    return (
+                      <tr key={seccion} className="border-t">
+                        <td className="p-2 font-semibold capitalize">{seccion}</td>
+                        <td className="p-2 text-right text-slate-700">{formatCurrency(costoBase)}</td>
+                        <td className="p-2 text-right text-orange-600">{formatCurrency(ivaTotal)}</td>
+                        <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoTotal)}</td>
+                      </tr>
+                    );
+                  })}
+                  {/* Fila total general */}
+                  {(() => {
+                    const allItems = currentItem?.insumos_utilizados || [];
+                    const baseTotal = allItems.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0)), 0);
+                    const ivaGlobal = allItems.reduce((sum, i) => {
+                      const sub = (parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0);
+                      return sum + sub * (parseFloat(i.iva)||0);
+                    }, 0);
+                    return (
+                      <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold">
+                        <td className="p-2 text-slate-800">TOTAL</td>
+                        <td className="p-2 text-right text-slate-800">{formatCurrency(baseTotal)}</td>
+                        <td className="p-2 text-right text-orange-700">{formatCurrency(ivaGlobal)}</td>
+                        <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(baseTotal + ivaGlobal)}</td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
             </div>
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
