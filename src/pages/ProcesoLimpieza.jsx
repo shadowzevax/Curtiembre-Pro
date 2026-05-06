@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Eye, X, Table } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, X, Table, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -43,9 +43,9 @@ export default function ProcesoLimpieza() {
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
-      // FILTRO: solo registros en estado EN_PROCESO y etapa = recepcion
+      // FILTRO: lotes EN_PROCESO en etapa recepcion O limpieza (para continuar pelambre)
       const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
-        .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'recepcion');
+        .filter(i => i.estado_actual === 'EN_PROCESO' && (i.etapa_actual === 'recepcion' || i.etapa_actual === 'limpieza'));
       setInventarioEnProceso(filtrados);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -56,26 +56,35 @@ export default function ProcesoLimpieza() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const defaultItem = () => ({
+    tipo_proceso: 'limpieza',
+    codigo_lote: '',
+    inv_proceso_id: '',
+    cantidad_pieles: 0,
+    seccion: 'remojo',
+    fecha_inicio: new Date().toISOString().split('T')[0],
+    fecha_fin: '',
+    peso_actual: 0,
+    peso_promedio: 0,
+    costo_remojo: 0,
+    costo_pelambre: 0,
+    observaciones: '',
+    insumos_utilizados: [],
+    estado: 'pendiente',
+    // Estados independientes por subproceso
+    estado_remojo: 'pendiente',    // 'pendiente' | 'finalizado'
+    estado_pelambre: 'pendiente',  // 'pendiente' | 'finalizado'
+    finalizar_limpieza: false,
+  });
+
   const handleOpenModal = (item = null) => {
     setIsEditing(!!item);
-    setCurrentItem(item || {
-      tipo_proceso: 'limpieza',
-      codigo_lote: '',
-      inv_proceso_id: '',
-      cantidad_pieles: 0,
-      seccion: 'remojo',
-      fecha_inicio: new Date().toISOString().split('T')[0],
-      fecha_fin: '',
-      peso_actual: 0,
-      peso_promedio: 0,
-      costo_remojo: 0,
-      costo_pelambre: 0,
-      observaciones: '',
-      insumos_utilizados: [],
-      estado: 'pendiente',
-      finalizar_remojo: false,
-      finalizar_pelambre: false
-    });
+    setCurrentItem(item ? {
+      ...defaultItem(),
+      ...item,
+      estado_remojo: item.estado_remojo || (item.finalizar_remojo ? 'finalizado' : 'pendiente'),
+      estado_pelambre: item.estado_pelambre || (item.finalizar_pelambre ? 'finalizado' : 'pendiente'),
+    } : defaultItem());
     setInvSeleccionado(null);
     setSearchEnProceso('');
     setShowModal(true);
@@ -162,15 +171,32 @@ export default function ProcesoLimpieza() {
       alert('⚠️ Debe seleccionar un "Código en Proceso" de la tabla central.');
       return;
     }
-    try {
-      const finalizando = currentItem.finalizar_remojo || currentItem.finalizar_pelambre;
-      const dataToSave = {
-        ...currentItem,
-        numero_proceso: `${currentItem.codigo_lote}-LMP`,
-        estado: finalizando ? 'completado' : 'pendiente',
-        fecha_fin: finalizando && !currentItem.fecha_fin ? new Date().toISOString().split('T')[0] : currentItem.fecha_fin
-      };
 
+    const remojoDone = currentItem.estado_remojo === 'finalizado';
+    const pelhambreDone = currentItem.estado_pelambre === 'finalizado';
+    const finalizandoLimpieza = currentItem.finalizar_limpieza && remojoDone && pelhambreDone;
+
+    // Validación: Pelambre solo puede finalizarse si Remojo ya está finalizado
+    if (currentItem.estado_pelambre === 'finalizado' && !remojoDone) {
+      alert('⚠️ Debe finalizar primero el subproceso de Remojo antes de finalizar Pelambre.');
+      return;
+    }
+
+    const dataToSave = {
+      ...currentItem,
+      numero_proceso: `${currentItem.codigo_lote}-LMP`,
+      // El proceso de limpieza solo se marca completado cuando se finaliza limpieza completa
+      estado: finalizandoLimpieza ? 'completado' : 'en_proceso',
+      fecha_fin: finalizandoLimpieza && !currentItem.fecha_fin ? new Date().toISOString().split('T')[0] : currentItem.fecha_fin,
+      // Guardar estados individuales
+      estado_remojo: currentItem.estado_remojo,
+      estado_pelambre: currentItem.estado_pelambre,
+      // Compatibilidad hacia atrás
+      finalizar_remojo: remojoDone,
+      finalizar_pelambre: pelhambreDone,
+    };
+
+    try {
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
@@ -199,24 +225,46 @@ export default function ProcesoLimpieza() {
         }
       }
 
-      // ACTUALIZAR TABLA CENTRAL: si se finaliza, avanzar etapa a 'limpieza'
-      if (finalizando && currentItem.inv_proceso_id) {
+      // ACTUALIZAR TABLA CENTRAL:
+      // - Al finalizar Remojo: mantener etapa en 'limpieza', estado EN_PROCESO
+      // - Al finalizar Limpieza completa: avanzar a 'limpieza' con estado piel_limpia (listo para curtido)
+      if (currentItem.inv_proceso_id) {
         const costoProceso = (dataToSave.costo_remojo || 0) + (dataToSave.costo_pelambre || 0);
         const invActual = inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id);
-        await InventarioEnProceso.update(currentItem.inv_proceso_id, {
-          etapa_actual: 'limpieza',
-          estado_actual: 'EN_PROCESO',
-          estado_proceso: 'piel_limpia',
-          peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
-          costo_acumulado: (invActual?.costo_acumulado || 0) + costoProceso
-        });
-        console.log(`✅ Tabla central actualizada: etapa → limpieza`);
+
+        if (finalizandoLimpieza) {
+          // Limpieza completa: avanzar etapa → listo para curtido
+          await InventarioEnProceso.update(currentItem.inv_proceso_id, {
+            etapa_actual: 'limpieza',
+            estado_actual: 'EN_PROCESO',
+            estado_proceso: 'piel_limpia',
+            peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
+            costo_acumulado: (invActual?.costo_acumulado || 0) + costoProceso
+          });
+          console.log(`✅ Limpieza COMPLETA. Tabla central: etapa → limpieza (piel_limpia)`);
+        } else if (remojoDone) {
+          // Solo remojo finalizado: mantener en limpieza pero en_proceso
+          await InventarioEnProceso.update(currentItem.inv_proceso_id, {
+            etapa_actual: 'limpieza',
+            estado_actual: 'EN_PROCESO',
+            estado_proceso: 'piel_limpia',
+            peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
+            costo_acumulado: (invActual?.costo_acumulado || 0) + (dataToSave.costo_remojo || 0)
+          });
+          console.log(`✅ Remojo finalizado. Tabla central: etapa → limpieza (en proceso)`);
+        }
       }
 
       setShowModal(false);
       setCurrentItem(null);
       await loadData();
-      alert('Proceso de limpieza guardado con éxito.');
+
+      const msg = finalizandoLimpieza
+        ? '✅ Limpieza finalizada completamente. El lote puede avanzar a Curtido.'
+        : remojoDone && !pelhambreDone
+          ? '✅ Remojo finalizado. Puede continuar con Pelambre en el mismo lote.'
+          : 'Proceso de limpieza guardado con éxito.';
+      alert(msg);
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar el proceso: ' + error.message);
@@ -230,26 +278,48 @@ export default function ProcesoLimpieza() {
 
   const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
 
-  const headers = ['Lote', 'Sección', 'Fecha Inicio', 'Peso Actual', 'Costo Remojo', 'Costo Pelambre', 'Estado', 'Acciones'];
-  const renderRow = (item) => (
-    <tr key={item.id}>
-      <td className="font-mono font-bold">{item.codigo_lote}</td>
-      <td className="capitalize">{item.seccion}</td>
-      <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
-      <td>{item.peso_actual} kg</td>
-      <td className="text-right">{formatCurrency(item.costo_remojo)}</td>
-      <td className="text-right">{formatCurrency(item.costo_pelambre)}</td>
-      <td><span className={`px-2 py-0.5 rounded text-xs ${item.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{item.estado}</span></td>
-      <td>
-        <div className="flex space-x-1">
-          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
-          <Button variant="outline" size="sm" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Eye className="w-4 h-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
-          <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
-        </div>
-      </td>
-    </tr>
-  );
+  // Estado visual de cada subproceso
+  const remojoDone = currentItem?.estado_remojo === 'finalizado';
+  const pelhambreDone = currentItem?.estado_pelambre === 'finalizado';
+  const puedeFinalizarLimpieza = remojoDone && pelhambreDone;
+
+  const headers = ['Lote', 'Estado Remojo', 'Estado Pelambre', 'Fecha Inicio', 'Peso Actual', 'Costo Remojo', 'Costo Pelambre', 'Estado', 'Acciones'];
+  const renderRow = (item) => {
+    const estadoR = item.estado_remojo || (item.finalizar_remojo ? 'finalizado' : 'pendiente');
+    const estadoP = item.estado_pelambre || (item.finalizar_pelambre ? 'finalizado' : 'pendiente');
+    return (
+      <tr key={item.id}>
+        <td className="font-mono font-bold">{item.codigo_lote}</td>
+        <td>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${estadoR === 'finalizado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+            {estadoR === 'finalizado' ? '✔ Finalizado' : 'Pendiente'}
+          </span>
+        </td>
+        <td>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${estadoP === 'finalizado' ? 'bg-green-100 text-green-700' : estadoR === 'finalizado' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+            {estadoP === 'finalizado' ? '✔ Finalizado' : estadoR === 'finalizado' ? 'Disponible' : 'Bloqueado'}
+          </span>
+        </td>
+        <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
+        <td>{item.peso_actual} kg</td>
+        <td className="text-right">{formatCurrency(item.costo_remojo)}</td>
+        <td className="text-right">{formatCurrency(item.costo_pelambre)}</td>
+        <td>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${item.estado === 'completado' ? 'bg-emerald-100 text-emerald-700' : item.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'}`}>
+            {item.estado === 'completado' ? 'Limpieza Completa' : item.estado === 'en_proceso' ? 'En Proceso' : item.estado}
+          </span>
+        </td>
+        <td>
+          <div className="flex space-x-1">
+            <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
+            <Button variant="outline" size="sm" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Eye className="w-4 h-4" /></Button>
+            <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
+            <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
 
   const invFiltrados = inventarioEnProceso.filter(inv => {
     if (!searchEnProceso) return true;
@@ -259,7 +329,7 @@ export default function ProcesoLimpieza() {
 
   return (
     <div className="p-6">
-      <PageHeader title="Proceso de Limpieza" description="Remojo y Pelambre. Filtra lotes con etapa=RECEPCIÓN y estado=EN_PROCESO."
+      <PageHeader title="Proceso de Limpieza" description="Remojo y Pelambre. Gestione ambos subprocesos en una misma pantalla por lote."
         onPrint={() => window.print()}
         actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" />Nueva Limpieza</Button>}
       />
@@ -273,17 +343,19 @@ export default function ProcesoLimpieza() {
           <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Limpieza</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
 
-            {/* SELECTOR CÓDIGO EN PROCESO */}
+            {/* SELECTOR CÓDIGO EN PROCESO — siempre visible */}
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <Label className="font-bold text-blue-800">Código en Proceso * <span className="font-normal text-xs">(Etapa: RECEPCIÓN | Estado: EN_PROCESO)</span></Label>
+              <Label className="font-bold text-blue-800">
+                Código en Proceso * <span className="font-normal text-xs">(permanece activo durante todo el proceso de Limpieza)</span>
+              </Label>
               <Input placeholder="Buscar por código lote o descripción..." value={searchEnProceso} onChange={e => setSearchEnProceso(e.target.value)} className="my-1 h-8 text-xs" />
               <Select value={currentItem?.inv_proceso_id || ''} onValueChange={handleSelectInvProceso}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar lote/sublote en proceso..." /></SelectTrigger>
                 <SelectContent>
-                  {invFiltrados.length === 0 && <SelectItem value="__empty__" disabled>No hay lotes disponibles (etapa=recepcion)</SelectItem>}
+                  {invFiltrados.length === 0 && <SelectItem value="__empty__" disabled>No hay lotes disponibles</SelectItem>}
                   {invFiltrados.map(inv => (
                     <SelectItem key={inv.id} value={inv.id}>
-                      {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas) [{inv.tipo || 'LOTE'}]
+                      {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas) [{inv.etapa_actual?.toUpperCase()}]
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -296,7 +368,29 @@ export default function ProcesoLimpieza() {
                   <div><span className="font-semibold">Costo acum.:</span> {formatCurrency(invSeleccionado.costo_acumulado)}</div>
                 </div>
               )}
-              {currentItem?.codigo_lote && <p className="text-xs text-blue-700 mt-1 font-medium">✔ Lote asignado: {currentItem.codigo_lote}</p>}
+              {currentItem?.codigo_lote && (
+                <p className="text-xs text-blue-700 mt-1 font-medium">
+                  ✔ Lote asignado: <strong>{currentItem.codigo_lote}</strong> — este código permanece activo hasta "Finalizar Limpieza"
+                </p>
+              )}
+            </div>
+
+            {/* INDICADOR DE PROGRESO DE SUBPROCESOS */}
+            <div className="flex items-center gap-3 p-3 bg-slate-50 border rounded-lg">
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${remojoDone ? 'bg-green-100 border-green-300 text-green-700' : 'bg-yellow-50 border-yellow-300 text-yellow-700'}`}>
+                {remojoDone ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+                Remojo: {remojoDone ? 'Finalizado' : 'Pendiente'}
+              </div>
+              <span className="text-slate-400">→</span>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${pelhambreDone ? 'bg-green-100 border-green-300 text-green-700' : remojoDone ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-gray-100 border-gray-200 text-gray-400'}`}>
+                {pelhambreDone ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+                Pelambre: {pelhambreDone ? 'Finalizado' : remojoDone ? 'Disponible' : 'Bloqueado'}
+              </div>
+              <span className="text-slate-400">→</span>
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${puedeFinalizarLimpieza ? 'bg-emerald-100 border-emerald-300 text-emerald-700' : 'bg-gray-100 border-gray-200 text-gray-400'}`}>
+                {puedeFinalizarLimpieza ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                Limpieza Completa
+              </div>
             </div>
 
             <div className="grid grid-cols-4 gap-4">
@@ -306,12 +400,24 @@ export default function ProcesoLimpieza() {
                 setCurrentItem({...currentItem, cantidad_pieles: val, peso_promedio: val > 0 ? peso / val : 0});
               }} /></div>
               <div>
-                <Label>Sección *</Label>
-                <Select value={currentItem?.seccion || 'remojo'} onValueChange={v => setCurrentItem({...currentItem, seccion: v})}>
+                <Label>Sección activa *</Label>
+                <Select
+                  value={currentItem?.seccion || 'remojo'}
+                  onValueChange={v => {
+                    // Solo permitir cambiar a pelambre si remojo está finalizado
+                    if (v === 'pelambre' && !remojoDone) {
+                      alert('⚠️ Debe finalizar primero el subproceso de Remojo para acceder a Pelambre.');
+                      return;
+                    }
+                    setCurrentItem({...currentItem, seccion: v});
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="remojo">Remojo</SelectItem>
-                    <SelectItem value="pelambre">Pelambre</SelectItem>
+                    <SelectItem value="pelambre" disabled={!remojoDone}>
+                      Pelambre {!remojoDone ? '(requiere Remojo finalizado)' : ''}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -324,7 +430,9 @@ export default function ProcesoLimpieza() {
             {/* ÍTEMS */}
             <div className="border rounded-lg p-4">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg">Ítems / Productos</h3>
+                <h3 className="font-semibold text-lg">
+                  Ítems / Productos — Sección: <span className="capitalize text-blue-700">{currentItem?.seccion || 'remojo'}</span>
+                </h3>
                 <Button type="button" onClick={addInsumo} size="sm"><Plus className="w-4 h-4 mr-2" />Agregar Item</Button>
               </div>
               <div className="overflow-x-auto">
@@ -334,12 +442,12 @@ export default function ProcesoLimpieza() {
                       <th className="p-2 text-left">Código</th><th className="p-2 text-left">Producto</th>
                       <th className="p-2 text-right">% Dosif.</th><th className="p-2 text-right">Cantidad (kg)</th>
                       <th className="p-2 text-right">Costo Unit.</th><th className="p-2 text-right">IVA</th>
-                      <th className="p-2 text-right">Valor Total</th><th className="p-2"></th>
+                      <th className="p-2 text-right">Valor Total</th><th className="p-2 text-center">Secc.</th><th className="p-2"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {(currentItem?.insumos_utilizados || []).map((item, index) => (
-                      <tr key={index} className="border-t">
+                      <tr key={index} className={`border-t ${item.seccion === 'pelambre' ? 'bg-purple-50' : ''}`}>
                         <td className="p-2">
                           <Select value={item.insumo_id} onValueChange={v => handleInsumoChange(index, 'insumo_id', v)}>
                             <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
@@ -361,9 +469,17 @@ export default function ProcesoLimpieza() {
                           </Select>
                         </td>
                         <td className="p-2 text-right font-medium text-emerald-700">{formatCurrency(item.valor_total)}</td>
+                        <td className="p-2 text-center">
+                          <span className={`text-xs px-1 py-0.5 rounded ${item.seccion === 'pelambre' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {item.seccion}
+                          </span>
+                        </td>
                         <td className="p-2"><Button type="button" variant="ghost" size="icon" onClick={() => removeInsumo(index)}><X className="w-4 h-4 text-red-500" /></Button></td>
                       </tr>
                     ))}
+                    {(currentItem?.insumos_utilizados || []).length === 0 && (
+                      <tr><td colSpan={9} className="p-4 text-center text-slate-400 text-sm">No hay ítems. Haga clic en "Agregar Item".</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -384,17 +500,8 @@ export default function ProcesoLimpieza() {
                 <tbody>
                   {['remojo', 'pelambre'].map(seccion => {
                     const items = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === seccion);
-                    const costoBase = items.reduce((sum, i) => {
-                      const cantidad = parseFloat(i.cantidad) || 0;
-                      const costoUnit = parseFloat(i.costo_unitario) || 0;
-                      return sum + (cantidad * costoUnit);
-                    }, 0);
-                    const ivaTotal = items.reduce((sum, i) => {
-                      const cantidad = parseFloat(i.cantidad) || 0;
-                      const costoUnit = parseFloat(i.costo_unitario) || 0;
-                      const iva = parseFloat(i.iva) || 0;
-                      return sum + (cantidad * costoUnit * iva);
-                    }, 0);
+                    const costoBase = items.reduce((sum, i) => sum + ((parseFloat(i.cantidad) || 0) * (parseFloat(i.costo_unitario) || 0)), 0);
+                    const ivaTotal = items.reduce((sum, i) => sum + ((parseFloat(i.cantidad) || 0) * (parseFloat(i.costo_unitario) || 0) * (parseFloat(i.iva) || 0)), 0);
                     const costoTotal = costoBase + ivaTotal;
                     return (
                       <tr key={seccion} className="border-t">
@@ -405,17 +512,13 @@ export default function ProcesoLimpieza() {
                       </tr>
                     );
                   })}
-                  {/* Fila total general */}
                   {(() => {
                     const allItems = currentItem?.insumos_utilizados || [];
                     const baseTotal = allItems.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0)), 0);
-                    const ivaGlobal = allItems.reduce((sum, i) => {
-                      const sub = (parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0);
-                      return sum + sub * (parseFloat(i.iva)||0);
-                    }, 0);
+                    const ivaGlobal = allItems.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0) * (parseFloat(i.iva)||0)), 0);
                     return (
                       <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold">
-                        <td className="p-2 text-slate-800">TOTAL</td>
+                        <td className="p-2 text-slate-800">TOTAL LIMPIEZA</td>
                         <td className="p-2 text-right text-slate-800">{formatCurrency(baseTotal)}</td>
                         <td className="p-2 text-right text-orange-700">{formatCurrency(ivaGlobal)}</td>
                         <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(baseTotal + ivaGlobal)}</td>
@@ -428,23 +531,79 @@ export default function ProcesoLimpieza() {
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
-            <div className="grid grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-center space-x-2">
-                <Checkbox id="finalizar_remojo" checked={currentItem?.finalizar_remojo || false} onCheckedChange={v => setCurrentItem({...currentItem, finalizar_remojo: v})} />
-                <Label htmlFor="finalizar_remojo" className="font-semibold cursor-pointer">Finalizar Remojo</Label>
+            {/* PANEL DE CONTROL DE ESTADOS */}
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+              <h3 className="font-bold text-blue-800 text-sm">Control de Subprocesos</h3>
+
+              {/* Finalizar Remojo */}
+              <div className={`flex items-center justify-between p-3 rounded-lg border ${remojoDone ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="finalizar_remojo"
+                    checked={remojoDone}
+                    onCheckedChange={v => setCurrentItem({...currentItem, estado_remojo: v ? 'finalizado' : 'pendiente'})}
+                    disabled={remojoDone} // no se puede des-finalizar
+                  />
+                  <div>
+                    <Label htmlFor="finalizar_remojo" className={`font-semibold cursor-pointer ${remojoDone ? 'text-green-700' : ''}`}>
+                      Finalizar Remojo
+                    </Label>
+                    <p className="text-xs text-slate-500">Solo marca Remojo como finalizado. El proceso de limpieza continúa activo.</p>
+                  </div>
+                </div>
+                {remojoDone && <span className="text-green-600 text-xs font-bold flex items-center gap-1"><CheckCircle2 className="w-4 h-4" />Finalizado</span>}
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="finalizar_pelambre" checked={currentItem?.finalizar_pelambre || false} onCheckedChange={v => setCurrentItem({...currentItem, finalizar_pelambre: v})} />
-                <Label htmlFor="finalizar_pelambre" className="font-semibold cursor-pointer">Finalizar Pelambre</Label>
+
+              {/* Finalizar Pelambre — solo habilitado si Remojo está finalizado */}
+              <div className={`flex items-center justify-between p-3 rounded-lg border ${pelhambreDone ? 'bg-green-50 border-green-200' : remojoDone ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="finalizar_pelambre"
+                    checked={pelhambreDone}
+                    disabled={!remojoDone || pelhambreDone}
+                    onCheckedChange={v => setCurrentItem({...currentItem, estado_pelambre: v ? 'finalizado' : 'pendiente'})}
+                  />
+                  <div>
+                    <Label htmlFor="finalizar_pelambre" className={`font-semibold ${pelhambreDone ? 'text-green-700' : !remojoDone ? 'text-gray-400' : 'cursor-pointer'}`}>
+                      Finalizar Pelambre
+                    </Label>
+                    <p className="text-xs text-slate-500">
+                      {!remojoDone ? '🔒 Requiere que Remojo esté finalizado primero.' : 'Solo marca Pelambre como finalizado. El proceso continúa activo.'}
+                    </p>
+                  </div>
+                </div>
+                {pelhambreDone && <span className="text-green-600 text-xs font-bold flex items-center gap-1"><CheckCircle2 className="w-4 h-4" />Finalizado</span>}
               </div>
-              {(currentItem?.finalizar_remojo || currentItem?.finalizar_pelambre) && (
-                <p className="col-span-2 text-xs text-blue-700 font-medium">✅ Al finalizar, se actualizará la tabla central: etapa → LIMPIEZA</p>
-              )}
+
+              {/* Finalizar Limpieza — solo habilitado si AMBOS están finalizados */}
+              <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${puedeFinalizarLimpieza ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id="finalizar_limpieza"
+                    checked={currentItem?.finalizar_limpieza || false}
+                    disabled={!puedeFinalizarLimpieza}
+                    onCheckedChange={v => setCurrentItem({...currentItem, finalizar_limpieza: v})}
+                  />
+                  <div>
+                    <Label htmlFor="finalizar_limpieza" className={`font-bold text-base ${puedeFinalizarLimpieza ? 'text-emerald-700 cursor-pointer' : 'text-gray-400'}`}>
+                      ✅ Finalizar Limpieza (Completa)
+                    </Label>
+                    <p className="text-xs text-slate-500">
+                      {puedeFinalizarLimpieza
+                        ? '🟢 Ambos subprocesos finalizados. Al guardar, el lote avanzará a Curtido.'
+                        : '🔒 Requiere Remojo Y Pelambre finalizados.'}
+                    </p>
+                  </div>
+                </div>
+                {currentItem?.finalizar_limpieza && <span className="text-emerald-600 text-xs font-bold">→ Avanza a Curtido</span>}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button type="submit">Guardar</Button>
+              <Button type="submit" className={currentItem?.finalizar_limpieza ? 'bg-emerald-600 hover:bg-emerald-700' : ''}>
+                {currentItem?.finalizar_limpieza ? '✅ Finalizar Limpieza y Guardar' : 'Guardar'}
+              </Button>
             </div>
           </form>
         </DialogContent>
@@ -456,14 +615,17 @@ export default function ProcesoLimpieza() {
           {selectedItem && (
             <div className="space-y-3 text-sm">
               <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
-              <p><span className="font-semibold">Sección:</span> <span className="capitalize">{selectedItem.seccion}</span></p>
-              <p><span className="font-semibold">Cantidad Pieles:</span> {selectedItem.cantidad_pieles}</p>
+              <p><span className="font-semibold">Cantidad Hojas:</span> {selectedItem.cantidad_pieles}</p>
               <p><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
               {selectedItem.fecha_fin && <p><span className="font-semibold">Fecha Fin:</span> {new Date(selectedItem.fecha_fin).toLocaleDateString()}</p>}
               <p><span className="font-semibold">Peso Actual:</span> {selectedItem.peso_actual} kg</p>
+              <div className="grid grid-cols-2 gap-2 p-2 bg-gray-50 rounded">
+                <p><span className="font-semibold">Estado Remojo:</span> <span className={selectedItem.estado_remojo === 'finalizado' ? 'text-green-700 font-bold' : 'text-yellow-700'}>{selectedItem.estado_remojo || 'pendiente'}</span></p>
+                <p><span className="font-semibold">Estado Pelambre:</span> <span className={selectedItem.estado_pelambre === 'finalizado' ? 'text-green-700 font-bold' : 'text-yellow-700'}>{selectedItem.estado_pelambre || 'pendiente'}</span></p>
+              </div>
               <p><span className="font-semibold">Costo Remojo:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.costo_remojo)}</span></p>
               <p><span className="font-semibold">Costo Pelambre:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.costo_pelambre)}</span></p>
-              <p><span className="font-semibold">Estado:</span> <span className="capitalize">{selectedItem.estado}</span></p>
+              <p><span className="font-semibold">Estado General:</span> <span className="capitalize font-bold">{selectedItem.estado === 'completado' ? '✅ Limpieza Completa' : selectedItem.estado}</span></p>
             </div>
           )}
           <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
