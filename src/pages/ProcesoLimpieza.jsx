@@ -550,7 +550,18 @@ export default function ProcesoLimpieza() {
                     onCheckedChange={v => {
                       const nuevoEstadoRemojo = v ? 'finalizado' : 'pendiente';
                       const ambosFinalizados = nuevoEstadoRemojo === 'finalizado' && pelhambreDone;
-                      setCurrentItem({...currentItem, estado_remojo: nuevoEstadoRemojo, finalizar_limpieza: ambosFinalizados});
+                      setCurrentItem({
+                        ...currentItem,
+                        estado_remojo: nuevoEstadoRemojo,
+                        finalizar_limpieza: ambosFinalizados,
+                        // Al finalizar remojo: limpiar ítems y cambiar sección a pelambre
+                        ...(v ? {
+                          seccion: 'pelambre',
+                          insumos_utilizados: [],
+                          costo_remojo: currentItem.costo_remojo, // conservar costo ya calculado
+                          costo_pelambre: 0,
+                        } : {})
+                      });
                     }}
                     disabled={remojoDone}
                   />
