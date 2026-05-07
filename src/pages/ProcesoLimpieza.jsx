@@ -95,13 +95,19 @@ export default function ProcesoLimpieza() {
     if (!inv) return;
     setInvSeleccionado(inv);
     setSearchEnProceso('');
-    setCurrentItem(prev => ({
-      ...prev,
-      inv_proceso_id: inv.id,
-      codigo_lote: inv.codigo_lote || inv.codigo || '',
-      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles,
-      peso_actual: inv.peso_actual || prev.peso_actual
-    }));
+    setCurrentItem(prev => {
+      const cantidadPieles = inv.cantidad_hojas || prev.cantidad_pieles;
+      const pesoActual = inv.peso_actual || prev.peso_actual;
+      const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
+      return {
+        ...prev,
+        inv_proceso_id: inv.id,
+        codigo_lote: inv.codigo_lote || inv.codigo || '',
+        cantidad_pieles: cantidadPieles,
+        peso_actual: pesoActual,
+        peso_promedio: pesoPromedio
+      };
+    });
   };
 
   const addInsumo = () => {
@@ -541,8 +547,12 @@ export default function ProcesoLimpieza() {
                   <Checkbox
                     id="finalizar_remojo"
                     checked={remojoDone}
-                    onCheckedChange={v => setCurrentItem({...currentItem, estado_remojo: v ? 'finalizado' : 'pendiente'})}
-                    disabled={remojoDone} // no se puede des-finalizar
+                    onCheckedChange={v => {
+                      const nuevoEstadoRemojo = v ? 'finalizado' : 'pendiente';
+                      const ambosFinalizados = nuevoEstadoRemojo === 'finalizado' && pelhambreDone;
+                      setCurrentItem({...currentItem, estado_remojo: nuevoEstadoRemojo, finalizar_limpieza: ambosFinalizados});
+                    }}
+                    disabled={remojoDone}
                   />
                   <div>
                     <Label htmlFor="finalizar_remojo" className={`font-semibold cursor-pointer ${remojoDone ? 'text-green-700' : ''}`}>
@@ -561,7 +571,11 @@ export default function ProcesoLimpieza() {
                     id="finalizar_pelambre"
                     checked={pelhambreDone}
                     disabled={!remojoDone || pelhambreDone}
-                    onCheckedChange={v => setCurrentItem({...currentItem, estado_pelambre: v ? 'finalizado' : 'pendiente'})}
+                    onCheckedChange={v => {
+                      const nuevoEstadoPelambre = v ? 'finalizado' : 'pendiente';
+                      const ambosFinalizados = remojoDone && nuevoEstadoPelambre === 'finalizado';
+                      setCurrentItem({...currentItem, estado_pelambre: nuevoEstadoPelambre, finalizar_limpieza: ambosFinalizados});
+                    }}
                   />
                   <div>
                     <Label htmlFor="finalizar_pelambre" className={`font-semibold ${pelhambreDone ? 'text-green-700' : !remojoDone ? 'text-gray-400' : 'cursor-pointer'}`}>
