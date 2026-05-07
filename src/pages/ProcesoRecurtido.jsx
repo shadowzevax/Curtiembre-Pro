@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProcesoProduccion, Insumo, ProductoTerminado, MovimientoInventario, InventarioEnProceso } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
-import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Eye, X, Table } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Eye, Trash2, Table, CheckCircle2, Lock, AlertCircle } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -26,20 +25,25 @@ export default function ProcesoRecurtido() {
   const [insumos, setInsumos] = useState([]);
   const [productos, setProductos] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
-  const [searchEnProceso, setSearchEnProceso] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Modal nuevo/editar sublote
   const [showModal, setShowModal] = useState(false);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [searchEnProceso, setSearchEnProceso] = useState('');
+  const [invSeleccionado, setInvSeleccionado] = useState(null);
+
+  // Modal detalle
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+
+  // Consolidado
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
-  const [invSeleccionado, setInvSeleccionado] = useState(null);
-  const [stockDisponible, setStockDisponible] = useState(null);
-  const [loadingStock, setLoadingStock] = useState(false);
-  const [showTrazabilidad, setShowTrazabilidad] = useState(false);
-  const [trazabilidadData, setTrazabilidadData] = useState(null);
+
+  // Filtro lote activo en tabla de control
+  const [loteActivoControl, setLoteActivoControl] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -53,7 +57,6 @@ export default function ProcesoRecurtido() {
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
-      // FILTRO: solo registros en estado EN_PROCESO y etapa = curtido
       const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
         .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'curtido');
       setInventarioEnProceso(filtrados);
@@ -66,70 +69,64 @@ export default function ProcesoRecurtido() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleOpenModal = (item = null) => {
-    setIsEditing(!!item);
-    setCurrentItem(item || {
-      tipo_proceso: 'recurtido',
-      codigo_lote: '',
-      inv_proceso_id: '',
-      codigo_color: '',
-      nombre_color: '',
-      cantidad_pieles: 0,
-      actividad: 'humectacion',
-      fecha_inicio: new Date().toISOString().split('T')[0],
-      fecha_fin: '',
-      peso_actual: 0,
-      peso_promedio: 0,
-      subtotal_humectacion: 0,
-      subtotal_recromado: 0,
-      subtotal_recurtido: 0,
-      observaciones: '',
-      insumos_utilizados: [],
-      estado: 'pendiente',
-      finalizar_recurtido: false
-    });
-    setInvSeleccionado(null);
-    setSearchEnProceso('');
-    setStockDisponible(null);
-    setTrazabilidadData(null);
-    setShowModal(true);
+  // ─── CÁLCULOS DE CONTROL DE LOTE ───────────────────────────────────────────
+
+  // Agrupa procesos de recurtido por código_lote
+  const lotesCodigos = [...new Set(procesos.map(p => p.codigo_lote).filter(Boolean))];
+
+  // Para un lote dado: total hojas del inventario en proceso
+  const getTotalHojasLote = (codigoLote) => {
+    const inv = inventarioEnProceso.find(i => i.codigo_lote === codigoLote);
+    if (inv) return inv.cantidad_hojas || 0;
+    // fallback: buscar en procesos de curtido
+    return 0;
   };
 
-  const calcularStock = async (inv) => {
-    if (!inv) return;
-    setLoadingStock(true);
-    try {
-      const codigoEnProceso = inv.codigo_lote;
-      console.log('[Recurtido] Calculando stock para código en proceso:', codigoEnProceso);
+  // Sublotes de recurtido para un lote
+  const getSublotesLote = (codigoLote) => procesos
+    .filter(p => p.codigo_lote === codigoLote)
+    .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
 
-      // Hojas en curtido (desde ProcesoProduccion tipo=curtido con este código)
-      const curtidos = await ProcesoProduccion.filter({ tipo_proceso: 'curtido', codigo_lote: codigoEnProceso });
-      console.log('[Recurtido] Registros curtido encontrados:', curtidos.length, curtidos);
-      // Acepta cantidad_pieles o cantidad_hojas como campo de cantidad
-      const totalCurtido = (Array.isArray(curtidos) ? curtidos : [])
-        .reduce((sum, c) => sum + (parseFloat(c.cantidad_pieles) || parseFloat(c.cantidad_hojas) || 0), 0);
-      console.log('[Recurtido] Total hojas en curtido:', totalCurtido);
+  const getTotalHojasRecurtidas = (codigoLote) =>
+    getSublotesLote(codigoLote).reduce((sum, p) => sum + (parseFloat(p.cantidad_pieles) || 0), 0);
 
-      // Hojas ya registradas en recurtido con este código
-      const recurtidos = await ProcesoProduccion.filter({ tipo_proceso: 'recurtido', codigo_lote: codigoEnProceso });
-      console.log('[Recurtido] Registros recurtido encontrados:', recurtidos.length, recurtidos);
-      const totalRecurtido = (Array.isArray(recurtidos) ? recurtidos : [])
-        .reduce((sum, r) => sum + (parseFloat(r.cantidad_pieles) || parseFloat(r.cantidad_hojas) || 0), 0);
-      console.log('[Recurtido] Total hojas ya recurtidas:', totalRecurtido);
+  const isRecurtidoGeneralFinalizado = (codigoLote) =>
+    getSublotesLote(codigoLote).some(p => p.finalizar_recurtido_general === true);
 
-      // Fallback: si no hay registros en curtido, usar cantidad_hojas del inventario
-      const stockBase = totalCurtido > 0 ? totalCurtido : (parseFloat(inv.cantidad_hojas) || 0);
-      const stock = Math.max(0, stockBase - totalRecurtido);
-      console.log('[Recurtido] Stock disponible calculado:', stock, '(base:', stockBase, '- recurtido:', totalRecurtido, ')');
+  // ─── HANDLERS MODAL ────────────────────────────────────────────────────────
 
-      setStockDisponible(stock);
-      setTrazabilidadData({ codigoEnProceso, totalCurtido: stockBase, totalRecurtido, stock });
-    } catch (err) {
-      console.error('[Recurtido] Error calculando stock:', err);
-      setStockDisponible(null);
-    } finally {
-      setLoadingStock(false);
+  const handleOpenModal = (item = null) => {
+    setIsEditing(!!item);
+    if (item) {
+      setCurrentItem({ ...item });
+      const inv = inventarioEnProceso.find(i => i.codigo_lote === item.codigo_lote);
+      setInvSeleccionado(inv || null);
+    } else {
+      setCurrentItem({
+        tipo_proceso: 'recurtido',
+        codigo_lote: '',
+        inv_proceso_id: '',
+        codigo_color: '',
+        nombre_color: '',
+        cantidad_pieles: 0,
+        actividad: 'humectacion',
+        fecha_inicio: new Date().toISOString().split('T')[0],
+        fecha_fin: '',
+        peso_actual: 0,
+        peso_promedio: 0,
+        subtotal_humectacion: 0,
+        subtotal_recromado: 0,
+        subtotal_recurtido: 0,
+        observaciones: '',
+        insumos_utilizados: [],
+        estado: 'pendiente',
+        finalizar_recurtido: false,
+        finalizar_recurtido_general: false
+      });
+      setInvSeleccionado(null);
     }
+    setSearchEnProceso('');
+    setShowModal(true);
   };
 
   const handleSelectInvProceso = (id) => {
@@ -137,15 +134,11 @@ export default function ProcesoRecurtido() {
     if (!inv) return;
     setInvSeleccionado(inv);
     setSearchEnProceso('');
-    setStockDisponible(null);
     setCurrentItem(prev => ({
       ...prev,
       inv_proceso_id: inv.id,
       codigo_lote: inv.codigo_lote || inv.codigo || '',
-      cantidad_pieles: inv.cantidad_hojas || prev.cantidad_pieles,
-      peso_actual: inv.peso_actual || prev.peso_actual
     }));
-    calcularStock(inv);
   };
 
   const addInsumo = () => {
@@ -212,42 +205,59 @@ export default function ProcesoRecurtido() {
     });
   };
 
+  // ─── GUARDAR SUBLOTE ────────────────────────────────────────────────────────
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!currentItem.inv_proceso_id && !isEditing) {
-      alert('⚠️ Debe seleccionar un "Código en Proceso" de la tabla central.');
+      alert('⚠️ Debe seleccionar un "Código en Proceso".');
       return;
     }
-    // Validar stock disponible
-    if (!isEditing && stockDisponible !== null) {
-      const cantIngresada = parseFloat(currentItem.cantidad_pieles) || 0;
-      if (cantIngresada > stockDisponible) {
-        alert(`❌ La cantidad ingresada (${cantIngresada} hojas) supera el stock disponible para este código en proceso (${stockDisponible} hojas).`);
-        return;
-      }
-      if (stockDisponible === 0) {
-        alert('❌ No hay stock disponible para este código en proceso. Ya fue totalmente recurtido.');
-        return;
-      }
+
+    const codigoLote = currentItem.codigo_lote;
+    const inv = invSeleccionado || inventarioEnProceso.find(i => i.codigo_lote === codigoLote);
+    const totalHojasLote = inv?.cantidad_hojas || 0;
+    const sublotesExistentes = getSublotesLote(codigoLote);
+    const totalYaRecurtido = sublotesExistentes
+      .filter(p => !isEditing || p.id !== currentItem.id)
+      .reduce((sum, p) => sum + (parseFloat(p.cantidad_pieles) || 0), 0);
+    const cantNueva = parseFloat(currentItem.cantidad_pieles) || 0;
+
+    // Validar cantidad total no supere el lote
+    if (totalHojasLote > 0 && (totalYaRecurtido + cantNueva) > totalHojasLote) {
+      alert(`❌ La cantidad ingresada supera el total del lote.\nTotal lote: ${totalHojasLote} hojas\nYa registradas: ${totalYaRecurtido} hojas\nDisponibles: ${totalHojasLote - totalYaRecurtido} hojas`);
+      return;
     }
+
+    // Validar que el recurtido general no esté ya finalizado
+    if (!isEditing && isRecurtidoGeneralFinalizado(codigoLote)) {
+      alert('❌ El Recurtido General de este lote ya fue finalizado. No se pueden agregar más registros.');
+      return;
+    }
+
     try {
+      // Número de sublote = cantidad de sublotes existentes + 1
+      const numSublote = isEditing
+        ? (currentItem.numero_sublote_recurtido || 1)
+        : sublotesExistentes.length + 1;
+
       const dataToSave = {
         ...currentItem,
-        numero_proceso: `${currentItem.codigo_lote}-RCT`,
+        numero_proceso: `${codigoLote}-RCT-${String(numSublote).padStart(2, '0')}`,
+        numero_sublote_recurtido: numSublote,
         estado: currentItem.finalizar_recurtido ? 'completado' : 'pendiente',
-        fecha_fin: currentItem.finalizar_recurtido && !currentItem.fecha_fin ? new Date().toISOString().split('T')[0] : currentItem.fecha_fin
+        fecha_fin: currentItem.finalizar_recurtido && !currentItem.fecha_fin
+          ? new Date().toISOString().split('T')[0]
+          : currentItem.fecha_fin
       };
 
-      let procesoId;
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
-        procesoId = currentItem.id;
       } else {
-        const created = await ProcesoProduccion.create(dataToSave);
-        procesoId = created.id;
+        await ProcesoProduccion.create(dataToSave);
       }
 
-      // Descontar insumos del inventario
+      // Descontar insumos del inventario (solo en creación)
       if (!isEditing && dataToSave.insumos_utilizados?.length > 0) {
         for (const insumo of dataToSave.insumos_utilizados) {
           if (insumo.insumo_id && insumo.cantidad > 0) {
@@ -257,8 +267,8 @@ export default function ProcesoRecurtido() {
                 tipo_movimiento: 'salida', insumo_id: insumo.insumo_id,
                 cantidad: -(insumo.cantidad), costo_unitario: insumoData.costo_promedio || 0,
                 fecha_movimiento: dataToSave.fecha_inicio,
-                referencia: `RECURTIDO-${dataToSave.codigo_lote}-${dataToSave.nombre_color}`,
-                observaciones: `Consumo recurtido (${dataToSave.actividad}) - Lote ${dataToSave.codigo_lote}`,
+                referencia: `RECURTIDO-${codigoLote}-${dataToSave.nombre_color}-S${numSublote}`,
+                observaciones: `Consumo recurtido (${dataToSave.actividad}) - Lote ${codigoLote} Sublote ${numSublote}`,
                 usuario_id: 'system'
               });
               const movimientos = await MovimientoInventario.filter({ insumo_id: insumo.insumo_id });
@@ -269,193 +279,320 @@ export default function ProcesoRecurtido() {
         }
       }
 
-      // ACTUALIZAR TABLA CENTRAL Y CREAR EN INVENTARIO EN PROCESO AL FINALIZAR
-      if (dataToSave.finalizar_recurtido && currentItem.inv_proceso_id) {
-        const invActual = inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id);
-        const costoProceso = (dataToSave.subtotal_humectacion || 0) + (dataToSave.subtotal_recromado || 0) + (dataToSave.subtotal_recurtido || 0);
-        const costoTotal = (invActual?.costo_acumulado || 0) + costoProceso;
-        const cantidadHojas = dataToSave.cantidad_pieles || invActual?.cantidad_hojas || 0;
-        const costoPromedio = cantidadHojas > 0 ? costoTotal / cantidadHojas : 0;
-
-        // Actualizar registro en tabla central: FINALIZADO
-        await InventarioEnProceso.update(currentItem.inv_proceso_id, {
-          etapa_actual: 'recurtido',
-          estado_actual: 'FINALIZADO',
-          estado_proceso: 'piel_recurtida',
-          peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
-          costo_acumulado: costoTotal,
-          color_base: dataToSave.nombre_color || '',
-          codigo_color: dataToSave.codigo_color || ''
-        });
-        console.log(`✅ Tabla central actualizada: etapa → recurtido, estado → FINALIZADO`);
-
-        // Verificar consolidación de sublotes si aplica
-        if (invActual?.codigo_lote_padre) {
-          await verificarConsolidacion(invActual.codigo_lote_padre, costoTotal, cantidadHojas, dataToSave, procesoId);
-        }
-      }
-
       setShowModal(false);
-      setCurrentItem(null);
       await loadData();
-      alert('Proceso de recurtido guardado con éxito.');
+      alert('Sublote de recurtido guardado correctamente.');
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Error al guardar el proceso: ' + error.message);
+      alert('Error al guardar: ' + error.message);
     }
   };
 
-  // REINTEGRACIÓN AUTOMÁTICA: si todos los sublotes están FINALIZADOS
-  const verificarConsolidacion = async (codigoPadre, costoUltimoSublote, cantUltimoSublote, dataToSave, procesoId) => {
+  // ─── FINALIZAR SUBLOTE INDIVIDUAL ──────────────────────────────────────────
+
+  const handleFinalizarSublote = async (proceso) => {
+    if (!window.confirm(`¿Finalizar el sublote "${proceso.nombre_color} - Sublote ${proceso.numero_sublote_recurtido || '#'}"?`)) return;
     try {
-      const todos = await InventarioEnProceso.list();
-      const sublotesDelLote = (Array.isArray(todos) ? todos : []).filter(i => i.codigo_lote_padre === codigoPadre);
-      const todosFinalizados = sublotesDelLote.length > 0 && sublotesDelLote.every(s => s.estado_actual === 'FINALIZADO');
-
-      if (todosFinalizados) {
-        // Sumar totales
-        const cantidadTotal = sublotesDelLote.reduce((sum, s) => sum + (s.cantidad_hojas || 0), 0);
-        const pesoTotal = sublotesDelLote.reduce((sum, s) => sum + (s.peso_actual || 0), 0);
-        const costoTotal = sublotesDelLote.reduce((sum, s) => sum + (s.costo_acumulado || 0), 0);
-        const costoPromedioFinal = cantidadTotal > 0 ? costoTotal / cantidadTotal : 0;
-
-        // Crear registro consolidado FINAL en InventarioEnProceso
-        const existeConsolidado = (Array.isArray(todos) ? todos : []).some(i => i.codigo_lote === `${codigoPadre}-FINAL`);
-        if (!existeConsolidado) {
-          await InventarioEnProceso.create({
-            codigo: codigoPadre,
-            descripcion: `Consolidado final de ${codigoPadre}`,
-            codigo_lote: `${codigoPadre}-FINAL`,
-            codigo_lote_padre: codigoPadre,
-            tipo: 'LOTE',
-            origen_modulo: 'recurtido',
-            etapa_actual: 'recurtido',
-            estado_proceso: 'piel_recurtida',
-            estado_actual: 'EN_PROCESO',
-            cantidad_hojas: cantidadTotal,
-            cantidad_pieles: cantidadTotal,
-            peso_actual: pesoTotal,
-            costo_acumulado: costoTotal,
-            costo_promedio: costoPromedioFinal,
-            color_base: dataToSave.nombre_color || '',
-            fecha_ingreso_proceso: dataToSave.fecha_fin || new Date().toISOString().split('T')[0],
-            proceso_origen_id: procesoId
-          });
-          console.log(`✅ Lote consolidado ${codigoPadre}-FINAL creado. Total hojas: ${cantidadTotal}`);
-        }
-
-        // Marcar sublotes como CONSOLIDADO
-        for (const sub of sublotesDelLote) {
-          await InventarioEnProceso.update(sub.id, { estado_actual: 'CONSOLIDADO' });
-        }
-
-        alert(`✅ Todos los sublotes del lote ${codigoPadre} han finalizado. Se creó el lote consolidado ${codigoPadre}-FINAL en Inventario en Proceso.`);
-      }
+      await ProcesoProduccion.update(proceso.id, {
+        estado: 'completado',
+        finalizar_recurtido: true,
+        fecha_fin: new Date().toISOString().split('T')[0]
+      });
+      await loadData();
     } catch (err) {
-      console.error('Error en consolidación:', err);
+      alert('Error al finalizar sublote: ' + err.message);
+    }
+  };
+
+  // ─── FINALIZAR RECURTIDO GENERAL ───────────────────────────────────────────
+
+  const handleFinalizarRecurtidoGeneral = async (codigoLote) => {
+    const sublotes = getSublotesLote(codigoLote);
+    const inv = inventarioEnProceso.find(i => i.codigo_lote === codigoLote);
+    const totalHojasLote = inv?.cantidad_hojas || 0;
+    const totalRecurtido = getTotalHojasRecurtidas(codigoLote);
+
+    // Validaciones
+    const pendientes = sublotes.filter(p => p.estado !== 'completado');
+    if (pendientes.length > 0) {
+      alert(`❌ Existen ${pendientes.length} sublote(s) pendientes. Debe finalizar todos los sublotes antes de cerrar el recurtido general.`);
+      return;
+    }
+    if (totalHojasLote > 0 && totalRecurtido < totalHojasLote) {
+      alert(`❌ Faltan ${totalHojasLote - totalRecurtido} hojas por registrar.\nTotal lote: ${totalHojasLote} | Total recurtido: ${totalRecurtido}`);
+      return;
+    }
+    if (!window.confirm(`¿Finalizar el Recurtido General del lote ${codigoLote}?\n\nEsto cerrará completamente el proceso de recurtido para este lote y bloqueará nuevos registros.`)) return;
+
+    try {
+      // Marcar todos los procesos del lote con finalizar_recurtido_general = true
+      for (const p of sublotes) {
+        await ProcesoProduccion.update(p.id, { finalizar_recurtido_general: true });
+      }
+
+      // Actualizar tabla central
+      if (inv) {
+        const costoTotal = sublotes.reduce((sum, p) => sum + (p.subtotal_humectacion || 0) + (p.subtotal_recromado || 0) + (p.subtotal_recurtido || 0), 0);
+        const costoAcum = (inv.costo_acumulado || 0) + costoTotal;
+        await InventarioEnProceso.update(inv.id, {
+          etapa_actual: 'recurtido',
+          estado_actual: 'FINALIZADO',
+          estado_proceso: 'piel_recurtida',
+          costo_acumulado: costoAcum,
+          costo_promedio: totalHojasLote > 0 ? costoAcum / totalHojasLote : 0
+        });
+      }
+
+      await loadData();
+      alert(`✅ Recurtido General del lote ${codigoLote} finalizado correctamente.`);
+    } catch (err) {
+      alert('Error al finalizar recurtido general: ' + err.message);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar este proceso?')) return;
+    if (!window.confirm('¿Eliminar este sublote de recurtido?')) return;
     try { await ProcesoProduccion.delete(id); loadData(); } catch (error) { console.error(error); }
   };
 
+  // ─── DATOS PARA TABLA DE CONTROL ───────────────────────────────────────────
+
   const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
-
-  const headers = ['Lote', 'Color', 'Actividad', 'Cantidad', 'Fecha Inicio', 'Peso Actual', 'Estado', 'Acciones'];
-  const renderRow = (item) => (
-    <tr key={item.id}>
-      <td className="font-mono font-bold">{item.codigo_lote}</td>
-      <td>{item.nombre_color || 'N/A'}</td>
-      <td className="capitalize">{item.actividad}</td>
-      <td>{item.cantidad_pieles}</td>
-      <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
-      <td>{item.peso_actual} kg</td>
-      <td><span className={`px-2 py-0.5 rounded text-xs ${item.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{item.estado}</span></td>
-      <td>
-        <div className="flex space-x-1">
-          <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
-          <Button variant="outline" size="sm" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Eye className="w-4 h-4" /></Button>
-          <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
-          <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
-        </div>
-      </td>
-    </tr>
-  );
-
   const invFiltrados = inventarioEnProceso.filter(inv => {
     if (!searchEnProceso) return true;
     const s = searchEnProceso.toLowerCase();
     return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
   });
 
+  // Lote seleccionado para tabla de control (default: primer lote con procesos)
+  const loteControlActual = loteActivoControl || lotesCodigos[0] || '';
+  const sublotesControl = getSublotesLote(loteControlActual);
+  const totalHojasControl = (() => {
+    const inv = inventarioEnProceso.find(i => i.codigo_lote === loteControlActual);
+    return inv?.cantidad_hojas || sublotesControl.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
+  })();
+  const totalRecurtidoControl = getTotalHojasRecurtidas(loteControlActual);
+  const faltanHojas = Math.max(0, totalHojasControl - totalRecurtidoControl);
+  const generalFinalizado = isRecurtidoGeneralFinalizado(loteControlActual);
+  const todosFinalizados = sublotesControl.length > 0 && sublotesControl.every(p => p.estado === 'completado');
+  const puedeFinalizarGeneral = todosFinalizados && faltanHojas === 0 && !generalFinalizado && sublotesControl.length > 0;
+
   return (
-    <div className="p-6">
-      <PageHeader title="Proceso de Recurtido" description="Filtra lotes con etapa=CURTIDO y estado=EN_PROCESO. Al finalizar actualiza tabla central."
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Proceso de Recurtido"
+        description="Control por color y sublote. Finalización general del lote al completar todos los sublotes."
         onPrint={() => window.print()}
-        actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" />Nuevo Recurtido</Button>}
+        actionButton={
+          <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
+            <Plus className="w-4 h-4 mr-2" />Nuevo Sublote Recurtido
+          </Button>
+        }
       />
-      <Card id="tabla-imprimible">
-        <CardHeader><CardTitle>Listado de Procesos de Recurtido</CardTitle></CardHeader>
-        <CardContent>{loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}</CardContent>
+
+      {/* ── TABLA DE CONTROL ─────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-base">Control de Recurtido por Sublote</CardTitle>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-slate-500">Lote:</Label>
+            <Select value={loteControlActual} onValueChange={setLoteActivoControl}>
+              <SelectTrigger className="w-52 h-8 text-xs">
+                <SelectValue placeholder="Seleccionar lote..." />
+              </SelectTrigger>
+              <SelectContent>
+                {lotesCodigos.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {lotesCodigos.length === 0 && <SelectItem value="__none__" disabled>Sin lotes registrados</SelectItem>}
+              </SelectContent>
+            </Select>
+            {loteControlActual && (
+              <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(loteControlActual); setShowConsolidadoModal(true); }}>
+                <Table className="w-3 h-3 mr-1" />Consolidado
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loteControlActual ? (
+            <>
+              {/* Resumen cantidades */}
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500">Total Hojas del Lote</p>
+                  <p className="text-2xl font-bold text-blue-700">{totalHojasControl}</p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                  <p className="text-xs text-slate-500">Hojas Recurtidas</p>
+                  <p className="text-2xl font-bold text-emerald-700">{totalRecurtidoControl}</p>
+                </div>
+                <div className={`border rounded-lg p-3 text-center ${faltanHojas > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                  <p className="text-xs text-slate-500">Hojas por Recurtir</p>
+                  <p className={`text-2xl font-bold ${faltanHojas > 0 ? 'text-amber-700' : 'text-green-700'}`}>{faltanHojas}</p>
+                </div>
+              </div>
+
+              {/* Tabla sublotes */}
+              <div className="overflow-x-auto border rounded-lg mb-4">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="p-2 text-left font-medium">Código en Proceso</th>
+                      <th className="p-2 text-left font-medium">Color Base</th>
+                      <th className="p-2 text-center font-medium">Sublote #</th>
+                      <th className="p-2 text-center font-medium">Actividad</th>
+                      <th className="p-2 text-right font-medium">Cant. Hojas</th>
+                      <th className="p-2 text-center font-medium">Estado</th>
+                      <th className="p-2 text-center font-medium">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sublotesControl.length === 0 ? (
+                      <tr><td colSpan={7} className="p-4 text-center text-slate-400">No hay sublotes registrados para este lote.</td></tr>
+                    ) : (
+                      sublotesControl.map((proc) => {
+                        const finalizado = proc.estado === 'completado';
+                        return (
+                          <tr key={proc.id} className={`border-t ${finalizado ? 'bg-green-50' : 'bg-white'}`}>
+                            <td className="p-2 font-mono font-bold text-xs">{proc.codigo_lote}</td>
+                            <td className="p-2">{proc.nombre_color || '—'}</td>
+                            <td className="p-2 text-center">
+                              <span className="inline-block bg-slate-100 text-slate-700 rounded px-2 py-0.5 text-xs font-bold">
+                                #{proc.numero_sublote_recurtido || '?'}
+                              </span>
+                            </td>
+                            <td className="p-2 text-center capitalize text-xs">{proc.actividad}</td>
+                            <td className="p-2 text-right font-bold">{proc.cantidad_pieles}</td>
+                            <td className="p-2 text-center">
+                              {finalizado
+                                ? <Badge className="bg-green-100 text-green-700 border-green-300">Finalizado</Badge>
+                                : <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300">Pendiente</Badge>
+                              }
+                            </td>
+                            <td className="p-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {finalizado || generalFinalizado ? (
+                                  <span className="flex items-center gap-1 text-xs text-slate-400">
+                                    <Lock className="w-3 h-3" /> Bloqueado
+                                  </span>
+                                ) : (
+                                  <>
+                                    <Button size="sm" variant="outline" onClick={() => handleOpenModal(proc)} className="h-7 text-xs">Editar</Button>
+                                    <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700" onClick={() => handleFinalizarSublote(proc)}>
+                                      <CheckCircle2 className="w-3 h-3 mr-1" />Finalizar
+                                    </Button>
+                                  </>
+                                )}
+                                <Button variant="ghost" size="sm" onClick={() => { setSelectedItem(proc); setShowDetailModal(true); }} className="h-7">
+                                  <Eye className="w-3 h-3" />
+                                </Button>
+                                {!finalizado && !generalFinalizado && (
+                                  <Button variant="ghost" size="sm" onClick={() => handleDelete(proc.id)} className="h-7 text-red-500">
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                  {sublotesControl.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-100 font-bold border-t-2">
+                        <td colSpan={4} className="p-2 text-right">TOTAL RECURTIDO:</td>
+                        <td className="p-2 text-right">{totalRecurtidoControl}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              {/* Botón Finalizar General */}
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-500">
+                  {generalFinalizado && (
+                    <span className="flex items-center gap-1 text-green-700 font-medium">
+                      <CheckCircle2 className="w-4 h-4" /> Recurtido General FINALIZADO — Lote cerrado
+                    </span>
+                  )}
+                  {!generalFinalizado && !puedeFinalizarGeneral && sublotesControl.length > 0 && (
+                    <span className="flex items-center gap-1 text-amber-700">
+                      <AlertCircle className="w-4 h-4" />
+                      {faltanHojas > 0
+                        ? `Faltan ${faltanHojas} hojas por registrar`
+                        : `Hay ${sublotesControl.filter(p => p.estado !== 'completado').length} sublote(s) pendiente(s)`
+                      }
+                    </span>
+                  )}
+                </div>
+                <Button
+                  disabled={!puedeFinalizarGeneral}
+                  onClick={() => handleFinalizarRecurtidoGeneral(loteControlActual)}
+                  className="bg-purple-700 hover:bg-purple-800 disabled:opacity-40"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Finalizar Recurtido General
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-slate-400 text-center py-8 text-sm">
+              {procesos.length === 0
+                ? 'Aún no hay sublotes de recurtido registrados. Use el botón "Nuevo Sublote Recurtido".'
+                : 'Seleccione un lote para ver el control.'
+              }
+            </p>
+          )}
+        </CardContent>
       </Card>
 
+      {/* ── MODAL NUEVO / EDITAR SUBLOTE ─────────────────────────────────── */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Proceso de Recurtido</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Sublote de Recurtido</DialogTitle>
+          </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
 
             {/* SELECTOR CÓDIGO EN PROCESO */}
-            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <Label className="font-bold text-purple-800">Código en Proceso * <span className="font-normal text-xs">(Etapa: CURTIDO | Estado: EN_PROCESO)</span></Label>
-              <Input placeholder="Buscar por código lote o descripción..." value={searchEnProceso} onChange={e => setSearchEnProceso(e.target.value)} className="my-1 h-8 text-xs" />
-              <Select value={currentItem?.inv_proceso_id || ''} onValueChange={handleSelectInvProceso}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar lote/sublote en proceso..." /></SelectTrigger>
-                <SelectContent>
-                  {invFiltrados.length === 0 && <SelectItem value="__empty__" disabled>No hay lotes disponibles (etapa=curtido)</SelectItem>}
-                  {invFiltrados.map(inv => (
-                    <SelectItem key={inv.id} value={inv.id}>
-                      {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas) [{inv.tipo || 'LOTE'}]
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {invSeleccionado && (
-                <div className="mt-2 grid grid-cols-4 gap-2 text-xs bg-white p-2 rounded border">
-                  <div><span className="font-semibold">Lote:</span> <span className="font-mono">{invSeleccionado.codigo_lote}</span></div>
-                  <div><span className="font-semibold">Hojas:</span> {invSeleccionado.cantidad_hojas}</div>
-                  <div><span className="font-semibold">Peso:</span> {invSeleccionado.peso_actual} kg</div>
-                  <div><span className="font-semibold">Costo acum.:</span> {formatCurrency(invSeleccionado.costo_acumulado)}</div>
-                </div>
-              )}
-              {currentItem?.codigo_lote && <p className="text-xs text-purple-700 mt-1 font-medium">✔ Lote asignado: {currentItem.codigo_lote}</p>}
-              {/* STOCK DISPONIBLE */}
-              {invSeleccionado && (
-                <div className="mt-2">
-                  {loadingStock ? (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg text-sm text-slate-600">
-                      <span className="animate-spin">⏳</span> Calculando stock disponible...
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className={`px-3 py-2 rounded-lg text-sm font-bold border ${stockDisponible === null ? 'bg-amber-100 text-amber-800 border-amber-300' : stockDisponible > 0 ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'}`}>
-                        📦 Disponible en inventario:{' '}
-                        <span className="text-lg">
-                          {stockDisponible === null ? '—' : stockDisponible}
-                        </span>{' '}
-                        hojas
-                      </div>
-                      {stockDisponible !== null && (
-                        <Button type="button" variant="outline" size="sm" onClick={() => setShowTrazabilidad(true)} className="text-xs">
-                          Ver Trazabilidad
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            {!isEditing && (
+              <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <Label className="font-bold text-purple-800">Código en Proceso *</Label>
+                <Input placeholder="Buscar por código lote o descripción..." value={searchEnProceso}
+                  onChange={e => setSearchEnProceso(e.target.value)} className="my-1 h-8 text-xs" />
+                <Select value={currentItem?.inv_proceso_id || ''} onValueChange={handleSelectInvProceso}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar lote en proceso..." /></SelectTrigger>
+                  <SelectContent>
+                    {invFiltrados.length === 0 && <SelectItem value="__empty__" disabled>No hay lotes disponibles</SelectItem>}
+                    {invFiltrados.map(inv => (
+                      <SelectItem key={inv.id} value={inv.id}>
+                        {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {invSeleccionado && (
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs bg-white p-2 rounded border">
+                    <div><span className="font-semibold">Lote:</span> <span className="font-mono">{invSeleccionado.codigo_lote}</span></div>
+                    <div><span className="font-semibold">Hojas totales:</span> {invSeleccionado.cantidad_hojas}</div>
+                    <div><span className="font-semibold">Ya recurtidas:</span> {getTotalHojasRecurtidas(invSeleccionado.codigo_lote)} / Disponibles: {Math.max(0, (invSeleccionado.cantidad_hojas || 0) - getTotalHojasRecurtidas(invSeleccionado.codigo_lote))}</div>
+                  </div>
+                )}
+                {currentItem?.codigo_lote && isRecurtidoGeneralFinalizado(currentItem.codigo_lote) && (
+                  <p className="mt-2 text-xs text-red-600 font-medium flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Este lote ya tiene el Recurtido General finalizado. No se pueden agregar más sublotes.
+                  </p>
+                )}
+              </div>
+            )}
+            {isEditing && (
+              <div className="p-2 bg-slate-50 rounded text-sm">
+                <span className="font-semibold">Lote:</span> <span className="font-mono">{currentItem?.codigo_lote}</span>
+                <span className="ml-4 font-semibold">Sublote:</span> #{currentItem?.numero_sublote_recurtido}
+              </div>
+            )}
 
             <div className="grid grid-cols-4 gap-4">
               <div>
@@ -477,15 +614,17 @@ export default function ProcesoRecurtido() {
                 </Select>
               </div>
               <div>
-                <Label>Cantidad Hojas</Label>
+                <Label>Cantidad Hojas (este sublote)</Label>
                 <Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
                   const cant = parseFloat(e.target.value) || 0;
-                  const peso = parseFloat(currentItem.peso_actual) || 0;
-                  setCurrentItem({...currentItem, cantidad_pieles: cant, peso_promedio: cant > 0 ? peso / cant : 0});
-                }} className={stockDisponible !== null && (parseFloat(currentItem?.cantidad_pieles) || 0) > stockDisponible ? 'border-red-500 bg-red-50' : ''} />
-                {stockDisponible !== null && (parseFloat(currentItem?.cantidad_pieles) || 0) > stockDisponible && (
-                  <p className="text-xs text-red-600 mt-1 font-medium">⚠️ Supera el stock disponible ({stockDisponible} hojas)</p>
-                )}
+                  const disponibles = invSeleccionado
+                    ? Math.max(0, (invSeleccionado.cantidad_hojas || 0) - getTotalHojasRecurtidas(invSeleccionado.codigo_lote))
+                    : 9999;
+                  setCurrentItem({...currentItem, cantidad_pieles: cant,
+                    peso_promedio: cant > 0 ? (parseFloat(currentItem.peso_actual) || 0) / cant : 0});
+                }} className={invSeleccionado && (parseFloat(currentItem?.cantidad_pieles) || 0) >
+                  Math.max(0, (invSeleccionado.cantidad_hojas || 0) - getTotalHojasRecurtidas(invSeleccionado.codigo_lote))
+                  ? 'border-red-500 bg-red-50' : ''} />
               </div>
               <div>
                 <Label>Actividad</Label>
@@ -504,13 +643,13 @@ export default function ProcesoRecurtido() {
               <div><Label>Fecha Inicio</Label><Input type="date" value={currentItem?.fecha_inicio || ''} onChange={e => setCurrentItem({...currentItem, fecha_inicio: e.target.value})} /></div>
               <div><Label>Fecha Final</Label><Input type="date" value={currentItem?.fecha_fin || ''} onChange={e => setCurrentItem({...currentItem, fecha_fin: e.target.value})} /></div>
               <div><Label>Peso Actual (kg)</Label><Input type="number" step="0.01" value={currentItem?.peso_actual || ''} onChange={e => handlePesoActualChange(e.target.value)} /></div>
-              <div><Label>Peso Promedio (kg/piel)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio || ''} onChange={e => setCurrentItem({...currentItem, peso_promedio: parseFloat(e.target.value) || 0})} /></div>
+              <div><Label>Peso Promedio (kg/piel)</Label><Input type="number" step="0.01" value={currentItem?.peso_promedio?.toFixed ? currentItem.peso_promedio.toFixed(3) : (currentItem?.peso_promedio || '')} readOnly className="bg-gray-50" /></div>
             </div>
 
             {/* ÍTEMS */}
             <div className="border rounded-lg p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg">Ítems / Productos</h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-semibold">Ítems / Productos</h3>
                 <Button type="button" onClick={addInsumo} size="sm"><Plus className="w-4 h-4 mr-2" />Agregar Item</Button>
               </div>
               <div className="overflow-x-auto">
@@ -547,9 +686,16 @@ export default function ProcesoRecurtido() {
                           </Select>
                         </td>
                         <td className="p-2 text-right font-medium text-emerald-700">{formatCurrency(item.valor_total)}</td>
-                        <td className="p-2"><Button type="button" variant="ghost" size="icon" onClick={() => removeInsumo(index)}><X className="w-4 h-4 text-red-500" /></Button></td>
+                        <td className="p-2">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeInsumo(index)}>
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          </Button>
+                        </td>
                       </tr>
                     ))}
+                    {(currentItem?.insumos_utilizados || []).length === 0 && (
+                      <tr><td colSpan={8} className="p-3 text-center text-slate-400 text-xs">Sin ítems agregados</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -563,103 +709,45 @@ export default function ProcesoRecurtido() {
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
-            <div className="p-4 bg-purple-50 rounded-lg space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox id="finalizar_recurtido" checked={currentItem?.finalizar_recurtido || false} onCheckedChange={v => setCurrentItem({...currentItem, finalizar_recurtido: v})} />
-                <Label htmlFor="finalizar_recurtido" className="font-semibold cursor-pointer">Finalizar Recurtido</Label>
-              </div>
-              {currentItem?.finalizar_recurtido && (
-                <div className="text-xs text-purple-700 font-medium bg-white p-2 rounded border border-purple-200">
-                  <p>✅ Al finalizar:</p>
-                  <p>• Tabla central: estado → FINALIZADO, etapa → RECURTIDO</p>
-                  <p>• Si todos los sublotes del lote padre están finalizados → se crea registro consolidado automáticamente</p>
-                </div>
-              )}
-
-              {/* Resumen de Recurtido */}
-              {currentItem?.codigo_lote && (
-                <div className="bg-white rounded-lg border p-3">
-                  <h4 className="font-semibold text-sm mb-2 text-slate-700">Resumen</h4>
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-100">
-                      <tr><th className="p-1 border">Código base</th><th className="p-1 border">Color</th><th className="p-1 border">Código lote</th><th className="p-1 border text-right">Hojas</th><th className="p-1 border text-right">Costo acum.</th></tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-t">
-                        <td className="p-1 border font-mono font-bold">{currentItem.codigo_color || '—'}</td>
-                        <td className="p-1 border">{currentItem.nombre_color || '—'}</td>
-                        <td className="p-1 border font-mono">{currentItem.codigo_lote}</td>
-                        <td className="p-1 border text-right font-bold">{currentItem.cantidad_pieles || 0}</td>
-                        <td className="p-1 border text-right">{formatCurrency((invSeleccionado?.costo_acumulado || 0) + (currentItem.subtotal_humectacion || 0) + (currentItem.subtotal_recromado || 0) + (currentItem.subtotal_recurtido || 0))}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button type="submit">Guardar</Button>
+              <Button type="submit">Guardar Sublote</Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* ── MODAL DETALLE ────────────────────────────────────────────────── */}
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Detalle del Proceso de Recurtido</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Detalle del Sublote de Recurtido</DialogTitle></DialogHeader>
           {selectedItem && (
-            <div className="space-y-3 text-sm">
+            <div className="space-y-2 text-sm">
               <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
+              <p><span className="font-semibold">Sublote #:</span> {selectedItem.numero_sublote_recurtido}</p>
               <p><span className="font-semibold">Color:</span> {selectedItem.codigo_color} — {selectedItem.nombre_color}</p>
               <p><span className="font-semibold">Actividad:</span> <span className="capitalize">{selectedItem.actividad}</span></p>
-              <p><span className="font-semibold">Cantidad Pieles:</span> {selectedItem.cantidad_pieles}</p>
+              <p><span className="font-semibold">Cantidad Hojas:</span> {selectedItem.cantidad_pieles}</p>
               <p><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
               {selectedItem.fecha_fin && <p><span className="font-semibold">Fecha Fin:</span> {new Date(selectedItem.fecha_fin).toLocaleDateString()}</p>}
               <p><span className="font-semibold">Peso Actual:</span> {selectedItem.peso_actual} kg</p>
               <p><span className="font-semibold">Subtotal Humectación:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.subtotal_humectacion)}</span></p>
               <p><span className="font-semibold">Subtotal Recromado:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.subtotal_recromado)}</span></p>
               <p><span className="font-semibold">Subtotal Recurtido:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.subtotal_recurtido)}</span></p>
-              <p><span className="font-semibold">Estado:</span> <span className="capitalize">{selectedItem.estado}</span></p>
+              <p><span className="font-semibold">Estado:</span>{' '}
+                <span className={`px-2 py-0.5 rounded text-xs ${selectedItem.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                  {selectedItem.estado}
+                </span>
+              </p>
             </div>
           )}
           <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
-      {showConsolidadoModal && <LoteDetalleConsolidado open={showConsolidadoModal} onOpenChange={setShowConsolidadoModal} codigoLote={loteConsolidado} />}
-
-      {/* MODAL TRAZABILIDAD */}
-      <Dialog open={showTrazabilidad} onOpenChange={setShowTrazabilidad}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Trazabilidad — {trazabilidadData?.codigoEnProceso}</DialogTitle></DialogHeader>
-          {trazabilidadData && (
-            <div className="space-y-3 text-sm">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Hojas desde Curtido:</span>
-                  <span className="font-bold text-blue-700">{trazabilidadData.totalCurtido} hojas</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Ya Recurtidas:</span>
-                  <span className="font-bold text-orange-600">− {trazabilidadData.totalRecurtido} hojas</span>
-                </div>
-                <div className="flex justify-between border-t pt-2">
-                  <span className="font-semibold">Stock Disponible:</span>
-                  <span className={`font-bold text-lg ${trazabilidadData.stock > 0 ? 'text-green-700' : 'text-red-600'}`}>
-                    {trazabilidadData.stock} hojas
-                  </span>
-                </div>
-              </div>
-              {trazabilidadData.stock === 0 && (
-                <p className="text-xs text-red-600 font-medium text-center">⚠️ Este lote ya fue completamente recurtido.</p>
-              )}
-            </div>
-          )}
-          <div className="flex justify-end pt-2"><Button onClick={() => setShowTrazabilidad(false)}>Cerrar</Button></div>
-        </DialogContent>
-      </Dialog>
+      {showConsolidadoModal && (
+        <LoteDetalleConsolidado open={showConsolidadoModal} onOpenChange={setShowConsolidadoModal} codigoLote={loteConsolidado} />
+      )}
     </div>
   );
 }
