@@ -60,7 +60,10 @@ import CajaConfig from './pages/CajaConfig';
 import CajaMovimientos from './pages/CajaMovimientos';
 import CajaTransferencias from './pages/CajaTransferencias';
 import CatalogoColores from './pages/CatalogoColores';
+import CatalogoMateriaPrima from './pages/CatalogoMateriaPrima';
 import CatalogoProductos from './pages/CatalogoProductos';
+import CatalogoProductosTerminados from './pages/CatalogoProductosTerminados';
+import CatalogoTipoAcabado from './pages/CatalogoTipoAcabado';
 import CompraInsumos from './pages/CompraInsumos';
 import ComprobanteEgreso from './pages/ComprobanteEgreso';
 import ConciliacionBancaria from './pages/ConciliacionBancaria';
@@ -145,7 +148,10 @@ export const PAGES = {
     "CajaMovimientos": CajaMovimientos,
     "CajaTransferencias": CajaTransferencias,
     "CatalogoColores": CatalogoColores,
+    "CatalogoMateriaPrima": CatalogoMateriaPrima,
     "CatalogoProductos": CatalogoProductos,
+    "CatalogoProductosTerminados": CatalogoProductosTerminados,
+    "CatalogoTipoAcabado": CatalogoTipoAcabado,
     "CompraInsumos": CompraInsumos,
     "ComprobanteEgreso": ComprobanteEgreso,
     "ConciliacionBancaria": ConciliacionBancaria,

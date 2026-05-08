@@ -110,8 +110,11 @@ const menuItems = [
       roles: ["admin", "operario"],
       subItems: [
         { title: "Ajuste Inicial de Inventario", url: createPageUrl("AjusteInicialInventario"), icon: Package },
-        { title: "Catálogo de Productos", url: createPageUrl("CatalogoProductos"), icon: Package },
+        { title: "Catálogo de Materia Prima", url: createPageUrl("CatalogoMateriaPrima"), icon: Package },
+        { title: "Catálogo de Químicos", url: createPageUrl("CatalogoProductos"), icon: Package },
         { title: "Catálogo de Colores (Pintura)", url: createPageUrl("CatalogoColores"), icon: Package },
+        { title: "Catálogo de Productos Terminados", url: createPageUrl("CatalogoProductosTerminados"), icon: Package },
+        { title: "Catálogo de Tipo de Acabado", url: createPageUrl("CatalogoTipoAcabado"), icon: Package },
         { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
         { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
         { title: "Inventario Productos en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },

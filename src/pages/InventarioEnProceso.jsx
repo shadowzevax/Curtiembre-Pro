@@ -82,7 +82,7 @@ export default function InventarioEnProcesoPage() {
 
   const handlePrint = () => window.print();
 
-  const headers = ['Código', 'Descripción', 'Código Lote', 'Origen', 'Estado Proceso', 'Unidad de Medida', 'Cantidad Hojas', 'Color Base', 'Acciones'];
+  const headers = ['Código', 'Descripción', 'Código Lote', 'Origen', 'Estado Proceso', 'Unidad de Medida', 'Cantidad Hojas', 'Costo Unitario', 'Color Base', 'Acciones'];
   
   const renderRow = (item) => {
     const catalogoProd = catalogoProductos.find(p => p.codigo === item.codigo);
@@ -100,6 +100,7 @@ export default function InventarioEnProcesoPage() {
       </td>
       <td className="text-center">{unidadMedida}</td>
       <td className="text-center font-bold">{item.cantidad_hojas}</td>
+      <td className="text-right font-bold text-blue-700">{item.costo_promedio ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(item.costo_promedio) : 'N/A'}</td>
       <td>{item.color_base || 'N/A'}</td>
       <td>
         <div className="flex space-x-2">
