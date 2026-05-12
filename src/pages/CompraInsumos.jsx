@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { OrdenCompra, Proveedor, Insumo, Tercero } from "@/entities/all";
+import { OrdenCompra, Insumo, Tercero } from "@/entities/all";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ export default function CompraInsumos() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showSoporteViewer, setShowSoporteViewer] = useState(false);
   const [soportesToShow, setSoportesToShow] = useState([]);
+  const [noProveedoresMsg] = useState("⚠️ No hay proveedores disponibles. Debe registrar un tercero como proveedor en Administración > Terceros.");
   
   const [filters, setFilters] = useState(initialFilters);
   const [searchTerm, setSearchTerm] = useState("");
@@ -105,20 +106,16 @@ export default function CompraInsumos() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Usar Tercero (fuente unificada) filtrado por tipo_tercero=proveedor, con fallback a Proveedor
-      const [ordenesData, terceroData, proveedoresData, insumosData] = await Promise.all([
+      // Cargar solo Terceros con es_proveedor === true (booleano real)
+      const [ordenesData, terceroData, insumosData] = await Promise.all([
         OrdenCompra.list(),
-        Tercero.filter({ tipo_tercero: 'proveedor' }),
-        Proveedor.list(),
+        Tercero.list(),
         Insumo.list()
       ]);
       setOrdenes(ordenesData);
-      // Combinar: priorizar Terceros con tipo proveedor, complementar con entidad Proveedor
-      const terceroIds = new Set(terceroData.map(t => t.id));
-      const proveedoresSolos = proveedoresData.filter(p => !terceroIds.has(p.id));
-      const combinados = [...terceroData, ...proveedoresSolos];
-      console.log('[CompraInsumos] Proveedores cargados:', combinados.length, combinados.map(p => ({ id: p.id, codigo: p.codigo, nombre: p.nombre })));
-      setProveedores(combinados);
+      // Filtrar solo los que tienen es_proveedor = true (booleano)
+      const soloProveedores = terceroData.filter(t => t.es_proveedor === true);
+      setProveedores(soloProveedores);
       setInsumos(insumosData);
     } catch (error) {
       console.error("Error loading data:", error);

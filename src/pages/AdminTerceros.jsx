@@ -118,6 +118,9 @@ export default function AdminTerceros() {
         try {
             const dataToSave = {
                 ...currentItem,
+                // Garantizar que es_cliente y es_proveedor se guarden como booleanos
+                es_cliente: currentItem.es_cliente === true || currentItem.es_cliente === 'si',
+                es_proveedor: currentItem.es_proveedor === true || currentItem.es_proveedor === 'si',
                 nit: currentItem.numero_identificacion
             };
             
@@ -147,15 +150,15 @@ export default function AdminTerceros() {
         }
     };
 
-    const getFilteredData = () => {
-        if (filtroTipo === 'todos') return terceros;
-        if (filtroTipo === 'clientes') return terceros.filter(t => t.es_cliente);
-        if (filtroTipo === 'proveedores') return terceros.filter(t => t.es_proveedor);
-        return terceros;
+    // Filtrado real por booleanos: es_cliente === true / es_proveedor === true
+    const getFilteredByTab = () => {
+        if (activeTab === 'proveedores') return terceros.filter(t => t.es_proveedor === true);
+        if (activeTab === 'clientes') return terceros.filter(t => t.es_cliente === true);
+        return terceros; // 'todos'
     };
     
     const handleExport = () => {
-        const dataToExport = getFilteredData();
+        const dataToExport = getFilteredByTab();
         let csvContent = "Código,Nombre,Nombre Comercial,Tipo Tercero,Número ID,Teléfono,Email,Es Cliente,Es Proveedor,Activo,Fecha Creación,Régimen Tributario\n";
         csvContent += dataToExport.map(item =>
             `${item.codigo || ''},"${item.nombre || ''}","${item.nombre_comercial || ''}","${item.tipo_tercero || ''}","${item.numero_identificacion || item.nit || ''}","${item.telefono || ''}","${item.email || ''}","${item.es_cliente ? 'Sí' : 'No'}","${item.es_proveedor ? 'Sí' : 'No'}","${item.activo ? 'Sí' : 'No'}","${item.fecha_creacion || ''}","${item.regimen_tributario || ''}"`
@@ -314,24 +317,24 @@ export default function AdminTerceros() {
     );
 
     const filteredData = () => {
-        let data = getFilteredData();
-        
-        // Filtrar por tab activo
-        if (activeTab === 'proveedores') {
-            data = data.filter(t => t.es_proveedor);
-        } else if (activeTab === 'clientes') {
-            data = data.filter(t => t.es_cliente);
+        // 1. Filtrar por pestaña activa (usando booleanos reales)
+        let data = getFilteredByTab();
+
+        // 2. Dentro de la pestaña, aplicar el filtro de tipo adicional
+        if (activeTab === 'todos') {
+            if (filtroTipo === 'clientes') data = data.filter(t => t.es_cliente === true);
+            else if (filtroTipo === 'proveedores') data = data.filter(t => t.es_proveedor === true);
+            // 'todos' en tab todos = sin filtro adicional
         }
-        
-        // Filtrar por búsqueda
+
+        // 3. Filtrar por búsqueda
         if (searchTerm) {
-            data = data.filter(item => 
+            data = data.filter(item =>
                 (item.numero_identificacion || item.nit || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (item.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (item.nombre_comercial || '').toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
-        
         return data;
     };
 

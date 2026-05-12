@@ -114,7 +114,7 @@ const menuItems = [
         { title: "Catálogo de Químicos", url: createPageUrl("CatalogoProductos"), icon: Package },
         { title: "Catálogo de Colores (Pintura)", url: createPageUrl("CatalogoColores"), icon: Package },
         { title: "Catálogo de Productos Terminados", url: createPageUrl("CatalogoProductosTerminados"), icon: Package },
-        { title: "Catálogo de Tipo de Acabado", url: createPageUrl("CatalogoTipoAcabado"), icon: Package },
+        { title: "Catálogo Tipo de Acabado de Cuero", url: createPageUrl("CatalogoTipoAcabado"), icon: Package },
         { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
         { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
         { title: "Inventario Productos en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },

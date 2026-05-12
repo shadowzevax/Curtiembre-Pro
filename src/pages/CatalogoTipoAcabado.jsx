@@ -83,12 +83,11 @@ export default function CatalogoTipoAcabado() {
     p.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const headers = ['Código', 'Nombre/Descripción', 'Familia/Grupo', 'Estado', 'Acciones'];
+  const headers = ['Código', 'Nombre/Descripción', 'Estado', 'Acciones'];
   const renderRow = (item) => (
     <tr key={item.id}>
       <td className="font-mono">{item.codigo}</td>
       <td>{item.descripcion}</td>
-      <td>{item.tipo_producto || 'N/A'}</td>
       <td><span className={`px-2 py-1 rounded-full text-xs ${item.estado === 'activo' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{item.estado}</span></td>
       <td>
         <div className="flex gap-2">
@@ -103,8 +102,8 @@ export default function CatalogoTipoAcabado() {
   return (
     <div className="p-6">
       <PageHeader
-        title="Catálogo de Tipo de Acabado"
-        description="Gestión de los tipos de acabado disponibles para el proceso de pintura."
+        title="Catálogo Tipo de Acabado de Cuero"
+        description="Gestión de los tipos de acabado de cuero disponibles para el proceso de pintura."
         actionButton={
           <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
             <Plus className="w-4 h-4 mr-2" /> Nuevo Tipo de Acabado
@@ -132,15 +131,12 @@ export default function CatalogoTipoAcabado() {
               <div><Label>Código *</Label><Input value={currentItem?.codigo || ''} onChange={e => setCurrentItem({...currentItem, codigo: e.target.value})} required disabled={isEditing} /></div>
               <div><Label>Nombre / Descripción *</Label><Input value={currentItem?.descripcion || ''} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required /></div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>Familia / Grupo</Label><Input value={currentItem?.tipo_producto || ''} onChange={e => setCurrentItem({...currentItem, tipo_producto: e.target.value})} placeholder="Ej: NAPA, ENVEJECIDO..." /></div>
-              <div>
-                <Label>Estado</Label>
-                <Select value={currentItem?.estado || 'activo'} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="activo">Activo</SelectItem><SelectItem value="inactivo">Inactivo</SelectItem></SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Estado</Label>
+              <Select value={currentItem?.estado || 'activo'} onValueChange={v => setCurrentItem({...currentItem, estado: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="activo">Activo</SelectItem><SelectItem value="inactivo">Inactivo</SelectItem></SelectContent>
+              </Select>
             </div>
             <div><Label>Descripción detallada</Label><Textarea value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})} rows={2} /></div>
             <div className="flex justify-end gap-2 pt-4">
@@ -158,7 +154,6 @@ export default function CatalogoTipoAcabado() {
             <div className="space-y-2 text-sm">
               <p><span className="font-semibold">Código:</span> {selectedItem.codigo}</p>
               <p><span className="font-semibold">Nombre:</span> {selectedItem.descripcion}</p>
-              <p><span className="font-semibold">Familia/Grupo:</span> {selectedItem.tipo_producto || 'N/A'}</p>
               <p><span className="font-semibold">Descripción:</span> {selectedItem.nombre_comercial || 'N/A'}</p>
               <p><span className="font-semibold">Estado:</span> {selectedItem.estado}</p>
             </div>

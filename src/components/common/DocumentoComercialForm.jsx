@@ -1241,25 +1241,43 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {tipoDocumento === 'compra' && (
                   <div>
-                    <Label>Código Proveedor</Label>
-                    <Select value={formData.proveedor_id || ''} onValueChange={v => handleInputChange('proveedor_id', v)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar por código">
-                          {formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id)
-                            ? (() => { const t = terceros.find(x => x.id === formData.proveedor_id); return `${t.codigo || 'S/C'} — ${t.nombre}`; })()
-                            : 'Seleccionar por código'}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {terceros.length === 0 && <SelectItem value="__empty__" disabled>Sin proveedores registrados</SelectItem>}
-                        {terceros.sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
-                          <SelectItem key={t.id} value={t.id}>{t.codigo || 'S/C'} — {t.nombre}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {formData.codigo_proveedor && <p className="text-xs text-emerald-600 mt-0.5 font-medium">✔ Código: <span className="font-mono">{formData.codigo_proveedor}</span></p>}
-                    {!formData.codigo_proveedor && formData.proveedor_id && <p className="text-xs text-amber-600 mt-0.5">Proveedor sin código asignado</p>}
-                    <p className="text-xs text-slate-400 mt-0.5">{terceros.length} proveedores disponibles</p>
+                    <Label>Proveedor *</Label>
+                    {terceros.length === 0 ? (
+                      <div className="p-3 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800 font-medium">
+                        ⚠️ No hay proveedores disponibles. Debe registrar un tercero como proveedor en Administración &gt; Terceros.
+                      </div>
+                    ) : (
+                      <Select value={formData.proveedor_id || ''} onValueChange={v => handleInputChange('proveedor_id', v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar proveedor...">
+                            {formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id)
+                              ? (() => { const t = terceros.find(x => x.id === formData.proveedor_id); return `${t.codigo || 'S/C'} — ${t.nombre}`; })()
+                              : 'Seleccionar proveedor...'}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {terceros.sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
+                            <SelectItem key={t.id} value={t.id}>
+                              <span className="font-mono font-bold text-emerald-700">{t.codigo || 'S/C'}</span>
+                              {' — '}
+                              <span>{t.nombre}</span>
+                              {(t.numero_identificacion || t.nit) && (
+                                <span className="text-gray-500 ml-1">({t.numero_identificacion || t.nit})</span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id) && (() => {
+                      const t = terceros.find(x => x.id === formData.proveedor_id);
+                      return (
+                        <div className="mt-1 text-xs space-y-0.5">
+                          <p className="text-emerald-600 font-medium">✔ Código: <span className="font-mono">{t.codigo || 'Sin código'}</span></p>
+                          <p className="text-gray-500">ID: {t.numero_identificacion || t.nit || 'N/A'}</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
                 {tipoDocumento === 'venta' && (
