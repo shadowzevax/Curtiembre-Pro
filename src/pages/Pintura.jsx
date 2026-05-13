@@ -183,7 +183,7 @@ export default function Pintura() {
   };
 
   const handleConsumoChange = (index, field, value) => {
-    const updated = [...consumosItems];
+    const updated = consumosItems.map((item, i) => i === index ? { ...item } : item);
     updated[index][field] = value;
     if (field === 'item_id') {
       const cat = catalogoCombinado.find(i => i.id === value);
@@ -192,7 +192,7 @@ export default function Pintura() {
         updated[index].origen_inventario = cat.origen;
         updated[index].codigo_pcto = cat.codigo;
         updated[index].nombre_producto = cat.descripcion;
-        updated[index].unidad_medida = cat.unidad_medida;
+        updated[index].unidad_medida = cat.unidad_medida || '';
         updated[index].costo_unitario = cat.costo_promedio || 0;
         updated[index].costo_total = (parseFloat(updated[index].cantidad_consumida) || 0) * (cat.costo_promedio || 0);
       }
@@ -202,7 +202,7 @@ export default function Pintura() {
       const costo = parseFloat(field === 'costo_unitario' ? value : updated[index].costo_unitario) || 0;
       updated[index].costo_total = cantidad * costo;
     }
-    setConsumosItems(updated);
+    setConsumosItems([...updated]);
   };
 
   const eliminarConsumo = (index) => {
@@ -714,8 +714,8 @@ export default function Pintura() {
                             {consumo.item_id && <div className={`text-xs mt-0.5 ${stockBajo ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>Stock: {catRef?.stock_actual || 0}{stockBajo && ' ⚠️'}</div>}
                           </td>
                           <td className="border p-1 min-w-[140px]"><Input value={consumo.nombre_producto || ''} readOnly className="bg-gray-50 h-8 text-xs" /></td>
-                          <td className="border p-1"><Input value={consumo.unidad_medida || ''} readOnly className="bg-gray-50 h-8 text-xs" /></td>
-                          <td className="border p-1 w-20"><Input type="number" value={consumo.cantidad_consumida} min="0.01" step="0.01" disabled={esFinalizado} onChange={e => handleConsumoChange(idx, 'cantidad_consumida', parseFloat(e.target.value) || 0)} className="h-8 text-xs text-right" /></td>
+                          <td className="border p-1"><Input value={consumo.unidad_medida || ''} readOnly className="bg-gray-50 h-8 text-xs text-center font-medium" placeholder="U.M." /></td>
+                          <td className="border p-1 w-20"><Input type="number" value={consumo.cantidad_consumida ?? 0} min="0.01" step="0.01" disabled={esFinalizado} onChange={e => handleConsumoChange(idx, 'cantidad_consumida', parseFloat(e.target.value) || 0)} className="h-8 text-xs text-right" /></td>
                           <td className="border p-1 min-w-[110px]"><Input type="number" value={consumo.costo_unitario || 0} min="0" step="1" disabled={esFinalizado} onChange={e => handleConsumoChange(idx, 'costo_unitario', parseFloat(e.target.value) || 0)} className="h-8 text-xs text-right" /></td>
                           <td className="border p-1 min-w-[110px]"><Input value={consumo.costo_total || 0} readOnly className="h-8 text-xs text-right bg-blue-50 font-bold" /></td>
                           <td className="border p-1 min-w-[100px]"><Input value={consumo.observacion || ''} disabled={esFinalizado} onChange={e => handleConsumoChange(idx, 'observacion', e.target.value)} className="h-8 text-xs" /></td>

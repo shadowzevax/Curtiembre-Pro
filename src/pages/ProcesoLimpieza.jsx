@@ -543,16 +543,17 @@ export default function ProcesoLimpieza() {
                 </thead>
                 <tbody>
                   {(() => {
-                    // REMOJO: si ya fue finalizado, usar snapshot guardado; si no, calcular desde insumos actuales
+                    // REMOJO: prioridad: 1) snapshot costo_remojo_sin_iva, 2) insumos_remojo_guardados, 3) insumos_utilizados seccion remojo
                     const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';
                     let costoBaseRemojo, ivaRemojo;
-                    if (remojoFinalizado && (currentItem?.costo_remojo_sin_iva !== undefined)) {
-                      // Usar snapshot persistido
+                    if (currentItem?.costo_remojo_sin_iva != null && parseFloat(currentItem.costo_remojo_sin_iva) > 0) {
                       costoBaseRemojo = parseFloat(currentItem.costo_remojo_sin_iva) || 0;
                       ivaRemojo = parseFloat(currentItem.iva_remojo) || 0;
                     } else {
-                      // Calcular en tiempo real desde insumos de remojo
-                      const itemsRemojo = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
+                      // Buscar en insumos_remojo_guardados o en insumos_utilizados con seccion remojo
+                      const itemsRemojo = (currentItem?.insumos_remojo_guardados?.length > 0
+                        ? currentItem.insumos_remojo_guardados
+                        : (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion));
                       costoBaseRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
                       ivaRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
                     }
@@ -709,24 +710,122 @@ export default function ProcesoLimpieza() {
       </Dialog>
 
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Detalle del Proceso de Limpieza</DialogTitle></DialogHeader>
-          {selectedItem && (
-            <div className="space-y-3 text-sm">
-              <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
-              <p><span className="font-semibold">Cantidad Hojas:</span> {selectedItem.cantidad_pieles}</p>
-              <p><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
-              {selectedItem.fecha_fin && <p><span className="font-semibold">Fecha Fin:</span> {new Date(selectedItem.fecha_fin).toLocaleDateString()}</p>}
-              <p><span className="font-semibold">Peso Actual:</span> {selectedItem.peso_actual} kg</p>
-              <div className="grid grid-cols-2 gap-2 p-2 bg-gray-50 rounded">
-                <p><span className="font-semibold">Estado Remojo:</span> <span className={selectedItem.estado_remojo === 'finalizado' ? 'text-green-700 font-bold' : 'text-yellow-700'}>{selectedItem.estado_remojo || 'pendiente'}</span></p>
-                <p><span className="font-semibold">Estado Pelambre:</span> <span className={selectedItem.estado_pelambre === 'finalizado' ? 'text-green-700 font-bold' : 'text-yellow-700'}>{selectedItem.estado_pelambre || 'pendiente'}</span></p>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Detalle del Proceso de Limpieza — {selectedItem?.codigo_lote}</DialogTitle></DialogHeader>
+          {selectedItem && (() => {
+            // Insumos de Remojo: pueden estar en insumos_remojo_guardados o en insumos_utilizados con seccion remojo
+            const insumosRemojo = selectedItem.insumos_remojo_guardados?.length > 0
+              ? selectedItem.insumos_remojo_guardados
+              : (selectedItem.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
+            const insumosPelambre = (selectedItem.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
+
+            // Costos Remojo
+            const costoBaseRemojo = selectedItem.costo_remojo_sin_iva != null
+              ? parseFloat(selectedItem.costo_remojo_sin_iva) || 0
+              : insumosRemojo.reduce((s, i) => s + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+            const ivaRemojo = selectedItem.iva_remojo != null
+              ? parseFloat(selectedItem.iva_remojo) || 0
+              : insumosRemojo.reduce((s, i) => s + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+
+            // Costos Pelambre
+            const costoBasePelambre = insumosPelambre.reduce((s, i) => s + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+            const ivaPelambre = insumosPelambre.reduce((s, i) => s + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+
+            const renderTablaInsumos = (items, seccion) => (
+              items.length === 0
+                ? <p className="text-xs text-slate-400 py-2">No hay insumos registrados para {seccion}.</p>
+                : (
+                  <table className="w-full text-xs mt-2">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="p-1 text-left">Código</th>
+                        <th className="p-1 text-left">Producto</th>
+                        <th className="p-1 text-right">% Dosif.</th>
+                        <th className="p-1 text-right">Cantidad</th>
+                        <th className="p-1 text-right">Costo Unit.</th>
+                        <th className="p-1 text-right">IVA</th>
+                        <th className="p-1 text-right font-bold">Valor Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((ins, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="p-1 font-mono">{ins.codigo}</td>
+                          <td className="p-1">{ins.producto}</td>
+                          <td className="p-1 text-right">{ins.dosificacion}%</td>
+                          <td className="p-1 text-right">{parseFloat(ins.cantidad).toFixed(2)}</td>
+                          <td className="p-1 text-right">{formatCurrency(ins.costo_unitario)}</td>
+                          <td className="p-1 text-right">{((parseFloat(ins.iva)||0)*100).toFixed(0)}%</td>
+                          <td className="p-1 text-right font-bold text-emerald-700">{formatCurrency(ins.valor_total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+            );
+
+            return (
+              <div className="space-y-4 text-sm">
+                {/* Encabezado */}
+                <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 border rounded">
+                  <div><span className="font-semibold">Código Lote:</span> <span className="font-mono font-bold">{selectedItem.codigo_lote}</span></div>
+                  <div><span className="font-semibold">Hojas:</span> {selectedItem.cantidad_pieles}</div>
+                  <div><span className="font-semibold">Peso Actual:</span> {selectedItem.peso_actual} kg</div>
+                  <div><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</div>
+                  {selectedItem.fecha_fin && <div><span className="font-semibold">Fecha Fin:</span> {new Date(selectedItem.fecha_fin).toLocaleDateString()}</div>}
+                  <div><span className="font-semibold">Estado:</span> <span className="font-bold capitalize">{selectedItem.estado === 'completado' ? '✅ Limpieza Completa' : selectedItem.estado}</span></div>
+                </div>
+
+                {/* Estados */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`p-2 rounded border text-center text-xs font-bold ${selectedItem.estado_remojo === 'finalizado' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-700 border-yellow-300'}`}>
+                    Remojo: {selectedItem.estado_remojo === 'finalizado' ? '✔ Finalizado' : 'Pendiente'}
+                  </div>
+                  <div className={`p-2 rounded border text-center text-xs font-bold ${selectedItem.estado_pelambre === 'finalizado' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-100 text-blue-700 border-blue-300'}`}>
+                    Pelambre: {selectedItem.estado_pelambre === 'finalizado' ? '✔ Finalizado' : 'Pendiente'}
+                  </div>
+                </div>
+
+                {/* Tabla trazabilidad REMOJO */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-blue-700 text-white px-3 py-2 font-bold text-sm">Sección: REMOJO</div>
+                  <div className="p-3">
+                    {renderTablaInsumos(insumosRemojo, 'Remojo')}
+                    <div className="mt-2 flex justify-end gap-6 text-xs font-bold border-t pt-2">
+                      <span>Costo Base sin IVA: <span className="text-slate-800">{formatCurrency(costoBaseRemojo)}</span></span>
+                      <span>IVA: <span className="text-orange-600">{formatCurrency(ivaRemojo)}</span></span>
+                      <span>Costo Total: <span className="text-emerald-700">{formatCurrency(costoBaseRemojo + ivaRemojo)}</span></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabla trazabilidad PELAMBRE */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-purple-700 text-white px-3 py-2 font-bold text-sm">Sección: PELAMBRE</div>
+                  <div className="p-3">
+                    {renderTablaInsumos(insumosPelambre, 'Pelambre')}
+                    <div className="mt-2 flex justify-end gap-6 text-xs font-bold border-t pt-2">
+                      <span>Costo Base sin IVA: <span className="text-slate-800">{formatCurrency(costoBasePelambre)}</span></span>
+                      <span>IVA: <span className="text-orange-600">{formatCurrency(ivaPelambre)}</span></span>
+                      <span>Costo Total: <span className="text-emerald-700">{formatCurrency(costoBasePelambre + ivaPelambre)}</span></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumen total */}
+                <div className="bg-slate-800 text-white rounded-lg p-3 flex justify-between items-center">
+                  <span className="font-bold">TOTAL LIMPIEZA (Remojo + Pelambre):</span>
+                  <div className="flex gap-6 text-sm">
+                    <span>Sin IVA: <strong>{formatCurrency(costoBaseRemojo + costoBasePelambre)}</strong></span>
+                    <span>IVA: <strong>{formatCurrency(ivaRemojo + ivaPelambre)}</strong></span>
+                    <span className="text-yellow-300">Total: <strong>{formatCurrency(costoBaseRemojo + costoBasePelambre + ivaRemojo + ivaPelambre)}</strong></span>
+                  </div>
+                </div>
+
+                {selectedItem.observaciones && <p><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</p>}
               </div>
-              <p><span className="font-semibold">Costo Remojo:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.costo_remojo)}</span></p>
-              <p><span className="font-semibold">Costo Pelambre:</span> <span className="text-emerald-700 font-bold">{formatCurrency(selectedItem.costo_pelambre)}</span></p>
-              <p><span className="font-semibold">Estado General:</span> <span className="capitalize font-bold">{selectedItem.estado === 'completado' ? '✅ Limpieza Completa' : selectedItem.estado}</span></p>
-            </div>
-          )}
+            );
+          })()}
           <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
