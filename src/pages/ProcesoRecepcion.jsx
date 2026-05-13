@@ -43,21 +43,27 @@ export default function ProcesoRecepcion() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [recepcionesData, insumosData, productosData, proveedoresData, comprasData, movimientosData] = await Promise.all([
+      const [recepcionesData, insumosData, todosProductosData, proveedoresData, comprasData, movimientosData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recepcion' }),
         Insumo.list(),
-        ProductoTerminado.filter({ categoria: 'pieles' }),
+        ProductoTerminado.list(), // Traer TODOS sin filtro para no perder registros nuevos
         Proveedor.list(),
         OrdenCompra.list(),
         MovimientoInventario.list()
       ]);
       setRecepciones(Array.isArray(recepcionesData) ? recepcionesData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
+      // Filtrar categoría 'pieles' en memoria (evita omisiones por filtro de API)
+      const productosData = (Array.isArray(todosProductosData) ? todosProductosData : [])
+        .filter(p => p.categoria === 'pieles');
       // Calcular stock real desde MovimientoInventario para cada producto
-      const productosConStock = (Array.isArray(productosData) ? productosData : []).map(prod => {
-        const movsProd = (Array.isArray(movimientosData) ? movimientosData : []).filter(m => m.insumo_id === prod.id);
-        const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-        return { ...prod, stock_actual: stockActual };
+      const movimientosArray = Array.isArray(movimientosData) ? movimientosData : [];
+      const productosConStock = productosData.map(prod => {
+        const movsProd = movimientosArray.filter(m => m.insumo_id === prod.id);
+        const stockCalculado = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+        // Si no hay movimientos, usar el stock_actual guardado en la entidad como fallback
+        const stockFinal = movsProd.length > 0 ? stockCalculado : (prod.stock_actual || 0);
+        return { ...prod, stock_actual: stockFinal };
       });
       setProductos(productosConStock);
       setProveedores(Array.isArray(proveedoresData) ? proveedoresData : []);
@@ -420,9 +426,13 @@ export default function ProcesoRecepcion() {
                   <SelectTrigger><SelectValue placeholder="Seleccionar código de materia prima" /></SelectTrigger>
                   <SelectContent>
                     {productos.filter(p => p.codigo).filter(p => !productoSearch || (p.codigo || '').toLowerCase().includes(productoSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(productoSearch.toLowerCase()))
+                      .sort((a, b) => (b.stock_actual || 0) - (a.stock_actual || 0)) // Productos con stock primero
                       .map(p => (
-                        <SelectItem key={p.id} value={p.codigo}>
-                          {p.codigo} — {p.descripcion} {p.stock_actual > 0 ? `(Stock: ${p.stock_actual})` : '⚠️ Sin stock'}
+                        <SelectItem key={p.id} value={p.codigo} disabled={p.stock_actual <= 0}>
+                          {p.stock_actual <= 0
+                            ? `🚫 ${p.codigo} — ${p.descripcion} [INVENTARIO NO DISPONIBLE]`
+                            : `${p.codigo} — ${p.descripcion} (Stock: ${p.stock_actual} ${p.unidad_medida || 'hojas'})`
+                          }
                         </SelectItem>
                       ))}
                   </SelectContent>

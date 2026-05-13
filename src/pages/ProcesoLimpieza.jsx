@@ -43,7 +43,8 @@ export default function ProcesoLimpieza() {
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
-      // FILTRO: lotes EN_PROCESO en etapa recepcion O limpieza (para continuar pelambre)
+      // FILTRO: lotes EN_PROCESO en etapa recepcion O limpieza
+      // Incluye también los que tienen estado_proceso 'piel_limpia' pero aún no finalizaron limpieza completa
       const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
         .filter(i => i.estado_actual === 'EN_PROCESO' && (i.etapa_actual === 'recepcion' || i.etapa_actual === 'limpieza'));
       setInventarioEnProceso(filtrados);
@@ -95,17 +96,35 @@ export default function ProcesoLimpieza() {
     if (!inv) return;
     setInvSeleccionado(inv);
     setSearchEnProceso('');
+
+    // Buscar si ya existe un proceso de limpieza previo para este lote
+    const procesoExistente = procesos.find(p => p.codigo_lote === (inv.codigo_lote || inv.codigo));
+    const estadoRemojoExistente = procesoExistente?.estado_remojo || (procesoExistente?.finalizar_remojo ? 'finalizado' : 'pendiente');
+    const estadoPelambreExistente = procesoExistente?.estado_pelambre || (procesoExistente?.finalizar_pelambre ? 'finalizado' : 'pendiente');
+    const costoRemojoExistente = procesoExistente?.costo_remojo || 0;
+
     setCurrentItem(prev => {
       const cantidadPieles = inv.cantidad_hojas || prev.cantidad_pieles;
       const pesoActual = inv.peso_actual || prev.peso_actual;
       const pesoPromedio = cantidadPieles > 0 ? pesoActual / cantidadPieles : 0;
+      // Si remojo ya está finalizado en proceso previo, iniciar en sección pelambre
+      const seccionInicial = estadoRemojoExistente === 'finalizado' && estadoPelambreExistente !== 'finalizado' ? 'pelambre' : 'remojo';
       return {
         ...prev,
         inv_proceso_id: inv.id,
         codigo_lote: inv.codigo_lote || inv.codigo || '',
         cantidad_pieles: cantidadPieles,
         peso_actual: pesoActual,
-        peso_promedio: pesoPromedio
+        peso_promedio: pesoPromedio,
+        // Cargar estados existentes del proceso de limpieza previo
+        estado_remojo: estadoRemojoExistente,
+        estado_pelambre: estadoPelambreExistente,
+        finalizar_remojo: estadoRemojoExistente === 'finalizado',
+        finalizar_pelambre: estadoPelambreExistente === 'finalizado',
+        costo_remojo: costoRemojoExistente,
+        seccion: seccionInicial,
+        // Si hay proceso existente, cargar su ID para actualizar en lugar de crear nuevo
+        id_proceso_existente: procesoExistente?.id || null,
       };
     });
   };
@@ -205,6 +224,9 @@ export default function ProcesoLimpieza() {
     try {
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
+      } else if (currentItem.id_proceso_existente) {
+        // Actualizar proceso de limpieza existente (ej: continuar con pelambre después de remojo)
+        await ProcesoProduccion.update(currentItem.id_proceso_existente, dataToSave);
       } else {
         await ProcesoProduccion.create(dataToSave);
       }
@@ -378,6 +400,11 @@ export default function ProcesoLimpieza() {
                 <p className="text-xs text-blue-700 mt-1 font-medium">
                   ✔ Lote asignado: <strong>{currentItem.codigo_lote}</strong> — este código permanece activo hasta "Finalizar Limpieza"
                 </p>
+              )}
+              {currentItem?.estado_remojo === 'finalizado' && currentItem?.estado_pelambre !== 'finalizado' && (
+                <div className="mt-2 p-2 bg-blue-100 border border-blue-300 rounded text-xs text-blue-800 font-medium">
+                  ℹ️ <strong>Remojo finalizado.</strong> El sistema ha habilitado automáticamente la sección <strong>Pelambre</strong> para continuar el proceso.
+                </div>
               )}
             </div>
 
