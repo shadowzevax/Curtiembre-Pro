@@ -207,18 +207,28 @@ export default function ProcesoLimpieza() {
       return;
     }
 
+    // Calcular snapshot de costos de Remojo para persistir antes de cambiar a Pelambre
+    const insumosRemojo = (currentItem.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
+    const costoRemojoSinIva = remojoDone && !(currentItem.costo_remojo_sin_iva !== undefined)
+      ? insumosRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0)
+      : (currentItem.costo_remojo_sin_iva || 0);
+    const ivaRemojo = remojoDone && !(currentItem.iva_remojo !== undefined)
+      ? insumosRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0)
+      : (currentItem.iva_remojo || 0);
+
     const dataToSave = {
       ...currentItem,
       numero_proceso: `${currentItem.codigo_lote}-LMP`,
-      // El proceso de limpieza solo se marca completado cuando se finaliza limpieza completa
       estado: finalizandoLimpieza ? 'completado' : 'en_proceso',
       fecha_fin: finalizandoLimpieza && !currentItem.fecha_fin ? new Date().toISOString().split('T')[0] : currentItem.fecha_fin,
-      // Guardar estados individuales
       estado_remojo: currentItem.estado_remojo,
       estado_pelambre: currentItem.estado_pelambre,
-      // Compatibilidad hacia atrás
       finalizar_remojo: remojoDone,
       finalizar_pelambre: pelhambreDone,
+      // Persistir snapshot de costos de Remojo para el Resumen acumulativo
+      costo_remojo_sin_iva: costoRemojoSinIva,
+      iva_remojo: ivaRemojo,
+      insumos_remojo_guardados: currentItem.insumos_remojo_guardados || insumosRemojo,
     };
 
     try {
@@ -518,44 +528,77 @@ export default function ProcesoLimpieza() {
               </div>
             </div>
 
-            {/* TABLA DESGLOSE DE COSTOS POR SECCIÓN */}
+            {/* TABLA DESGLOSE DE COSTOS POR SECCIÓN — Acumulativa: Remojo + Pelambre */}
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-slate-700 text-white px-4 py-2 font-bold text-sm">Resumen de Costos por Sección</div>
               <table className="w-full text-sm">
                 <thead className="bg-slate-100">
                   <tr>
                     <th className="p-2 text-left border-b">Sección</th>
-                    <th className="p-2 text-right border-b">Costo Base (sin IVA)</th>
+                    <th className="p-2 text-right border-b">Costo BASE SIN IVA</th>
                     <th className="p-2 text-right border-b">IVA</th>
-                    <th className="p-2 text-right border-b font-bold">Costo Total</th>
+                    <th className="p-2 text-right border-b font-bold">COSTO TOTAL</th>
+                    <th className="p-2 text-center border-b">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {['remojo', 'pelambre'].map(seccion => {
-                    const items = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === seccion);
-                    const costoBase = items.reduce((sum, i) => sum + ((parseFloat(i.cantidad) || 0) * (parseFloat(i.costo_unitario) || 0)), 0);
-                    const ivaTotal = items.reduce((sum, i) => sum + ((parseFloat(i.cantidad) || 0) * (parseFloat(i.costo_unitario) || 0) * (parseFloat(i.iva) || 0)), 0);
-                    const costoTotal = costoBase + ivaTotal;
-                    return (
-                      <tr key={seccion} className="border-t">
-                        <td className="p-2 font-semibold capitalize">{seccion}</td>
-                        <td className="p-2 text-right text-slate-700">{formatCurrency(costoBase)}</td>
-                        <td className="p-2 text-right text-orange-600">{formatCurrency(ivaTotal)}</td>
-                        <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoTotal)}</td>
-                      </tr>
-                    );
-                  })}
                   {(() => {
-                    const allItems = currentItem?.insumos_utilizados || [];
-                    const baseTotal = allItems.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0)), 0);
-                    const ivaGlobal = allItems.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0) * (parseFloat(i.costo_unitario)||0) * (parseFloat(i.iva)||0)), 0);
+                    // REMOJO: si ya fue finalizado, usar snapshot guardado; si no, calcular desde insumos actuales
+                    const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';
+                    let costoBaseRemojo, ivaRemojo;
+                    if (remojoFinalizado && (currentItem?.costo_remojo_sin_iva !== undefined)) {
+                      // Usar snapshot persistido
+                      costoBaseRemojo = parseFloat(currentItem.costo_remojo_sin_iva) || 0;
+                      ivaRemojo = parseFloat(currentItem.iva_remojo) || 0;
+                    } else {
+                      // Calcular en tiempo real desde insumos de remojo
+                      const itemsRemojo = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
+                      costoBaseRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+                      ivaRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+                    }
+
+                    // PELAMBRE: calcular desde insumos actuales con seccion === 'pelambre'
+                    const itemsPelambre = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
+                    const costoBasePelambre = itemsPelambre.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+                    const ivaPelambre = itemsPelambre.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+
+                    const totalBase = costoBaseRemojo + costoBasePelambre;
+                    const totalIva = ivaRemojo + ivaPelambre;
+
                     return (
-                      <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold">
-                        <td className="p-2 text-slate-800">TOTAL LIMPIEZA</td>
-                        <td className="p-2 text-right text-slate-800">{formatCurrency(baseTotal)}</td>
-                        <td className="p-2 text-right text-orange-700">{formatCurrency(ivaGlobal)}</td>
-                        <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(baseTotal + ivaGlobal)}</td>
-                      </tr>
+                      <>
+                        <tr className="border-t bg-blue-50">
+                          <td className="p-2 font-semibold capitalize text-blue-800">Remojo</td>
+                          <td className="p-2 text-right text-slate-700">{formatCurrency(costoBaseRemojo)}</td>
+                          <td className="p-2 text-right text-orange-600">{formatCurrency(ivaRemojo)}</td>
+                          <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoBaseRemojo + ivaRemojo)}</td>
+                          <td className="p-2 text-center">
+                            {remojoFinalizado
+                              ? <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✔ Finalizado</span>
+                              : <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">Pendiente</span>}
+                          </td>
+                        </tr>
+                        <tr className="border-t bg-purple-50">
+                          <td className="p-2 font-semibold capitalize text-purple-800">Pelambre</td>
+                          <td className="p-2 text-right text-slate-700">{formatCurrency(costoBasePelambre)}</td>
+                          <td className="p-2 text-right text-orange-600">{formatCurrency(ivaPelambre)}</td>
+                          <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoBasePelambre + ivaPelambre)}</td>
+                          <td className="p-2 text-center">
+                            {currentItem?.estado_pelambre === 'finalizado'
+                              ? <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✔ Finalizado</span>
+                              : remojoFinalizado
+                                ? <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">En Registro</span>
+                                : <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-400">Bloqueado</span>}
+                          </td>
+                        </tr>
+                        <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold">
+                          <td className="p-2 text-slate-800">TOTAL LIMPIEZA</td>
+                          <td className="p-2 text-right text-slate-800">{formatCurrency(totalBase)}</td>
+                          <td className="p-2 text-right text-orange-700">{formatCurrency(totalIva)}</td>
+                          <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(totalBase + totalIva)}</td>
+                          <td className="p-2"></td>
+                        </tr>
+                      </>
                     );
                   })()}
                 </tbody>
@@ -584,8 +627,12 @@ export default function ProcesoLimpieza() {
                         // Al finalizar remojo: limpiar ítems y cambiar sección a pelambre
                         ...(v ? {
                           seccion: 'pelambre',
+                          // Al finalizar Remojo: guardar snapshot de los insumos de Remojo y limpiar lista para Pelambre
+                          insumos_remojo_guardados: currentItem.insumos_utilizados || [],
+                          costo_remojo_sin_iva: currentItem.insumos_utilizados.filter(i => i.seccion === 'remojo' || !i.seccion).reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0),
+                          iva_remojo: currentItem.insumos_utilizados.filter(i => i.seccion === 'remojo' || !i.seccion).reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0),
                           insumos_utilizados: [],
-                          costo_remojo: currentItem.costo_remojo, // conservar costo ya calculado
+                          costo_remojo: currentItem.costo_remojo,
                           costo_pelambre: 0,
                         } : {})
                       });

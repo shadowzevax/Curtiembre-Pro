@@ -330,16 +330,23 @@ export default function ProcesoRecurtido() {
         await ProcesoProduccion.update(p.id, { finalizar_recurtido_general: true });
       }
 
-      // Actualizar tabla central
+      // Actualizar tabla central con datos de color y cantidad hojas desde los sublotes
       if (inv) {
         const costoTotal = sublotes.reduce((sum, p) => sum + (p.subtotal_humectacion || 0) + (p.subtotal_recromado || 0) + (p.subtotal_recurtido || 0), 0);
         const costoAcum = (inv.costo_acumulado || 0) + costoTotal;
+        // Tomar color del primer sublote con color definido
+        const subloteConColor = sublotes.find(p => p.codigo_color || p.nombre_color);
+        const totalHojasRecurtidas = sublotes.reduce((sum, p) => sum + (parseFloat(p.cantidad_pieles) || 0), 0);
         await InventarioEnProceso.update(inv.id, {
           etapa_actual: 'recurtido',
           estado_actual: 'FINALIZADO',
           estado_proceso: 'piel_recurtida',
           costo_acumulado: costoAcum,
-          costo_promedio: totalHojasLote > 0 ? costoAcum / totalHojasLote : 0
+          costo_promedio: totalHojasLote > 0 ? costoAcum / totalHojasLote : 0,
+          // Sincronizar campos de color y cantidad hojas desde Recurtido
+          codigo_color: subloteConColor?.codigo_color || inv.codigo_color || '',
+          color_base: subloteConColor?.nombre_color || inv.color_base || '',
+          cantidad_hojas: totalHojasRecurtidas > 0 ? totalHojasRecurtidas : (inv.cantidad_hojas || 0),
         });
       }
 
@@ -439,7 +446,6 @@ export default function ProcesoRecurtido() {
                       <th className="p-2 text-left font-medium">Código en Proceso</th>
                       <th className="p-2 text-left font-medium">Color Base</th>
                       <th className="p-2 text-center font-medium">Sublote #</th>
-                      <th className="p-2 text-center font-medium">Actividad</th>
                       <th className="p-2 text-right font-medium">Cant. Hojas</th>
                       <th className="p-2 text-center font-medium">Estado</th>
                       <th className="p-2 text-center font-medium">Acción</th>
@@ -460,7 +466,6 @@ export default function ProcesoRecurtido() {
                                 #{proc.numero_sublote_recurtido || '?'}
                               </span>
                             </td>
-                            <td className="p-2 text-center capitalize text-xs">{proc.actividad}</td>
                             <td className="p-2 text-right font-bold">{proc.cantidad_pieles}</td>
                             <td className="p-2 text-center">
                               {finalizado
@@ -500,7 +505,7 @@ export default function ProcesoRecurtido() {
                   {sublotesControl.length > 0 && (
                     <tfoot>
                       <tr className="bg-slate-100 font-bold border-t-2">
-                        <td colSpan={4} className="p-2 text-right">TOTAL RECURTIDO:</td>
+                        <td colSpan={3} className="p-2 text-right">TOTAL RECURTIDO:</td>
                         <td className="p-2 text-right">{totalRecurtidoControl}</td>
                         <td colSpan={2}></td>
                       </tr>
@@ -617,25 +622,11 @@ export default function ProcesoRecurtido() {
                 <Label>Cantidad Hojas (este sublote)</Label>
                 <Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
                   const cant = parseFloat(e.target.value) || 0;
-                  const disponibles = invSeleccionado
-                    ? Math.max(0, (invSeleccionado.cantidad_hojas || 0) - getTotalHojasRecurtidas(invSeleccionado.codigo_lote))
-                    : 9999;
                   setCurrentItem({...currentItem, cantidad_pieles: cant,
                     peso_promedio: cant > 0 ? (parseFloat(currentItem.peso_actual) || 0) / cant : 0});
                 }} className={invSeleccionado && (parseFloat(currentItem?.cantidad_pieles) || 0) >
                   Math.max(0, (invSeleccionado.cantidad_hojas || 0) - getTotalHojasRecurtidas(invSeleccionado.codigo_lote))
                   ? 'border-red-500 bg-red-50' : ''} />
-              </div>
-              <div>
-                <Label>Actividad</Label>
-                <Select value={currentItem?.actividad || 'humectacion'} onValueChange={v => setCurrentItem({...currentItem, actividad: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="humectacion">Humectación</SelectItem>
-                    <SelectItem value="recromado">Recromado</SelectItem>
-                    <SelectItem value="recurtido">Recurtido</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 
@@ -701,9 +692,7 @@ export default function ProcesoRecurtido() {
               </div>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg grid grid-cols-3 gap-4">
-              <div><Label>Subtotal Humectación</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_humectacion || 0)}</div></div>
-              <div><Label>Subtotal Recromado</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_recromado || 0)}</div></div>
+            <div className="bg-gray-50 p-4 rounded-lg">
               <div><Label>Subtotal Recurtido</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_recurtido || 0)}</div></div>
             </div>
 

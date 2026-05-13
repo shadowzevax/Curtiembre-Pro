@@ -280,6 +280,11 @@ export default function Pintura() {
       const costoTotalProceso = totalConsumo + totalManoObra;
       const totalHojas = parseFloat(currentItem.total_hojas_enviadas_pintura) || 0;
 
+      // Estado automático: borrador si vacío, parcial si hay datos, terminado si finalizar_pintura
+      const tieneConsumos = consumoCueroItems.length > 0 || consumosItems.length > 0 || manoObraItems.length > 0;
+      const esFinalizacion = currentItem.finalizar_pintura;
+      const estadoAuto = esFinalizacion ? 'terminado' : tieneConsumos ? 'parcial' : 'pendiente';
+
       const dataToSave = {
         ...currentItem,
         numero_proceso: currentItem.numero_proceso || currentItem.id_consecutivo,
@@ -291,7 +296,8 @@ export default function Pintura() {
         total_consumo_productos: totalConsumo,
         total_mano_obra: totalManoObra,
         costo_total_proceso_pintura: costoTotalProceso,
-        costo_promedio_por_hoja: totalHojas > 0 ? costoTotalProceso / totalHojas : 0
+        costo_promedio_por_hoja: totalHojas > 0 ? costoTotalProceso / totalHojas : 0,
+        estado_pedido_pintura: estadoAuto,
       };
 
       if (isEditing) {
@@ -486,15 +492,16 @@ export default function Pintura() {
             </div>
             <div className="grid grid-cols-1 gap-4 max-w-xs">
               <div>
-                <Label>Estado del Pedido en Pintura *</Label>
-                <Select value={currentItem.estado_pedido_pintura || 'pendiente'} onValueChange={v => setCurrentItem({...currentItem, estado_pedido_pintura: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pendiente">PENDIENTE</SelectItem>
-                    <SelectItem value="parcial">PARCIAL</SelectItem>
-                    <SelectItem value="terminado">TERMINADO</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Estado del Pedido en Pintura</Label>
+                <div className={`mt-1 px-3 py-2 rounded border font-bold text-sm ${
+                  currentItem.estado_pedido_pintura === 'terminado' ? 'bg-green-100 text-green-800 border-green-300' :
+                  currentItem.estado_pedido_pintura === 'parcial' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                  'bg-yellow-100 text-yellow-800 border-yellow-300'
+                }`}>
+                  {currentItem.estado_pedido_pintura === 'terminado' ? '✅ FINALIZADO' :
+                   currentItem.estado_pedido_pintura === 'parcial' ? '🔄 EN PROCESO / PARCIAL' : '🕐 BORRADOR / PENDIENTE'}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">El estado se controla automáticamente por el sistema.</p>
               </div>
             </div>
 
@@ -773,36 +780,194 @@ export default function Pintura() {
               </div>
             </div>
 
-            {/* ══ RESUMEN COSTOS ════════════════════════════════════════════ */}
+            {/* ══ RESUMEN DE COSTOS POR TIPO DE ACABADO (7 bloques) ════════ */}
             {resumenAcabado && (
-              <div className="border-t pt-4 mt-2">
-                <h3 className="font-bold text-lg mb-4">Resumen de Costos por Tipo de Acabado</h3>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="border rounded-lg p-4 bg-emerald-50 border-emerald-200">
-                    <h4 className="font-bold text-emerald-800 mb-3 text-sm uppercase">NAPA</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between"><span className="text-gray-600">Total Consumo NAPA:</span><span className="font-bold text-blue-700">{formatCurrency(resumenAcabado.consumoNapa)}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Total Mano de Obra NAPA:</span><span className="font-bold text-green-700">{formatCurrency(resumenAcabado.manoObraNapa)}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Hojas Buenas NAPA:</span><span className="font-bold">{resumenAcabado.hojasNapa}</span></div>
-                      <div className="flex justify-between border-t pt-2"><span className="font-semibold">Costo Total NAPA:</span><span className="font-bold text-xl text-purple-700">{formatCurrency(resumenAcabado.costoTotalNapa)}</span></div>
-                      <div className="flex justify-between"><span className="font-semibold">Costo por Hoja NAPA:</span><span className="font-bold text-orange-700">{formatCurrency(resumenAcabado.costoPorHojaNapa)}</span></div>
-                    </div>
+              <div className="border-t pt-4 mt-2 space-y-4">
+                <h3 className="font-bold text-lg">Resumen de Costos por Tipo de Acabado</h3>
+
+                {/* 1. INFORMACIÓN GENERAL DEL PEDIDO */}
+                <div className="bg-slate-50 border rounded-lg p-4">
+                  <h4 className="font-bold text-slate-700 mb-3 text-sm uppercase border-b pb-1">1. Información General del Pedido</h4>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div><span className="font-semibold text-slate-600">ID Consecutivo:</span> <span className="font-mono font-bold text-emerald-700">{currentItem.id_consecutivo || 'N/A'}</span></div>
+                    <div><span className="font-semibold text-slate-600">Fecha Entrega Pintor:</span> {currentItem.fecha_entrega_pintor || 'N/A'}</div>
+                    <div><span className="font-semibold text-slate-600">Pintor Responsable:</span> {currentItem.pintor_responsable || 'N/A'}</div>
+                    <div><span className="font-semibold text-slate-600">Tipo de Acabado(s):</span> {[...new Set(consumoCueroItems.map(c => c.tipo_acabado).filter(Boolean))].join(', ') || 'N/A'}</div>
+                    <div><span className="font-semibold text-slate-600">Tipo de Cuero:</span> {[...new Set(consumoCueroItems.map(c => c.tipo_cuero).filter(Boolean))].join(', ') || 'N/A'}</div>
+                    <div><span className="font-semibold text-slate-600">Color Final:</span> {[...new Set(consumoCueroItems.map(c => c.color_final).filter(Boolean))].join(', ') || 'N/A'}</div>
                   </div>
-                  <div className="border rounded-lg p-4 bg-slate-50 border-slate-200">
-                    <h4 className="font-bold text-slate-700 mb-3 text-sm uppercase">OTROS ACABADOS</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between"><span className="text-gray-600">Total Consumo OTROS:</span><span className="font-bold text-blue-700">{formatCurrency(resumenAcabado.consumoOtros)}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Total Mano de Obra OTROS:</span><span className="font-bold text-green-700">{formatCurrency(resumenAcabado.manoObraOtros)}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-600">Hojas Buenas OTROS:</span><span className="font-bold">{resumenAcabado.hojasOtros}</span></div>
-                      <div className="flex justify-between border-t pt-2"><span className="font-semibold">Costo Total OTROS:</span><span className="font-bold text-xl text-purple-700">{formatCurrency(resumenAcabado.costoTotalOtros)}</span></div>
-                      <div className="flex justify-between"><span className="font-semibold">Costo por Hoja OTROS:</span><span className="font-bold text-orange-700">{formatCurrency(resumenAcabado.costoPorHojaOtros)}</span></div>
+                </div>
+
+                {/* 2. RESUMEN CONSUMO CUERO EN HOJAS */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-bold text-purple-800 mb-3 text-sm uppercase border-b border-purple-200 pb-1">2. Resumen Consumo Cuero en Hojas</h4>
+                  {consumoCueroItems.length === 0 ? <p className="text-xs text-slate-400">Sin items de cuero registrados.</p> : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-purple-100">
+                          <tr>
+                            <th className="p-1 text-left">Código</th><th className="p-1 text-left">Descripción</th><th className="p-1 text-left">U.M.</th>
+                            <th className="p-1 text-right">Total Hojas</th><th className="p-1 text-right">Hojas Buenas</th><th className="p-1 text-right">Merma</th>
+                            <th className="p-1 text-right">% Merma</th><th className="p-1 text-right">% Aprovech.</th>
+                            <th className="p-1 text-right">Costo Prom./Hoja</th><th className="p-1 text-right">Costo Total</th>
+                            <th className="p-1 text-right">Costo Merma</th><th className="p-1 text-right">Costo Real Hojas Buenas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {consumoCueroItems.map((c, i) => {
+                            const totalH = parseFloat(c.cantidad_hojas) || 0;
+                            const merma = parseFloat(c.merma_produccion) || 0;
+                            const buenas = parseFloat(c.hojas_buenas) || Math.max(0, totalH - merma);
+                            const pctMerma = totalH > 0 ? (merma / totalH * 100).toFixed(1) : 0;
+                            const pctAprov = totalH > 0 ? (buenas / totalH * 100).toFixed(1) : 0;
+                            const costoMerma = merma * (parseFloat(c.costo_promedio) || 0);
+                            const costoRealBuenas = buenas > 0 ? (parseFloat(c.costo_total_cuero) || 0) / buenas : 0;
+                            return (
+                              <tr key={i} className="border-t">
+                                <td className="p-1 font-mono">{c.codigo}</td>
+                                <td className="p-1">{c.descripcion}</td>
+                                <td className="p-1">{c.unidad_medida || 'HOJA'}</td>
+                                <td className="p-1 text-right font-bold">{totalH}</td>
+                                <td className="p-1 text-right text-green-700 font-bold">{buenas}</td>
+                                <td className="p-1 text-right text-red-600">{merma}</td>
+                                <td className="p-1 text-right text-orange-600">{pctMerma}%</td>
+                                <td className="p-1 text-right text-green-600">{pctAprov}%</td>
+                                <td className="p-1 text-right">{formatCurrency(c.costo_promedio || 0)}</td>
+                                <td className="p-1 text-right font-bold text-blue-700">{formatCurrency(c.costo_total_cuero || 0)}</td>
+                                <td className="p-1 text-right text-red-600">{formatCurrency(costoMerma)}</td>
+                                <td className="p-1 text-right font-bold text-emerald-700">{formatCurrency(costoRealBuenas)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-purple-100 font-bold text-xs">
+                          <tr>
+                            <td colSpan={3} className="p-1 text-right">TOTALES:</td>
+                            <td className="p-1 text-right">{consumoCueroItems.reduce((s,c) => s+(parseFloat(c.cantidad_hojas)||0),0)}</td>
+                            <td className="p-1 text-right text-green-700">{consumoCueroItems.reduce((s,c) => s+(parseFloat(c.hojas_buenas)||0),0)}</td>
+                            <td className="p-1 text-right text-red-600">{consumoCueroItems.reduce((s,c) => s+(parseFloat(c.merma_produccion)||0),0)}</td>
+                            <td colSpan={2} className="p-1"></td>
+                            <td className="p-1"></td>
+                            <td className="p-1 text-right text-blue-700">{formatCurrency(consumoCueroItems.reduce((s,c) => s+(c.costo_total_cuero||0),0))}</td>
+                            <td colSpan={2} className="p-1"></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. RESUMEN CONSUMO INSUMOS Y QUÍMICOS (independiente del cuero) */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-bold text-blue-800 mb-3 text-sm uppercase border-b border-blue-200 pb-1">3. Resumen Consumo Insumos y Químicos (Total del Lote)</h4>
+                  {consumosItems.length === 0 ? <p className="text-xs text-slate-400">Sin consumos de insumos registrados.</p> : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-blue-100">
+                          <tr>
+                            <th className="p-1 text-left">Producto</th><th className="p-1 text-right">Cantidad</th>
+                            <th className="p-1 text-right">U.M.</th><th className="p-1 text-right">Costo Unitario</th><th className="p-1 text-right font-bold">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {consumosItems.map((c, i) => (
+                            <tr key={i} className="border-t">
+                              <td className="p-1">{c.nombre_producto || c.codigo_pcto}</td>
+                              <td className="p-1 text-right">{c.cantidad_consumida}</td>
+                              <td className="p-1 text-right">{c.unidad_medida}</td>
+                              <td className="p-1 text-right">{formatCurrency(c.costo_unitario)}</td>
+                              <td className="p-1 text-right font-bold text-blue-700">{formatCurrency(c.costo_total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-blue-100 font-bold">
+                          <tr><td colSpan={4} className="p-1 text-right">TOTAL GENERAL INSUMOS Y QUÍMICOS:</td>
+                            <td className="p-1 text-right text-blue-800">{formatCurrency(consumosItems.reduce((s,c) => s+(c.costo_total||0),0))}</td></tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. RESUMEN MANO DE OBRA */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-bold text-green-800 mb-3 text-sm uppercase border-b border-green-200 pb-1">4. Resumen Mano de Obra</h4>
+                  <div className="space-y-1 text-sm">
+                    {manoObraItems.map((m, i) => (
+                      <div key={i} className="flex justify-between text-xs">
+                        <span>{m.detalle || `Item ${i+1}`} ({m.cantidad_hojas} hojas × {formatCurrency(m.valor_por_hoja)}/hoja)</span>
+                        <span className="font-bold text-green-700">{formatCurrency(m.total)}</span>
+                      </div>
+                    ))}
+                    {manoObraItems.length === 0 && <p className="text-xs text-slate-400">Sin mano de obra registrada.</p>}
+                    <div className="flex justify-between font-bold border-t pt-2">
+                      <span>TOTAL GENERAL MANO DE OBRA:</span>
+                      <span className="text-green-800">{formatCurrency(manoObraItems.reduce((s,m) => s+(m.total||0), 0))}</span>
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 p-3 bg-slate-800 text-white rounded-lg flex justify-between items-center">
-                  <span className="font-bold">COSTO TOTAL PROCESO DE PINTURA:</span>
-                  <span className="font-bold text-xl">{formatCurrency((resumenAcabado.costoTotalNapa || 0) + (resumenAcabado.costoTotalOtros || 0))}</span>
-                </div>
+
+                {/* 5. COSTO TOTAL GENERAL */}
+                {(() => {
+                  const totalCuero = consumoCueroItems.reduce((s,c) => s+(c.costo_total_cuero||0), 0);
+                  const totalInsumos = consumosItems.reduce((s,c) => s+(c.costo_total||0), 0);
+                  const totalMO = manoObraItems.reduce((s,m) => s+(m.total||0), 0);
+                  const totalGeneral = totalCuero + totalInsumos + totalMO;
+                  return (
+                    <div className="bg-slate-800 text-white rounded-lg p-4">
+                      <h4 className="font-bold mb-3 text-sm uppercase">5. Costo Total General del Proceso</h4>
+                      <div className="grid grid-cols-4 gap-4 text-sm">
+                        <div className="text-center"><p className="text-slate-300 text-xs">Total Cuero en Hojas</p><p className="font-bold text-xl text-purple-300">{formatCurrency(totalCuero)}</p></div>
+                        <div className="text-center"><p className="text-slate-300 text-xs">Total Insumos y Químicos</p><p className="font-bold text-xl text-blue-300">{formatCurrency(totalInsumos)}</p></div>
+                        <div className="text-center"><p className="text-slate-300 text-xs">Total Mano de Obra</p><p className="font-bold text-xl text-green-300">{formatCurrency(totalMO)}</p></div>
+                        <div className="text-center border-l border-slate-600"><p className="text-slate-300 text-xs">COSTO TOTAL GENERAL</p><p className="font-bold text-2xl text-yellow-300">{formatCurrency(totalGeneral)}</p></div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 6. INDICADORES DE CONTROL Y RENDIMIENTO */}
+                {(() => {
+                  const totalHojasUsadas = consumoCueroItems.reduce((s,c) => s+(parseFloat(c.cantidad_hojas)||0), 0);
+                  const totalHojasBuenas = consumoCueroItems.reduce((s,c) => s+(parseFloat(c.hojas_buenas)||0), 0);
+                  const totalMerma = consumoCueroItems.reduce((s,c) => s+(parseFloat(c.merma_produccion)||0), 0);
+                  const pctMerma = totalHojasUsadas > 0 ? (totalMerma / totalHojasUsadas * 100).toFixed(1) : 0;
+                  const pctAprov = totalHojasUsadas > 0 ? (totalHojasBuenas / totalHojasUsadas * 100).toFixed(1) : 0;
+                  const totalCuero = consumoCueroItems.reduce((s,c) => s+(c.costo_total_cuero||0), 0);
+                  const totalInsumos = consumosItems.reduce((s,c) => s+(c.costo_total||0), 0);
+                  const totalMO = manoObraItems.reduce((s,m) => s+(m.total||0), 0);
+                  const totalGeneral = totalCuero + totalInsumos + totalMO;
+                  const costoPromHojaBuena = totalHojasBuenas > 0 ? totalGeneral / totalHojasBuenas : 0;
+                  return (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <h4 className="font-bold text-amber-800 mb-3 text-sm uppercase border-b border-amber-200 pb-1">6. Indicadores de Control y Rendimiento</h4>
+                      <div className="grid grid-cols-4 gap-4 text-sm">
+                        <div className="text-center p-3 bg-white rounded border"><p className="text-slate-500 text-xs">Cantidad Total Procesada</p><p className="font-bold text-2xl text-slate-800">{totalHojasUsadas}</p><p className="text-xs text-slate-400">hojas</p></div>
+                        <div className="text-center p-3 bg-white rounded border"><p className="text-slate-500 text-xs">% Desperdicio</p><p className="font-bold text-2xl text-red-600">{pctMerma}%</p><p className="text-xs text-slate-400">{totalMerma} hojas merma</p></div>
+                        <div className="text-center p-3 bg-white rounded border"><p className="text-slate-500 text-xs">% Aprovechamiento</p><p className="font-bold text-2xl text-green-600">{pctAprov}%</p><p className="text-xs text-slate-400">{totalHojasBuenas} hojas buenas</p></div>
+                        <div className="text-center p-3 bg-white rounded border"><p className="text-slate-500 text-xs">Costo Prom. Real/Hoja Buena</p><p className="font-bold text-xl text-orange-600">{formatCurrency(costoPromHojaBuena)}</p></div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <p className="font-semibold text-slate-600 mb-2">Costos por Tipo de Acabado:</p>
+                          {TIPOS_ACABADO.map(t => {
+                            const costo = consumosItems.filter(c => c.tipo_acabado === t.value).reduce((s,c) => s+(c.costo_total||0), 0) + manoObraItems.filter(m => m.tipo_acabado === t.value).reduce((s,m) => s+(m.total||0), 0);
+                            return <div key={t.value} className="flex justify-between py-0.5"><span>{t.label}:</span><span className="font-bold">{formatCurrency(costo)}</span></div>;
+                          })}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-600 mb-2">Costos por Tipo de Cuero:</p>
+                          {TIPOS_CUERO.map(t => {
+                            const hojas = consumoCueroItems.filter(c => c.tipo_cuero === t.value).reduce((s,c) => s+(parseFloat(c.cantidad_hojas)||0), 0);
+                            const costo = consumoCueroItems.filter(c => c.tipo_cuero === t.value).reduce((s,c) => s+(c.costo_total_cuero||0), 0);
+                            return <div key={t.value} className="flex justify-between py-0.5"><span>{t.label} ({hojas} hojas):</span><span className="font-bold">{formatCurrency(costo)}</span></div>;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
               </div>
             )}
 
@@ -811,20 +976,27 @@ export default function Pintura() {
               <Textarea value={currentItem.observaciones || ''} disabled={esFinalizado} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={3} />
             </div>
 
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-              <div className="flex items-center space-x-3">
-                <input type="checkbox" id="finalizar_pintura" checked={currentItem?.finalizar_pintura || false}
-                  onChange={e => setCurrentItem({...currentItem, finalizar_pintura: e.target.checked})}
-                  className="w-5 h-5 accent-emerald-600 cursor-pointer"
-                />
-                <label htmlFor="finalizar_pintura" className="font-semibold text-emerald-800 cursor-pointer">Finalizar Pintura</label>
-                <span className="text-sm text-emerald-600">(Al finalizar descuenta de Inv. en Proceso e ingresa a Productos Terminados)</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+            <div className="flex justify-end gap-3 pt-4 border-t mt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              {!esFinalizado && <Button type="submit">Guardar</Button>}
+              {!esFinalizado && (
+                <>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="border-blue-500 text-blue-700 hover:bg-blue-50"
+                    onClick={() => setCurrentItem(prev => ({ ...prev, finalizar_pintura: false, _guardar_modo: 'borrador' }))}
+                  >
+                    💾 Guardar Borrador
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => setCurrentItem(prev => ({ ...prev, finalizar_pintura: true, _guardar_modo: 'final' }))}
+                  >
+                    ✅ Finalizar Proceso
+                  </Button>
+                </>
+              )}
             </div>
           </form>
           )}

@@ -216,8 +216,8 @@ export default function CatalogoProductos() {
     return (
         <div className="p-6">
             <PageHeader 
-                title="Catálogo de Químicos" 
-                description="Gestión maestra de productos químicos e insumos."
+                title="Catálogo de Productos" 
+                description="Catálogo de Productos- Gestión Maestra de Productos."
                 actionButton={
                     <div className="flex gap-2">
                         <Button variant="outline" onClick={handleSyncAll} className="border-blue-500 text-blue-600 hover:bg-blue-50">
@@ -232,7 +232,7 @@ export default function CatalogoProductos() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Listado de Químicos</CardTitle>
+                    <CardTitle>Listado de Productos</CardTitle>
                     <div className="mt-2">
                         <div className="relative">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
