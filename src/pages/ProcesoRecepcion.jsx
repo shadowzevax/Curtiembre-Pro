@@ -43,16 +43,23 @@ export default function ProcesoRecepcion() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [recepcionesData, insumosData, productosData, proveedoresData, comprasData] = await Promise.all([
+      const [recepcionesData, insumosData, productosData, proveedoresData, comprasData, movimientosData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recepcion' }),
         Insumo.list(),
-        ProductoTerminado.list(),
+        ProductoTerminado.filter({ categoria: 'pieles' }),
         Proveedor.list(),
-        OrdenCompra.list()
+        OrdenCompra.list(),
+        MovimientoInventario.list()
       ]);
       setRecepciones(Array.isArray(recepcionesData) ? recepcionesData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
-      setProductos(Array.isArray(productosData) ? productosData : []);
+      // Calcular stock real desde MovimientoInventario para cada producto
+      const productosConStock = (Array.isArray(productosData) ? productosData : []).map(prod => {
+        const movsProd = (Array.isArray(movimientosData) ? movimientosData : []).filter(m => m.insumo_id === prod.id);
+        const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
+        return { ...prod, stock_actual: stockActual };
+      });
+      setProductos(productosConStock);
       setProveedores(Array.isArray(proveedoresData) ? proveedoresData : []);
       setOrdenesCompra(Array.isArray(comprasData) ? comprasData : []);
     } catch (error) {
@@ -141,9 +148,13 @@ export default function ProcesoRecepcion() {
       if (exists) { alert('El CÓDIGO DE LOTE YA EXISTE.'); return; }
     }
 
-    if (!isEditing && currentItem.codigo_producto && currentItem.cantidad_total_lote_hojas > 0 && stockDisponible !== null) {
-      if (currentItem.cantidad_total_lote_hojas > stockDisponible) {
-        alert(`⚠️ Cantidad (${currentItem.cantidad_total_lote_hojas}) supera el stock (${stockDisponible} ${stockUnidad}).`);
+    if (!isEditing && currentItem.codigo_producto) {
+      if (stockDisponible !== null && stockDisponible <= 0) {
+        alert('🚫 No existen hojas disponibles en inventario para el código seleccionado. No es posible registrar la recepción.');
+        return;
+      }
+      if (stockDisponible !== null && currentItem.cantidad_total_lote_hojas > stockDisponible) {
+        alert(`⚠️ La cantidad ingresada (${currentItem.cantidad_total_lote_hojas}) supera el stock disponible en Inventario de Materias Primas (${stockDisponible} ${stockUnidad}). Por favor ajuste la cantidad.`);
         return;
       }
     }
@@ -346,9 +357,16 @@ export default function ProcesoRecepcion() {
                 <div className="space-y-1">
                   <Input placeholder="Buscar orden..." value={ordenCompraSearch} onChange={e => setOrdenCompraSearch(e.target.value)} className="h-8 text-xs" />
                   <Select value={currentItem?.id_orden_compra_origen || ''} onValueChange={v => {
-                    if (v === '__clear__') { setCurrentItem({ ...currentItem, id_orden_compra_origen: '' }); setOrdenCompraSearch(''); return; }
+                    if (v === '__clear__') { setCurrentItem({ ...currentItem, id_orden_compra_origen: '', proveedor_id: '', no_documento: '' }); setOrdenCompraSearch(''); return; }
                     const oc = ordenesCompra.find(o => o.id === v);
-                    setCurrentItem({ ...currentItem, id_orden_compra_origen: v, no_documento: oc?.numero_documento || '', proveedor_id: oc?.proveedor_id || '' });
+                    // Buscar proveedor: primero por proveedor_id, si no por codigo_proveedor
+                    const proveedorEncontrado = proveedores.find(p => p.id === oc?.proveedor_id) || proveedores.find(p => p.codigo === oc?.codigo_proveedor);
+                    setCurrentItem({
+                      ...currentItem,
+                      id_orden_compra_origen: v,
+                      no_documento: oc?.numero_documento || oc?.numero_id || '',
+                      proveedor_id: proveedorEncontrado?.id || oc?.proveedor_id || ''
+                    });
                     setOrdenCompraSearch('');
                   }}>
                     <SelectTrigger><SelectValue placeholder="Seleccionar (opcional)" /></SelectTrigger>
@@ -387,24 +405,37 @@ export default function ProcesoRecepcion() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Código PCTO. *</Label>
-                <Input placeholder="Buscar..." value={productoSearch} onChange={e => setProductoSearch(e.target.value)} className="h-8 text-xs mb-1" />
+                <Label>Código PCTO. * <span className="text-xs text-slate-400">(Inventario Materias Primas)</span></Label>
+                <Input placeholder="Buscar por código o descripción..." value={productoSearch} onChange={e => setProductoSearch(e.target.value)} className="h-8 text-xs mb-1" />
                 <Select value={currentItem?.codigo_producto || ''} onValueChange={v => {
                   const p = productos.find(pr => pr.codigo === v);
+                  const stockReal = p?.stock_actual ?? 0;
                   setCostoPromedioProducto(p?.costo_promedio || 0);
-                  setStockDisponible(p?.stock_actual ?? null);
-                  setStockUnidad(p?.unidad_medida || '');
+                  setStockDisponible(stockReal);
+                  setStockUnidad(p?.unidad_medida || 'hojas');
                   setProductoSearch('');
                   const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
                   setCurrentItem({ ...currentItem, codigo_producto: v, descripcion_producto: p?.descripcion || '', costo_promedio: p?.costo_promedio || 0, costo_total: hojas * (p?.costo_promedio || 0) });
                 }}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar código" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar código de materia prima" /></SelectTrigger>
                   <SelectContent>
                     {productos.filter(p => p.codigo).filter(p => !productoSearch || (p.codigo || '').toLowerCase().includes(productoSearch.toLowerCase()) || (p.descripcion || '').toLowerCase().includes(productoSearch.toLowerCase()))
-                      .map(p => <SelectItem key={p.id} value={p.codigo}>{p.codigo} — {p.descripcion}</SelectItem>)}
+                      .map(p => (
+                        <SelectItem key={p.id} value={p.codigo}>
+                          {p.codigo} — {p.descripcion} {p.stock_actual > 0 ? `(Stock: ${p.stock_actual})` : '⚠️ Sin stock'}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
-                {stockDisponible !== null && <div className={`text-xs px-2 py-1 rounded mt-1 font-medium ${stockDisponible > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>📦 Disponible: <strong>{stockDisponible} {stockUnidad}</strong></div>}
+                {stockDisponible !== null && (
+                  <div className={`text-xs px-2 py-1 rounded mt-1 font-medium flex items-center gap-1 ${stockDisponible > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                    {stockDisponible > 0 ? '📦' : '🚫'}
+                    {stockDisponible > 0
+                      ? <span>Disponible en inventario: <strong>{stockDisponible} {stockUnidad}</strong></span>
+                      : <span><strong>No existen hojas disponibles en inventario para el código seleccionado.</strong></span>
+                    }
+                  </div>
+                )}
               </div>
               <div>
                 <Label>Nombre del Producto *</Label>
