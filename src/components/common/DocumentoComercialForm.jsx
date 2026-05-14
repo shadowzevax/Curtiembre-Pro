@@ -22,7 +22,7 @@ const getTodayColombia = () => {
   return localTime.toISOString().split('T')[0];
 };
 
-export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, documento, terceros, itemsCatalogo, tipoDocumento, tipoItem, terceroLabel, documentoTitulo }) {
+export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, onSuccess, documento, terceros, itemsCatalogo, tipoDocumento, tipoItem, terceroLabel, documentoTitulo }) {
   const [successToast, setSuccessToast] = useState(null);
   const [formData, setFormData] = useState(null);
   const [terceroPersonalizado, setTerceroPersonalizado] = useState(false);
@@ -498,13 +498,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     // Guardar la orden primero
     try {
         const savedOrder = await onSubmit(finalData);
+        if (!savedOrder) return; // onSubmit retornó null (ej: duplicado)
         const orderId = savedOrder?.id || finalData.id;
 
-        // Cerrar modal inmediatamente tras guardar exitosamente
+        // Cerrar modal y notificar éxito para que el padre recargue la tabla
         onOpenChange(false);
-        
-        // Mensaje de éxito
-        setSuccessToast({
+        if (onSuccess) onSuccess({
           message: "Documento guardado",
           description: `${finalData.numero_id || finalData.numero_documento} registrado correctamente.`,
         });
@@ -1720,14 +1719,6 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
       />
     </Dialog>
 
-    {successToast && (
-      <SuccessToast
-        message={successToast.message}
-        description={successToast.description}
-        duration={3000}
-        onClose={() => setSuccessToast(null)}
-      />
-    )}
     </>
   );
 }

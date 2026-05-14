@@ -11,6 +11,7 @@ import PageHeader from "../components/common/PageHeader";
 import DocumentoComercialForm from "../components/common/DocumentoComercialForm";
 import SoporteViewer from "../components/common/SoporteViewer";
 import OrdenDetalle from "../components/compras/OrdenDetalle";
+import SuccessToast from "../components/common/SuccessToast";
 
 // Formatear fecha a dd/mm/yyyy
 const formatDate = (dateString) => {
@@ -52,6 +53,7 @@ export default function CompraInsumos() {
   const [filters, setFilters] = useState(initialFilters);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [successToast, setSuccessToast] = useState(null);
 
   const getProveedorNombre = useCallback((proveedorId) => {
     const proveedor = proveedores.find(p => p.id === proveedorId);
@@ -141,7 +143,7 @@ export default function CompraInsumos() {
       if (isDuplicate) {
         alert("⚠️ REVISE DOCUMENTO YA EXISTE\n\nYa existe un documento con el mismo No. ID.");
         setLoading(false);
-        return;
+        return null;
       }
       
       if (editingOrder) {
@@ -220,14 +222,12 @@ export default function CompraInsumos() {
         }
       }
 
-      // Siempre cerrar el modal y recargar al guardar exitosamente
-      setShowForm(false);
+      // Retornar savedOrder — DocumentoComercialForm cierra el modal y luego onSuccess recarga
       setEditingOrder(null);
-      // Pequeño delay para asegurar que la DB ya tiene el registro antes de recargar
-      setTimeout(() => loadData(), 500);
       return savedOrder;
     } catch (error) {
       console.error("Error saving order:", error);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -442,11 +442,12 @@ export default function CompraInsumos() {
       {showForm && (
         <DocumentoComercialForm
           open={showForm}
-          onOpenChange={(open) => {
-            setShowForm(open);
-            if (!open) setTimeout(() => loadData(), 500);
-          }}
+          onOpenChange={(open) => { setShowForm(open); }}
           onSubmit={handleSubmit}
+          onSuccess={(toast) => {
+            setSuccessToast(toast);
+            loadData();
+          }}
           documento={editingOrder}
           terceros={proveedores}
           itemsCatalogo={insumos}
@@ -471,6 +472,15 @@ export default function CompraInsumos() {
             onOpenChange={setShowSoporteViewer}
             soportes={soportesToShow}
             orden={selectedOrder}
+        />
+      )}
+
+      {successToast && (
+        <SuccessToast
+          message={successToast.message}
+          description={successToast.description}
+          duration={4000}
+          onClose={() => setSuccessToast(null)}
         />
       )}
     </div>
