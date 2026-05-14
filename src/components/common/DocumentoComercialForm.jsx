@@ -379,12 +379,28 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
 
   const handleFinalSubmit = async (e) => {
     e.preventDefault();
+    
+    // ── DEBUG ────────────────────────────────────────────────────────────────
+    const hoy = getTodayColombia();
+    console.log('🟡 [SUBMIT] handleFinalSubmit ejecutado');
+    console.log('🟡 [SUBMIT] Fecha Colombia (hoy):', hoy);
+    console.log('🟡 [SUBMIT] fecha_emision_documento en formData:', formData.fecha_emision_documento);
+    console.log('🟡 [SUBMIT] fecha_orden en formData:', formData.fecha_orden);
+    console.log('🟡 [SUBMIT] fecha_vencimiento en formData:', formData.fecha_vencimiento);
+    console.log('🟡 [SUBMIT] condicion_pago:', formData.condicion_pago);
+    console.log('🟡 [SUBMIT] forma_pago:', formData.forma_pago);
+    console.log('🟡 [SUBMIT] cuenta_destino_id:', formData.cuenta_destino_id);
+    console.log('🟡 [SUBMIT] totalNeto calculado:', calculateTotals().totalNeto);
+    // ────────────────────────────────────────────────────────────────────────
+
     const totals = calculateTotals();
     const terceroIdField = tipoDocumento === 'compra' ? 'proveedor_id' : 'cliente_id';
     const itemIdField = tipoItem === 'producto' ? 'producto_id' : (tipoItem === 'servicio' ? 'servicio_id' : 'insumo_id');
 
     const finalData = {
       ...formData,
+      fecha_emision_documento: formData.fecha_emision_documento || formData.fecha_orden || getTodayColombia(),
+      fecha_orden: formData.fecha_emision_documento || formData.fecha_orden || getTodayColombia(),
       [terceroIdField]: terceroPersonalizado ? formData.tercero_personalizado : formData[terceroIdField],
       items: formData.items.map((item, index) => {
         const cleanItem = { ...item };
@@ -1334,18 +1350,16 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                         <Label className="font-bold">Documento Origen *</Label>
                         <Input 
                             value={formData.documento_origen_numero || ''} 
-                            onChange={e => handleInputChange('documento_origen_numero', e.target.value)} 
-                            placeholder="Ej: FV-001"
-                            required
+                                            onChange={e => handleInputChange('documento_origen_numero', e.target.value)} 
+                                            placeholder="Ej: FV-001"
                         />
                     </div>
                     <div className="md:col-span-2">
                         <Label className="font-bold">Motivo *</Label>
                         <Input 
                             value={formData.motivo_nota || ''} 
-                            onChange={e => handleInputChange('motivo_nota', e.target.value)} 
-                            placeholder="Describe el motivo de la nota"
-                            required
+                                            onChange={e => handleInputChange('motivo_nota', e.target.value)} 
+                                            placeholder="Describe el motivo de la nota"
                         />
                     </div>
                     <div>
@@ -1577,7 +1591,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                                              const caja = cajas.find(c => c.id === v);
                                              handleInputChange('cuenta_destino_id', v);
                                              handleInputChange('cuenta_destino_nombre', caja ? caja.nombre : '');
-                                         }} required>
+                                         }}>
                                              <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
                                              <SelectContent>
                                                  {cajas.map(c => (
@@ -1593,7 +1607,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                                              const cuenta = cuentasBancarias.find(c => c.id === v);
                                              handleInputChange('cuenta_destino_id', v);
                                              handleInputChange('cuenta_destino_nombre', cuenta ? `${cuenta.banco} - ${cuenta.numero_cuenta}` : '');
-                                         }} required>
+                                         }}>
                                              <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
                                              <SelectContent>
                                                  {cuentasBancarias.map(c => (
