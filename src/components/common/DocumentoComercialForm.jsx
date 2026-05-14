@@ -1412,14 +1412,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                   <Input
                     type="date"
                     value={formData.fecha_emision_documento || formData.fecha_orden}
-                    max={getTodayColombia()}
                     onChange={e => {
                       const val = e.target.value;
                       const hoy = getTodayColombia();
                       if (val > hoy) { alert('⚠️ La Fecha de Emisión no puede ser futura.'); return; }
                       handleInputChange('fecha_emision_documento', val);
                     }}
-                    required
                   />
                 </div>
                 {tipoDocumento === 'compra' && (
