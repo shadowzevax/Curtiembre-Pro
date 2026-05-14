@@ -503,16 +503,18 @@ export default function Layout({ children, currentPageName }) {
             >
                 <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-4">
                     <div className="flex items-center space-x-3">
-                        <img 
-                            src="https://www.artecueros.com/wp-content/uploads/2025/05/logogrande.png"
+                        <img
+                            src="https://i.ibb.co/9HQ246Fn/artecueros-logo.png"
                             alt="ArteCueros Logo"
                             className="h-10 w-10 object-contain flex-shrink-0"
-                            onError={(e) => { 
-                                e.target.onerror = null; 
-                                e.target.src='https://cdn-icons-png.flaticon.com/512/1973/1973885.png'; 
-                                e.target.style.backgroundColor='white'; 
-                                e.target.style.padding='2px'; 
-                                e.target.style.borderRadius='8px';
+                            onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src =
+                                    "https://cdn-icons-png.flaticon.com/512/1973/1973885.png";
+
+                                e.currentTarget.style.backgroundColor = "white";
+                                e.currentTarget.style.padding = "2px";
+                                e.currentTarget.style.borderRadius = "8px";
                             }}
                         />
                         {!isCollapsed && (
