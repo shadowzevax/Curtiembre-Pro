@@ -207,14 +207,30 @@ export default function ProcesoLimpieza() {
       return;
     }
 
-    // Calcular snapshot de costos de Remojo para persistir antes de cambiar a Pelambre
-    const insumosRemojo = (currentItem.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
-    const costoRemojoSinIva = remojoDone && !(currentItem.costo_remojo_sin_iva !== undefined)
-      ? insumosRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0)
-      : (currentItem.costo_remojo_sin_iva || 0);
-    const ivaRemojo = remojoDone && !(currentItem.iva_remojo !== undefined)
-      ? insumosRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0)
-      : (currentItem.iva_remojo || 0);
+    // Los insumos de remojo ya están guardados en insumos_remojo_guardados (capturado en el checkbox onCheckedChange)
+    // Si remojo NO está finalizado aún, los insumos de remojo están en insumos_utilizados con seccion remojo
+    const insumosRemojoGuardados = currentItem.insumos_remojo_guardados && currentItem.insumos_remojo_guardados.length > 0
+      ? currentItem.insumos_remojo_guardados
+      : (currentItem.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
+
+    const costoRemojoSinIva = currentItem.costo_remojo_sin_iva != null && parseFloat(currentItem.costo_remojo_sin_iva) >= 0
+      ? parseFloat(currentItem.costo_remojo_sin_iva)
+      : insumosRemojoGuardados.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+    const ivaRemojo = currentItem.iva_remojo != null && parseFloat(currentItem.iva_remojo) >= 0
+      ? parseFloat(currentItem.iva_remojo)
+      : insumosRemojoGuardados.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+
+    // costo_remojo = base + iva (total con IVA)
+    const costoRemojoTotal = costoRemojoSinIva + ivaRemojo;
+    // insumos de pelambre = los que están actualmente en insumos_utilizados con seccion pelambre
+    const insumosPelambreActuales = (currentItem.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
+    const costoPelambreTotal = insumosPelambreActuales.reduce((sum, i) => sum + (parseFloat(i.valor_total)||0), 0);
+
+    // Combinar insumos de remojo guardados + insumos pelambre actuales para guardar todos juntos
+    const insumosCompletos = [
+      ...insumosRemojoGuardados,
+      ...insumosPelambreActuales,
+    ];
 
     const dataToSave = {
       ...currentItem,
@@ -225,10 +241,13 @@ export default function ProcesoLimpieza() {
       estado_pelambre: currentItem.estado_pelambre,
       finalizar_remojo: remojoDone,
       finalizar_pelambre: pelhambreDone,
-      // Persistir snapshot de costos de Remojo para el Resumen acumulativo
+      // Persistir todos los insumos juntos (remojo + pelambre) y snapshot de costos
+      insumos_utilizados: insumosCompletos,
+      insumos_remojo_guardados: insumosRemojoGuardados,
       costo_remojo_sin_iva: costoRemojoSinIva,
       iva_remojo: ivaRemojo,
-      insumos_remojo_guardados: currentItem.insumos_remojo_guardados || insumosRemojo,
+      costo_remojo: costoRemojoTotal,
+      costo_pelambre: costoPelambreTotal,
     };
 
     try {
@@ -713,11 +732,12 @@ export default function ProcesoLimpieza() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Detalle del Proceso de Limpieza — {selectedItem?.codigo_lote}</DialogTitle></DialogHeader>
           {selectedItem && (() => {
-            // Insumos de Remojo: pueden estar en insumos_remojo_guardados o en insumos_utilizados con seccion remojo
+            // Insumos de Remojo: primero buscar en insumos_remojo_guardados, luego filtrar insumos_utilizados
+            const todosInsumos = selectedItem.insumos_utilizados || [];
             const insumosRemojo = selectedItem.insumos_remojo_guardados?.length > 0
               ? selectedItem.insumos_remojo_guardados
-              : (selectedItem.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion);
-            const insumosPelambre = (selectedItem.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
+              : todosInsumos.filter(i => i.seccion === 'remojo' || !i.seccion);
+            const insumosPelambre = todosInsumos.filter(i => i.seccion === 'pelambre');
 
             // Costos Remojo
             const costoBaseRemojo = selectedItem.costo_remojo_sin_iva != null
