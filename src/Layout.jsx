@@ -501,11 +501,8 @@ export default function Layout({ children, currentPageName }) {
                     setExpandedMenus({}); // Contrae todos los submenús al salir
                 }}
             >
-                <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center px-4">
-                    {/* Espacio izquierdo fantasma para balancear el botón */}
-                    <div className="w-8 flex-shrink-0" />
-                    
-                    <div className="flex items-center space-x-3 flex-1 justify-center">
+                <div className={`h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center px-4 ${isCollapsed ? 'justify-center' : 'justify-between'}`}>
+                    <div className="flex items-center space-x-3">
                         <img
                             src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
                             alt="ArteCueros Logo"
@@ -526,15 +523,16 @@ export default function Layout({ children, currentPageName }) {
                             </div>
                         )}
                     </div>
-
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`lg:hidden text-stone-600 hover:bg-stone-200 flex-shrink-0 transition-opacity duration-300 ${isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-                        onClick={() => setSidebarOpen(false)}
-                    >
-                        <X className="w-5 h-5" />
-                    </Button>
+                    {!isCollapsed && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="lg:hidden text-stone-600 hover:bg-stone-200"
+                            onClick={() => setSidebarOpen(false)}
+                        >
+                            <X className="w-5 h-5" />
+                        </Button>
+                    )}
                 </div>
 
                 <nav className="flex-1 overflow-y-auto p-2">
