@@ -498,9 +498,10 @@ export default function Layout({ children, currentPageName }) {
                 onMouseEnter={() => setIsHovering(true)}
                 onMouseLeave={() => {
                     setIsHovering(false);
-                    setExpandedMenus({}); // Contrae todos los submenús al salir
+                    // ❌ Quitamos el setExpandedMenus({}) — era el causante de los saltos
                 }}
             >
+                {/* Header logo — sin cambios */}
                 <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-3">
                     <div className="flex items-center space-x-3">
                         <img
@@ -535,26 +536,28 @@ export default function Layout({ children, currentPageName }) {
                     )}
                 </div>
 
-                <nav className="flex-1 overflow-y-auto p-2">
+                {/* Nav con max-height para que no entierre el botón Salir */}
+                <nav className="flex-1 overflow-y-auto p-2 min-h-0">
                     <ul className="space-y-1">
                         {menuItems.map((item) => (
-                           <MenuItem
-                             key={item.title}
-                             item={item}
-                             expandedMenus={expandedMenus}
-                             toggleMenu={toggleMenu}
-                             isActiveLink={isActiveLink}
-                             togglePin={togglePin}
-                             pinnedShortcuts={pinnedShortcuts}
-                             setSidebarOpen={setSidebarOpen}
-                             userHasRole={userHasRole}
-                             isCollapsed={isCollapsed}
-                           />
+                        <MenuItem
+                            key={item.title}
+                            item={item}
+                            expandedMenus={expandedMenus}
+                            toggleMenu={toggleMenu}
+                            isActiveLink={isActiveLink}
+                            togglePin={togglePin}
+                            pinnedShortcuts={pinnedShortcuts}
+                            setSidebarOpen={setSidebarOpen}
+                            userHasRole={userHasRole}
+                            isCollapsed={isCollapsed}
+                        />
                         ))}
                     </ul>
                 </nav>
 
-                <div className="p-2 mt-auto border-t border-gray-200">
+                {/* Botón Salir — siempre visible, nunca enterrado */}
+                <div className="flex-shrink-0 p-2 border-t border-gray-200 bg-white">
                     <button
                         onClick={handleLogout}
                         className="w-full flex items-center space-x-3 p-3 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
