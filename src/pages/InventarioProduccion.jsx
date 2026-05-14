@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { ProductoTerminado, MovimientoInventario } from "@/entities/all";
+import { ProductoTerminado } from "@/entities/all";
 import PageHeader from "../components/common/PageHeader";
 import DataTable from "../components/common/DataTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,17 +28,10 @@ export default function InventarioProduccion() {
 
     const loadData = useCallback(async () => {
         try {
+            // Usar stock_actual directamente de la entidad (actualizado por Compras al guardar)
             const data = await ProductoTerminado.filter({ categoria: 'pieles' });
-            const movimientos = await MovimientoInventario.list();
-            
-            const productosConStock = data.map(prod => {
-                const movsProd = movimientos.filter(m => m.insumo_id === prod.id); 
-                const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-                return { ...prod, stock_actual: stockActual };
-            });
-            
-            setProductos(productosConStock);
-            setFilteredProductos(productosConStock);
+            setProductos(data);
+            setFilteredProductos(data);
         } catch (error) { 
             console.error("Error loading data:", error); 
         } finally { 
@@ -54,22 +47,10 @@ export default function InventarioProduccion() {
             (async () => {
                 try {
                     const data = await ProductoTerminado.filter({ categoria: 'pieles' });
-                    const movimientos = await MovimientoInventario.list();
-                    
-                    const productosConStock = data.map(prod => {
-                        const movsProd = movimientos.filter(m => m.insumo_id === prod.id); 
-                        const stockActual = movsProd.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-                        return { ...prod, stock_actual: stockActual };
-                    });
-                    
-                    setProductos(productosConStock);
-                    setFilteredProductos(prev => {
-                        const prevIds = new Set(prev.map(p => p.id));
-                        return productosConStock.filter(p => prevIds.has(p.id) || prev.length === 0);
-                    });
+                    setProductos(data);
                 } catch (error) { console.error(error); }
             })();
-        }, 3000);
+        }, 5000);
         
         return () => clearInterval(interval);
     }, [loadData]);
