@@ -502,32 +502,38 @@ export default function Layout({ children, currentPageName }) {
                 }}
             >
                 <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-4">
-                    <div className="flex items-center space-x-3">
-                        <img
-                            src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
-                            alt="ArteCueros Logo"
-                            className="h-10 w-10 object-contain flex-shrink-0"
-                            onError={(e) => {
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.src =
-                                    "https://cdn-icons-png.flaticon.com/512/1973/1973885.png";
-
-                                e.currentTarget.style.backgroundColor = "white";
-                                e.currentTarget.style.padding = "2px";
-                                e.currentTarget.style.borderRadius = "8px";
-                            }}
-                        />
+                    <div className="flex items-center space-x-3 w-full">
+                        {/* Contenedor fijo para el logo que siempre mantiene la misma posición */}
+                        <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center">
+                            <img
+                                src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
+                                alt="ArteCueros Logo"
+                                className="h-10 w-10 object-contain"
+                                onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src =
+                                        "https://cdn-icons-png.flaticon.com/512/1973/1973885.png";
+                                    e.currentTarget.style.backgroundColor = "white";
+                                    e.currentTarget.style.padding = "2px";
+                                    e.currentTarget.style.borderRadius = "8px";
+                                }}
+                            />
+                        </div>
+                        
+                        {/* Texto del logo - solo visible cuando no está colapsado */}
                         {!isCollapsed && (
-                            <div className="transition-opacity duration-300">
-                                <h1 className="text-stone-800 font-bold text-lg">ArteCueros</h1>
+                            <div className="transition-opacity duration-300 min-w-0">
+                                <h1 className="text-stone-800 font-bold text-lg truncate">ArteCueros</h1>
                                 <p className="text-stone-600 text-xs">Mejía</p>
                             </div>
                         )}
                     </div>
+                    
+                    {/* Botón de cerrar - solo en móvil */}
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="lg:hidden text-stone-600 hover:bg-stone-200"
+                        className="lg:hidden text-stone-600 hover:bg-stone-200 flex-shrink-0 ml-2"
                         onClick={() => setSidebarOpen(false)}
                     >
                         <X className="w-5 h-5" />
