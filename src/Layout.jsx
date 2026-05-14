@@ -501,7 +501,7 @@ export default function Layout({ children, currentPageName }) {
                     setExpandedMenus({}); // Contrae todos los submenús al salir
                 }}
             >
-                <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-0">
+                <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-2">
                     <div className="flex items-center space-x-3">
                         <img
                             src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
