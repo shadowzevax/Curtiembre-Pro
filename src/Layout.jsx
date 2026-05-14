@@ -491,32 +491,31 @@ export default function Layout({ children, currentPageName }) {
 
             <aside 
                 className={`
-                    fixed lg:relative inset-y-0 left-0 z-50 w-64 lg:w-72 
-                    bg-white shadow-xl transform transition-all duration-300 ease-in-out
+                    fixed lg:relative inset-y-0 left-0 z-50 ${sidebarWidth} bg-white shadow-xl transform transition-all duration-300 ease-in-out
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                     flex flex-col
                 `}
                 onMouseEnter={() => setIsHovering(true)}
                 onMouseLeave={() => setIsHovering(false)}
-                role="complementary"
-                aria-label="Navegación principal"
             >
-                {/* HEADER FIJO */}
-                <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-3 flex-shrink-0">
+                <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-3">
                     <div className="flex items-center space-x-3">
                         <img
-                            src="https://i.ibb.co/q36LpTD/artecueros-logo.png"
+                            src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
                             alt="ArteCueros Logo"
-                            className="h-10 w-10 object-contain flex-shrink-0 bg-white p-0.5 rounded-lg"
+                            className="h-10 w-10 object-contain flex-shrink-0"
                             onError={(e) => {
-                                const target = e.currentTarget;
-                                target.src = "https://cdn-icons-png.flaticon.com/512/1973/1973885.png";
-                                target.className = "h-10 w-10 object-contain flex-shrink-0 bg-white p-0.5 rounded-lg";
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src =
+                                    "https://cdn-icons-png.flaticon.com/512/1973/1973885.png";
+                                e.currentTarget.style.backgroundColor = "white";
+                                e.currentTarget.style.padding = "2px";
+                                e.currentTarget.style.borderRadius = "8px";
                             }}
                         />
                         {!isCollapsed && (
-                            <div className="transition-all duration-200 min-w-0">
-                                <h1 className="text-stone-800 font-bold text-lg truncate">ArteCueros</h1>
+                            <div className="transition-opacity duration-300">
+                                <h1 className="text-stone-800 font-bold text-lg">ArteCueros</h1>
                                 <p className="text-stone-600 text-xs">Mejía</p>
                             </div>
                         )}
@@ -527,49 +526,39 @@ export default function Layout({ children, currentPageName }) {
                             size="icon"
                             className="lg:hidden text-stone-600 hover:bg-stone-200"
                             onClick={() => setSidebarOpen(false)}
-                            aria-label="Cerrar menú lateral"
                         >
                             <X className="w-5 h-5" />
                         </Button>
                     )}
                 </div>
 
-                {/* CONTENIDO PRINCIPAL CON SCROLL LIMITADO */}
-                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-                    <nav className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-stone-300 scrollbar-track-stone-100">
-                        <ul className="space-y-1">
-                            {menuItems.map((item) => (
-                                <MenuItem
-                                    key={item.title}
-                                    item={item}
-                                    expandedMenus={expandedMenus}
-                                    toggleMenu={toggleMenu}
-                                    isActiveLink={isActiveLink}
-                                    togglePin={togglePin}
-                                    pinnedShortcuts={pinnedShortcuts}
-                                    setSidebarOpen={setSidebarOpen}
-                                    userHasRole={userHasRole}
-                                    isCollapsed={isCollapsed}
-                                    // ← PASAR isHovering para evitar recálculos
-                                    isHovering={isHovering}
-                                />
-                            ))}
-                        </ul>
-                    </nav>
-                </div>
+                <nav className="flex-1 overflow-y-auto p-2 min-h-0">
+                    <ul className="space-y-1">
+                        {menuItems.map((item) => (
+                        <MenuItem
+                            key={item.title}
+                            item={item}
+                            expandedMenus={expandedMenus}
+                            toggleMenu={toggleMenu}
+                            isActiveLink={isActiveLink}
+                            togglePin={togglePin}
+                            pinnedShortcuts={pinnedShortcuts}
+                            setSidebarOpen={setSidebarOpen}
+                            userHasRole={userHasRole}
+                            isCollapsed={isCollapsed}
+                        />
+                        ))}
+                    </ul>
+                </nav>
 
-                {/* FOOTER FIJO - SIEMPRE VISIBLE */}
-                <div className="flex-shrink-0 p-2 border-t border-stone-200 bg-stone-50/50">
+                <div className="flex-shrink-0 p-2 border-t border-gray-200 bg-white">
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center space-x-3 p-3 text-red-600 hover:bg-red-50 active:bg-red-100 rounded-lg transition-all duration-200 group hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+                        className="w-full flex items-center space-x-3 p-3 text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
                         title={isCollapsed ? "Salir" : ''}
-                        aria-label="Cerrar sesión"
                     >
-                        <LogOut className="w-5 h-5 flex-shrink-0 group-hover:rotate-[-3deg] transition-transform duration-200" />
-                        {!isCollapsed && (
-                            <span className="font-medium whitespace-nowrap">Salir</span>
-                        )}
+                        <LogOut className="w-5 h-5 flex-shrink-0" />
+                        {!isCollapsed && <span className="font-medium">Salir</span>}
                     </button>
                 </div>
             </aside>
