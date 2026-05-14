@@ -14,6 +14,14 @@ import SuccessToast from './SuccessToast';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 
+// Fecha actual en zona horaria Colombia (UTC-5)
+const getTodayColombia = () => {
+  const now = new Date();
+  const offset = -5 * 60; // UTC-5 en minutos
+  const localTime = new Date(now.getTime() + (offset - now.getTimezoneOffset()) * 60000);
+  return localTime.toISOString().split('T')[0];
+};
+
 export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, documento, terceros, itemsCatalogo, tipoDocumento, tipoItem, terceroLabel, documentoTitulo }) {
   const [successToast, setSuccessToast] = useState(null);
   const [formData, setFormData] = useState(null);
@@ -102,8 +110,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         cc_nit_cliente: '',
         direccion_cliente: '',
         telefono_cliente: '',
-        fecha_orden: new Date().toISOString().split('T')[0],
-        fecha_vencimiento: new Date().toISOString().split('T')[0],
+        fecha_orden: getTodayColombia(),
+        fecha_vencimiento: getTodayColombia(),
         condicion_pago: 'contado',
         forma_pago: 'efectivo',
         cuenta_destino_id: '',
@@ -1407,10 +1415,10 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
                   <Input
                     type="date"
                     value={formData.fecha_emision_documento || formData.fecha_orden}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={getTodayColombia()}
                     onChange={e => {
                       const val = e.target.value;
-                      const hoy = new Date().toISOString().split('T')[0];
+                      const hoy = getTodayColombia();
                       if (val > hoy) { alert('⚠️ La Fecha de Emisión no puede ser futura.'); return; }
                       handleInputChange('fecha_emision_documento', val);
                     }}
