@@ -506,7 +506,7 @@ export default function Layout({ children, currentPageName }) {
                         <img
                             src="https://i.ibb.co/9HQ246Fn/artecueros-logo.png"
                             alt="ArteCueros Logo"
-                            className="max-w-full max-h-full object-contain"
+                            className="h-10 w-10 object-contain flex-shrink-0"
                             onError={(e) => {
                                 e.currentTarget.onerror = null;
                                 e.currentTarget.src =
