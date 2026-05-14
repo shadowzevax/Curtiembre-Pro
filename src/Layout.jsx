@@ -496,12 +496,8 @@ export default function Layout({ children, currentPageName }) {
                     flex flex-col
                 `}
                 onMouseEnter={() => setIsHovering(true)}
-                onMouseLeave={() => {
-                    setIsHovering(false);
-                    // ❌ Quitamos el setExpandedMenus({}) — era el causante de los saltos
-                }}
+                onMouseLeave={() => setIsHovering(false)}
             >
-                {/* Header logo — sin cambios */}
                 <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-3">
                     <div className="flex items-center space-x-3">
                         <img
@@ -536,7 +532,6 @@ export default function Layout({ children, currentPageName }) {
                     )}
                 </div>
 
-                {/* Nav con max-height para que no entierre el botón Salir */}
                 <nav className="flex-1 overflow-y-auto p-2 min-h-0">
                     <ul className="space-y-1">
                         {menuItems.map((item) => (
@@ -556,7 +551,6 @@ export default function Layout({ children, currentPageName }) {
                     </ul>
                 </nav>
 
-                {/* Botón Salir — siempre visible, nunca enterrado */}
                 <div className="flex-shrink-0 p-2 border-t border-gray-200 bg-white">
                     <button
                         onClick={handleLogout}
