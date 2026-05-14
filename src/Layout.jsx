@@ -504,7 +504,7 @@ export default function Layout({ children, currentPageName }) {
                 <div className="h-20 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-4">
                     <div className="flex items-center space-x-3">
                         <img
-                            src="https://ibb.co/JwZWHDcJ"
+                            src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
                             alt="ArteCueros Logo"
                             className="h-10 w-10 object-contain flex-shrink-0"
                             onError={(e) => {
