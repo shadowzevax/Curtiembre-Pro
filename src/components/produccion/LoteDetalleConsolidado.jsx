@@ -44,13 +44,42 @@ export default function LoteDetalleConsolidado({ open, onOpenChange, codigoLote 
         ProcesoProduccion.filter({ codigo_lote: codigoLote, tipo_proceso: 'recurtido' })
       ]);
       
-      const remojo = limpieza.filter(p => p.seccion === 'remojo');
-      const pelambre = limpieza.filter(p => p.seccion === 'pelambre');
-      
+      // Los procesos de limpieza ahora se guardan en un solo registro con:
+      // - insumos_remojo_guardados: insumos de remojo
+      // - insumos_utilizados con seccion === 'pelambre': insumos de pelambre
+      // Construimos objetos "virtuales" para cada sección con sus insumos separados
+      const procesoLimpieza = limpieza[0] || null;
+
+      let insumosRemojo = [];
+      let insumosPelambre = [];
+      let pesoLimpieza = 0;
+      let hojasLimpieza = 0;
+
+      if (procesoLimpieza) {
+        pesoLimpieza = procesoLimpieza.peso_actual || 0;
+        hojasLimpieza = procesoLimpieza.cantidad_pieles || 0;
+
+        // Remojo: primero buscar en insumos_remojo_guardados, luego filtrar insumos_utilizados
+        const todosInsumos = procesoLimpieza.insumos_utilizados || [];
+        insumosRemojo = procesoLimpieza.insumos_remojo_guardados?.length > 0
+          ? procesoLimpieza.insumos_remojo_guardados
+          : todosInsumos.filter(i => i.seccion === 'remojo' || !i.seccion);
+
+        insumosPelambre = todosInsumos.filter(i => i.seccion === 'pelambre');
+      }
+
+      // Crear objetos "proceso virtual" que SeccionProductosQuimicos pueda consumir
+      const remojoVirtual = insumosRemojo.length > 0
+        ? [{ insumos_utilizados: insumosRemojo, cantidad_pieles: hojasLimpieza, peso_actual: pesoLimpieza }]
+        : [];
+      const pelambreVirtual = insumosPelambre.length > 0
+        ? [{ insumos_utilizados: insumosPelambre, cantidad_pieles: hojasLimpieza, peso_actual: pesoLimpieza }]
+        : [];
+
       setProcesos({
         recepcion: recepcion[0] || null,
-        remojo,
-        pelambre,
+        remojo: remojoVirtual,
+        pelambre: pelambreVirtual,
         curtido,
         recurtido
       });
