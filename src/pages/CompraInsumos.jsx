@@ -133,100 +133,31 @@ export default function CompraInsumos() {
 
   const handleSubmit = async (orderData) => {
     setLoading(true);
-    let savedOrder = null;
     try {
-      const isDuplicate = ordenes.some(orden => 
+      // Verificar duplicado por numero_id
+      const isDuplicate = ordenes.some(orden =>
         orden.numero_id === orderData.numero_id &&
         (!editingOrder || orden.id !== editingOrder.id)
       );
-      
+
       if (isDuplicate) {
-        alert("⚠️ REVISE DOCUMENTO YA EXISTE\n\nYa existe un documento con el mismo No. ID.");
-        setLoading(false);
+        alert("⚠️ Ya existe un documento con el mismo No. ID.");
         return null;
       }
-      
+
+      let savedOrder;
       if (editingOrder) {
         await OrdenCompra.update(editingOrder.id, orderData);
         savedOrder = { id: editingOrder.id };
       } else {
-        const nuevaCompra = await OrdenCompra.create(orderData);
-        savedOrder = nuevaCompra;
-        
-        // Si es CONTADO y valor pagado = total, generar movimiento automático
-        if (orderData.condicion_pago === 'contado' && orderData.valor_pagado === orderData.total) {
-          if (orderData.forma_pago === 'efectivo' && orderData.cuenta_destino_id) {
-            const Caja = (await import('@/entities/all')).Caja;
-            const MovimientoCaja = (await import('@/entities/all')).MovimientoCaja;
-            const caja = await Caja.filter({ id: orderData.cuenta_destino_id });
-            if (caja && caja.length > 0) {
-              const cajaData = caja[0];
-              const nuevoSaldo = (cajaData.saldo_actual || 0) - orderData.total;
-              await Caja.update(cajaData.id, { saldo_actual: nuevoSaldo });
-              await MovimientoCaja.create({
-                caja_id: cajaData.id,
-                nombre_caja: cajaData.nombre,
-                fecha: orderData.fecha_emision_documento || orderData.fecha_orden,
-                tipo_movimiento: 'salida',
-                concepto: `Compra - ${orderData.tipo_documento_proveedor} ${orderData.numero_documento}`,
-                responsable: '',
-                valor: orderData.total,
-                saldo_resultante: nuevoSaldo
-              });
-            }
-          } else if (orderData.forma_pago === 'banco') {
-            const MovimientoBancario = (await import('@/entities/all')).MovimientoBancario;
-            const CuentaBancaria = (await import('@/entities/all')).CuentaBancaria;
-            if (orderData.cuenta_destino_id) {
-              const cuenta = await CuentaBancaria.filter({ id: orderData.cuenta_destino_id });
-              if (cuenta && cuenta.length > 0) {
-                const cuentaData = cuenta[0];
-                const nuevoSaldo = (cuentaData.saldo_actual || 0) - orderData.total;
-                await CuentaBancaria.update(cuentaData.id, { saldo_actual: nuevoSaldo });
-                await MovimientoBancario.create({
-                  cuenta_id: cuentaData.id,
-                  fecha: orderData.fecha_emision_documento || orderData.fecha_orden,
-                  tipo_movimiento: 'egreso',
-                  concepto: `Compra - ${orderData.tipo_documento_proveedor} ${orderData.numero_documento}`,
-                  valor: orderData.total,
-                  saldo_posterior: nuevoSaldo
-                });
-              }
-            }
-          }
-        }
-        
-        // Si es CRÉDITO, generar cuenta por pagar
-        if (orderData.condicion_pago === 'credito') {
-          const CuentaPorPagar = (await import('@/entities/all')).CuentaPorPagar;
-          const proveedor = proveedores.find(p => p.id === orderData.proveedor_id);
-          await CuentaPorPagar.create({
-            id_cuenta: `CPP-${Date.now()}`,
-            proveedor_id: orderData.proveedor_id,
-            proveedor_nombre: proveedor?.nombre || '',
-            proveedor_nit: proveedor?.numero_identificacion || '',
-            tipo_documento: orderData.tipo_documento_proveedor,
-            numero_documento: orderData.numero_documento,
-            documento_origen_id: savedOrder.id,
-            modulo_origen: 'compras',
-            fecha_documento: orderData.fecha_emision_documento || orderData.fecha_orden,
-            fecha_vencimiento: orderData.fecha_vencimiento,
-            valor_total: orderData.total,
-            valor_pagado: orderData.valor_pagado || 0,
-            saldo_pendiente: orderData.total - (orderData.valor_pagado || 0),
-            estado: (orderData.valor_pagado || 0) >= orderData.total ? 'pagada' :
-                    (orderData.valor_pagado || 0) > 0 ? 'parcial' :
-                    'pendiente',
-            historial_pagos: []
-          });
-        }
+        savedOrder = await OrdenCompra.create(orderData);
       }
 
-      // Retornar savedOrder — DocumentoComercialForm cierra el modal y luego onSuccess recarga
       setEditingOrder(null);
       return savedOrder;
     } catch (error) {
       console.error("Error saving order:", error);
+      alert("Error al guardar: " + error.message);
       return null;
     } finally {
       setLoading(false);
