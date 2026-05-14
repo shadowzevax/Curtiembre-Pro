@@ -499,6 +499,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
     try {
         const savedOrder = await onSubmit(finalData);
         const orderId = savedOrder?.id || finalData.id;
+
+        // Cerrar modal inmediatamente tras guardar exitosamente
+        onOpenChange(false);
         
         // Mensaje de éxito
         setSuccessToast({
@@ -1082,10 +1085,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, d
         return;
         }
 
-    // Cerrar modal tras guardar exitosamente
-    onOpenChange(false);
-
-    // Lógica de actualización de Inventario para VENTAS (Salidas)
+    // Lógica de actualización de Inventario para VENTAS (Salidas) - corre en background
     if (tipoDocumento === 'venta') {
         for (const item of finalData.items) {
              try {

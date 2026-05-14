@@ -223,7 +223,8 @@ export default function CompraInsumos() {
       // Siempre cerrar el modal y recargar al guardar exitosamente
       setShowForm(false);
       setEditingOrder(null);
-      loadData();
+      // Pequeño delay para asegurar que la DB ya tiene el registro antes de recargar
+      setTimeout(() => loadData(), 500);
       return savedOrder;
     } catch (error) {
       console.error("Error saving order:", error);
@@ -443,7 +444,7 @@ export default function CompraInsumos() {
           open={showForm}
           onOpenChange={(open) => {
             setShowForm(open);
-            if (!open) loadData(); // Recargar lista al cerrar el modal
+            if (!open) setTimeout(() => loadData(), 500);
           }}
           onSubmit={handleSubmit}
           documento={editingOrder}
