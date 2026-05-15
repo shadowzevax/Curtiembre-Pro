@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -19,6 +19,7 @@ import {
 import { User } from "@/entities/User";
 import { Button } from "@/components/ui/button";
 import ChatBotFloating from "@/components/agent/ChatBotFloating";
+import SidebarSearch from "@/components/layout/SidebarSearch";
 
 const menuItems = [
     {
@@ -327,6 +328,9 @@ export default function Layout({ children, currentPageName }) {
     const [isHovering, setIsHovering] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
     const [pinnedShortcuts, setPinnedShortcuts] = useState([]);
+    const [searchResults, setSearchResults] = useState(null); // null = sin búsqueda activa
+    const clearSearchRef = useRef(null);
+    const clearSearchTimerRef = useRef(null);
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -500,8 +504,17 @@ export default function Layout({ children, currentPageName }) {
                     flex flex-col flex-shrink-0 h-full fixed lg:static inset-y-0 left-0 z-50 overflow-x-hidden ${sidebarWidth} bg-white shadow-xl transform transition-all duration-300 ease-in-out
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                 `}
-                onMouseEnter={() => setIsHovering(true)}
-                onMouseLeave={() => setIsHovering(false)}
+                onMouseEnter={() => {
+                    setIsHovering(true);
+                    if (clearSearchTimerRef.current) clearTimeout(clearSearchTimerRef.current);
+                }}
+                onMouseLeave={() => {
+                    setIsHovering(false);
+                    // Borrar búsqueda 3s después de que el cursor salga
+                    clearSearchTimerRef.current = setTimeout(() => {
+                        if (clearSearchRef.current) clearSearchRef.current();
+                    }, 3000);
+                }}
             >
                 <div className="h-20 flex-shrink-0 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-3">
                     <div className="flex items-center space-x-3 whitespace-nowrap overflow-hidden">
@@ -536,21 +549,78 @@ export default function Layout({ children, currentPageName }) {
                 </div>
 
                 <nav className="flex-1 overflow-y-auto overflow-x-hidden p-2 min-h-0 custom-scrollbar">
+                    <SidebarSearch
+                        menuItems={menuItems}
+                        isCollapsed={isCollapsed}
+                        onSearchResults={setSearchResults}
+                        onClear={clearSearchRef}
+                    />
                     <ul className="space-y-1">
-                        {menuItems.map((item) => (
-                            <MenuItem
-                                key={item.title}
-                                item={item}
-                                expandedMenus={expandedMenus}
-                                toggleMenu={toggleMenu}
-                                isActiveLink={isActiveLink}
-                                togglePin={togglePin}
-                                pinnedShortcuts={pinnedShortcuts}
-                                setSidebarOpen={setSidebarOpen}
-                                userHasRole={userHasRole}
-                                isCollapsed={isCollapsed}
-                            />
-                        ))}
+                        {menuItems.map((item) => {
+                            const isVisible = item.roles ? userHasRole(item.roles) : true;
+                            if (!isVisible) return null;
+
+                            // Si hay búsqueda activa, filtrar items
+                            if (searchResults !== null) {
+                                // "Inicio" (sin subItems) siempre visible
+                                if (!item.subItems) {
+                                    return (
+                                        <MenuItem
+                                            key={item.title}
+                                            item={item}
+                                            expandedMenus={expandedMenus}
+                                            toggleMenu={toggleMenu}
+                                            isActiveLink={isActiveLink}
+                                            togglePin={togglePin}
+                                            pinnedShortcuts={pinnedShortcuts}
+                                            setSidebarOpen={setSidebarOpen}
+                                            userHasRole={userHasRole}
+                                            isCollapsed={isCollapsed}
+                                        />
+                                    );
+                                }
+                                // Módulo no en resultados → ocultar
+                                if (!(item.title in searchResults)) return null;
+                                // Crear item filtrado con solo los subItems que matchean
+                                const matchedSubs = searchResults[item.title];
+                                const filteredItem = matchedSubs ? { ...item, subItems: matchedSubs } : item;
+                                // Forzar expandido
+                                const forcedExpandedMenus = { ...expandedMenus, [item.title]: true };
+                                // También expandir sub-niveles 2 si existen
+                                if (matchedSubs) {
+                                    matchedSubs.forEach(s => { if (s.subItems) forcedExpandedMenus[s.title] = true; });
+                                }
+                                return (
+                                    <MenuItem
+                                        key={item.title}
+                                        item={filteredItem}
+                                        expandedMenus={forcedExpandedMenus}
+                                        toggleMenu={toggleMenu}
+                                        isActiveLink={isActiveLink}
+                                        togglePin={togglePin}
+                                        pinnedShortcuts={pinnedShortcuts}
+                                        setSidebarOpen={setSidebarOpen}
+                                        userHasRole={userHasRole}
+                                        isCollapsed={isCollapsed}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <MenuItem
+                                    key={item.title}
+                                    item={item}
+                                    expandedMenus={expandedMenus}
+                                    toggleMenu={toggleMenu}
+                                    isActiveLink={isActiveLink}
+                                    togglePin={togglePin}
+                                    pinnedShortcuts={pinnedShortcuts}
+                                    setSidebarOpen={setSidebarOpen}
+                                    userHasRole={userHasRole}
+                                    isCollapsed={isCollapsed}
+                                />
+                            );
+                        })}
                     </ul>
                 </nav>
 

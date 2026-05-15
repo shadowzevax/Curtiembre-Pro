@@ -1302,11 +1302,48 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                   </div>
                 )}
                 {tipoDocumento === 'venta' && (
-                  <div>
-                    <Label>Código Cliente</Label>
-                    <Input value={formData.codigo_cliente || ''} readOnly className="bg-gray-100" />
+                  <div className="md:col-span-3">
+                    <Label>Cliente *</Label>
+                    {terceros.length === 0 ? (
+                      <div className="p-3 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800 font-medium">
+                        ⚠️ No hay clientes disponibles. Debe registrar un tercero como cliente en Administración &gt; Terceros.
+                      </div>
+                    ) : (
+                      <Select value={formData.cliente_id || ''} onValueChange={v => handleInputChange('cliente_id', v)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar cliente...">
+                            {formData.cliente_id && terceros.find(t => t.id === formData.cliente_id)
+                              ? (() => { const t = terceros.find(x => x.id === formData.cliente_id); return `${t.codigo || 'S/C'} — ${t.nombre}`; })()
+                              : 'Seleccionar cliente...'}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {terceros.sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
+                            <SelectItem key={t.id} value={t.id}>
+                              <span className="font-mono font-bold text-blue-700">{t.codigo || 'S/C'}</span>
+                              {' — '}
+                              <span>{t.nombre}</span>
+                              {(t.numero_identificacion) && (
+                                <span className="text-gray-500 ml-1">({t.numero_identificacion})</span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {formData.cliente_id && terceros.find(t => t.id === formData.cliente_id) && (() => {
+                      const t = terceros.find(x => x.id === formData.cliente_id);
+                      return (
+                        <div className="mt-1 text-xs space-y-0.5">
+                          <p className="text-blue-600 font-medium">✔ Código: <span className="font-mono">{t.codigo || 'Sin código'}</span></p>
+                          <p className="text-gray-500">ID: {t.numero_identificacion || 'N/A'}</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
+                {/* Campo cliente personalizado solo para compras */}
+                {tipoDocumento === 'compra' && (
                 <div><Label>{terceroLabel}</Label>
                     {!terceroPersonalizado ? (
                     <Select value={formData[terceroIdField]} onValueChange={v => v === 'personalizado' ? setTerceroPersonalizado(true) : handleInputChange(terceroIdField, v)}>
@@ -1315,6 +1352,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                     </Select>
                     ) : (<div className="flex gap-2"><Input placeholder={`Escriba nombre de ${terceroLabel}`} value={formData.tercero_personalizado} onChange={e => handleInputChange('tercero_personalizado', e.target.value)}/><Button type="button" variant="outline" size="sm" onClick={() => setTerceroPersonalizado(false)}>Cancelar</Button></div>)}
                 </div>
+                )}
                 <div><Label>CC/NIT</Label><Input value={formData[nitField]} onChange={e => handleInputChange(nitField, e.target.value)} /></div>
                 {tipoDocumento === 'venta' && (
                   <div>

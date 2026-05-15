@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { OrdenVenta, Cliente, Servicio } from "@/entities/all";
+import { OrdenVenta, Tercero, Servicio } from "@/entities/all";
 import PageHeader from "../components/common/PageHeader";
 import DataTable from "../components/common/DataTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,11 +48,13 @@ export default function VentaServicios() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [data, cliData, servData] = await Promise.all([
+            const [data, tercerosTodos, servData] = await Promise.all([
                 OrdenVenta.filter({ tipo_venta: "servicios" }),
-                Cliente.list(),
+                Tercero.list(),
                 Servicio.list()
             ]);
+            // Solo terceros con es_cliente === true
+            const cliData = tercerosTodos.filter(t => t.es_cliente === true);
             setVentas(data);
             setClientes(cliData);
             setServicios(servData);
