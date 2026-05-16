@@ -12,37 +12,39 @@ export default function SidebarSearch({ menuItems, isCollapsed, onSearchResults,
     return () => { if (clearTimerRef.current) clearTimeout(clearTimerRef.current); };
   }, []);
 
+  // Normaliza texto: minúsculas + sin tildes/diacríticos
+  const normalize = (str) =>
+    (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
   const handleChange = (e) => {
     const val = e.target.value;
     setQuery(val);
     if (!val.trim()) {
       onSearchResults(null);
     } else {
-      const lower = val.toLowerCase();
+      const lower = normalize(val);
       const results = {};
       menuItems.forEach(item => {
         if (!item.subItems) {
-          // Item sin submenú (ej: Inicio) — siempre visible o si matchea
           return;
         }
         const matchedSubs = [];
         item.subItems.forEach(sub => {
           if (sub.subItems) {
-            // sub de nivel 2
             const matchedSubSubs = sub.subItems.filter(ss =>
-              ss.title.toLowerCase().includes(lower)
+              normalize(ss.title).includes(lower)
             );
-            if (matchedSubSubs.length > 0 || sub.title.toLowerCase().includes(lower)) {
+            if (matchedSubSubs.length > 0 || normalize(sub.title).includes(lower)) {
               matchedSubs.push({ ...sub, _matchedSubSubs: matchedSubSubs.length > 0 ? matchedSubSubs : sub.subItems });
             }
           } else {
-            if (sub.title.toLowerCase().includes(lower)) {
+            if (normalize(sub.title).includes(lower)) {
               matchedSubs.push(sub);
             }
           }
         });
-        if (matchedSubs.length > 0 || item.title.toLowerCase().includes(lower)) {
-          results[item.title] = matchedSubs.length > 0 ? matchedSubs : null; // null = mostrar todo
+        if (matchedSubs.length > 0 || normalize(item.title).includes(lower)) {
+          results[item.title] = matchedSubs.length > 0 ? matchedSubs : null;
         }
       });
       onSearchResults(results);

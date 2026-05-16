@@ -121,13 +121,22 @@ export default function ProcesoRecepcion() {
 
   const handleGenerateSublotes = () => {
     const num = parseInt(currentItem.num_sublotes) || 0;
-    if (num > 0) {
-      const newSublotes = Array.from({ length: num }, (_, i) => ({
-        codigo: `${currentItem.codigo_lote}-SUB${i + 1}`,
-        cantidad: 0
-      }));
-      setSublotes(newSublotes);
-    }
+    if (num <= 0) return;
+    const totalHojas = parseFloat(currentItem.cantidad_total_lote_hojas) || 0;
+    // Distribuir hojas equitativamente como punto de partida
+    const base = Math.floor(totalHojas / num);
+    const resto = totalHojas - base * num;
+    const newSublotes = Array.from({ length: num }, (_, i) => ({
+      codigo: `${currentItem.codigo_lote}-SUB${i + 1}`,
+      cantidad: i === 0 ? base + resto : base  // el primero absorbe el residuo
+    }));
+    setSublotes(newSublotes);
+  };
+
+  const handleSubloteCantidadChange = (index, value) => {
+    const updated = [...sublotes];
+    updated[index] = { ...updated[index], cantidad: parseFloat(value) || 0 };
+    setSublotes(updated);
   };
 
   const handleSubloteChange = (index, field, value) => {
@@ -139,11 +148,20 @@ export default function ProcesoRecepcion() {
   const handleSave = async (e) => {
     e.preventDefault();
 
-    // Validar que si el lote está dividido, los sublotes tengan cantidades
+    // Validar sublotes: suma debe ser igual al total del lote
     if (currentItem.dividir_lote && sublotes.length > 0) {
+      const totalHojas = parseFloat(currentItem.cantidad_total_lote_hojas) || 0;
       const totalSublotes = sublotes.reduce((s, sub) => s + (parseFloat(sub.cantidad) || 0), 0);
       if (totalSublotes === 0) {
         alert('⚠️ Debe asignar cantidades a los sublotes antes de guardar.');
+        return;
+      }
+      if (sublotes.some(sub => (parseFloat(sub.cantidad) || 0) <= 0)) {
+        alert('⚠️ Ningún sublote puede tener cantidad cero o negativa.');
+        return;
+      }
+      if (totalSublotes !== totalHojas) {
+        alert(`⚠️ La suma de sublotes (${totalSublotes}) debe ser igual al total del lote (${totalHojas}). Diferencia: ${totalHojas - totalSublotes}`);
         return;
       }
     }
@@ -500,36 +518,89 @@ export default function ProcesoRecepcion() {
 
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <div className="flex items-center space-x-2 mb-2">
-                <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => setCurrentItem({...currentItem, dividir_lote: v})} id="dividir" />
+                <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => { setCurrentItem({...currentItem, dividir_lote: v}); if (!v) setSublotes([]); }} id="dividir" />
                 <Label htmlFor="dividir" className="font-semibold cursor-pointer">Dividir Lote <span className="text-xs text-slate-400">(opcional)</span></Label>
               </div>
               {currentItem?.dividir_lote && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex gap-2 items-end">
-                    <div className="flex-grow"><Label>¿Cuántos sublotes?</Label><Input type="number" value={currentItem?.num_sublotes || ''} onChange={e => setCurrentItem({...currentItem, num_sublotes: parseInt(e.target.value) || 0})} /></div>
-                    <Button type="button" onClick={handleGenerateSublotes}>Generar Sublotes</Button>
-                    {sublotes.length > 0 && <Button type="button" variant="outline" onClick={() => setShowSublotesModal(true)}>Editar Sublotes ({sublotes.length})</Button>}
+                    <div><Label>¿Cuántos sublotes?</Label><Input type="number" min="1" className="w-32" value={currentItem?.num_sublotes || ''} onChange={e => setCurrentItem({...currentItem, num_sublotes: parseInt(e.target.value) || 0})} /></div>
+                    <Button type="button" onClick={handleGenerateSublotes} className="bg-amber-600 hover:bg-amber-700">Generar Sublotes</Button>
                   </div>
-                  {sublotes.length > 0 && (
-                    <div className="border rounded overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead className="bg-amber-100"><tr><th className="border p-1">Código</th><th className="border p-1">Cantidad</th><th className="border p-1">Costo Total</th></tr></thead>
-                        <tbody>
-                          {sublotes.map((sub, idx) => {
-                            const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
-                            return (
-                              <tr key={idx} className="border-t">
-                                <td className="border p-1 font-mono font-bold">{sub.codigo}</td>
-                                <td className="border p-1 text-right">{sub.cantidad}</td>
-                                <td className="border p-1 text-right">{formatCurrency((parseFloat(sub.cantidad) || 0) * costoP)}</td>
+
+                  {sublotes.length > 0 && (() => {
+                    const totalHojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+                    const totalAsignado = sublotes.reduce((s, sub) => s + (parseFloat(sub.cantidad) || 0), 0);
+                    const saldo = totalHojas - totalAsignado;
+                    const costoP = parseFloat(currentItem?.costo_promedio) || costoPromedioProducto;
+                    const esValido = saldo === 0 && sublotes.every(s => (parseFloat(s.cantidad) || 0) > 0);
+                    return (
+                      <div className="space-y-2">
+                        {/* Indicador de saldo */}
+                        <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-semibold border ${
+                          esValido ? 'bg-green-50 border-green-300 text-green-700' :
+                          saldo < 0 ? 'bg-red-50 border-red-300 text-red-700' :
+                          'bg-orange-50 border-orange-300 text-orange-700'
+                        }`}>
+                          <span>Total lote: <strong>{totalHojas}</strong> hojas</span>
+                          <span>Asignado: <strong>{totalAsignado}</strong></span>
+                          <span>Saldo restante: <strong className={saldo < 0 ? 'text-red-700' : saldo === 0 ? 'text-green-700' : 'text-orange-700'}>{saldo}</strong></span>
+                          {esValido && <span className="text-green-600">✔ OK</span>}
+                          {saldo < 0 && <span className="text-red-600">✖ Excedido</span>}
+                        </div>
+
+                        {/* Tabla editable de sublotes */}
+                        <div className="border rounded overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead className="bg-amber-100">
+                              <tr>
+                                <th className="border p-2 text-left">Código Sublote</th>
+                                <th className="border p-2 text-center">Cantidad Hojas *</th>
+                                <th className="border p-2 text-right">Costo Unitario</th>
+                                <th className="border p-2 text-right">Costo Total</th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <p className="text-xs text-amber-700 font-medium">⚠️ Al guardar con sublotes, SOLO los sublotes podrán usarse en los procesos siguientes.</p>
+                            </thead>
+                            <tbody>
+                              {sublotes.map((sub, idx) => {
+                                const cant = parseFloat(sub.cantidad) || 0;
+                                const costoTotal = cant * costoP;
+                                const tieneError = cant <= 0;
+                                return (
+                                  <tr key={idx} className={`border-t ${tieneError ? 'bg-red-50' : 'bg-white'}`}>
+                                    <td className="border p-2 font-mono font-bold text-blue-700">{sub.codigo}</td>
+                                    <td className="border p-1">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={sub.cantidad === 0 ? '' : sub.cantidad}
+                                        onChange={e => handleSubloteCantidadChange(idx, e.target.value)}
+                                        className={`h-7 text-xs text-center font-bold ${tieneError ? 'border-red-400 bg-red-50' : 'border-green-300 bg-green-50'}`}
+                                        placeholder="0"
+                                      />
+                                    </td>
+                                    <td className="border p-2 text-right text-slate-500">{formatCurrency(costoP)}</td>
+                                    <td className="border p-2 text-right font-semibold text-emerald-700">{formatCurrency(costoTotal)}</td>
+                                  </tr>
+                                );
+                              })}
+                              {/* Fila totales */}
+                              <tr className="bg-amber-50 font-bold border-t-2 border-amber-300">
+                                <td className="border p-2 text-right text-xs text-slate-500">TOTAL</td>
+                                <td className={`border p-2 text-center text-sm ${esValido ? 'text-green-700' : 'text-red-700'}`}>{totalAsignado} / {totalHojas}</td>
+                                <td className="border p-2"></td>
+                                <td className="border p-2 text-right text-emerald-700">{formatCurrency(totalAsignado * costoP)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        {!esValido && saldo !== 0 && (
+                          <p className="text-xs text-red-600 font-medium">⚠️ La suma de sublotes debe ser igual a {totalHojas} hojas. Faltan {saldo > 0 ? saldo : `sobran ${Math.abs(saldo)}`} hojas por distribuir.</p>
+                        )}
+                        <p className="text-xs text-amber-700 font-medium">⚠️ Al guardar con sublotes, SOLO los sublotes podrán avanzar a las etapas siguientes.</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
