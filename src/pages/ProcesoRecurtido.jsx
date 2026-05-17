@@ -44,6 +44,9 @@ export default function ProcesoRecurtido() {
 
   // Filtro lote activo en tabla de control
   const [loteActivoControl, setLoteActivoControl] = useState('');
+  // Selectores tabla de control: lote padre + sublote específico
+  const [lotePadreControl, setLotePadreControl] = useState('');
+  const [subloteControl, setSubloteControl] = useState('');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -365,14 +368,42 @@ export default function ProcesoRecurtido() {
   // ─── DATOS PARA TABLA DE CONTROL ───────────────────────────────────────────
 
   const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
+
+  // Códigos ya usados en recurtido (para evitar duplicados en el selector)
+  const codigosYaUsados = new Set(procesos.map(p => p.inv_proceso_id).filter(Boolean));
+
   const invFiltrados = inventarioEnProceso.filter(inv => {
+    if (codigosYaUsados.has(inv.id)) return false; // ya tiene recurtido registrado
     if (!searchEnProceso) return true;
     const s = searchEnProceso.toLowerCase();
     return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
   });
 
-  // Lote seleccionado para tabla de control (default: primer lote con procesos)
-  const loteControlActual = loteActivoControl || lotesCodigos[0] || '';
+  // ─── LOTES PRINCIPALES para la tabla de control ────────────────────────────
+  // El lote principal es el prefijo antes de "-SUB" (o el propio código si no tiene sublotes)
+  const getLotePadre = (codigoLote) => {
+    const match = (codigoLote || '').match(/^(.*?)-SUB\d+$/);
+    return match ? match[1] : codigoLote;
+  };
+
+  // Todos los lotes padre únicos que tienen procesos de recurtido
+  const lotesPadreUnicos = [...new Set(lotesCodigos.map(getLotePadre))];
+
+  // Cuando cambia el lote padre, resetear el sublote
+  const handleLotePadreChange = (val) => {
+    setLotePadreControl(val);
+    setSubloteControl('');
+    setLoteActivoControl('');
+  };
+
+  // Sublotes disponibles del lote padre seleccionado (códigos que tienen recurtido)
+  const sublotesDelPadre = lotePadreControl
+    ? lotesCodigos.filter(c => getLotePadre(c) === lotePadreControl && c !== lotePadreControl)
+    : [];
+  const tieneSublotes = sublotesDelPadre.length > 0;
+
+  // Lote efectivo para mostrar en tabla (si hay sublotes, usar el sublote seleccionado; si no, el padre)
+  const loteControlActual = subloteControl || lotePadreControl || loteActivoControl || lotesCodigos[0] || '';
   const sublotesControl = getSublotesLote(loteControlActual);
   const totalHojasControl = (() => {
     const inv = inventarioEnProceso.find(i => i.codigo_lote === loteControlActual);
@@ -399,21 +430,41 @@ export default function ProcesoRecurtido() {
 
       {/* ── TABLA DE CONTROL ─────────────────────────────────────────────── */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-row items-center justify-between pb-3 flex-wrap gap-2">
           <CardTitle className="text-base">Control de Recurtido por Sublote</CardTitle>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-slate-500">Lote:</Label>
-            <Select value={loteControlActual} onValueChange={setLoteActivoControl}>
-              <SelectTrigger className="w-52 h-8 text-xs">
-                <SelectValue placeholder="Seleccionar lote..." />
-              </SelectTrigger>
-              <SelectContent>
-                {lotesCodigos.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                {lotesCodigos.length === 0 && <SelectItem value="__none__" disabled>Sin lotes registrados</SelectItem>}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Selector Lote Principal */}
+            <div className="flex items-center gap-1">
+              <Label className="text-xs text-slate-500 whitespace-nowrap">Código Lote:</Label>
+              <Select value={lotePadreControl} onValueChange={handleLotePadreChange}>
+                <SelectTrigger className="w-48 h-8 text-xs">
+                  <SelectValue placeholder="Seleccionar lote..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {lotesPadreUnicos.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {lotesPadreUnicos.length === 0 && <SelectItem value="__none__" disabled>Sin lotes registrados</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Selector Sublote — solo aparece si el lote padre tiene sublotes */}
+            {lotePadreControl && tieneSublotes && (
+              <div className="flex items-center gap-1">
+                <Label className="text-xs text-slate-500 whitespace-nowrap">Sublote:</Label>
+                <Select value={subloteControl} onValueChange={setSubloteControl}>
+                  <SelectTrigger className="w-52 h-8 text-xs">
+                    <SelectValue placeholder="Todos / seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={null}>— Ver todos los sublotes —</SelectItem>
+                    {sublotesDelPadre.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {loteControlActual && (
-              <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(loteControlActual); setShowConsolidadoModal(true); }}>
+              <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(lotePadreControl || loteControlActual); setShowConsolidadoModal(true); }}>
                 <Table className="w-3 h-3 mr-1" />Consolidado
               </Button>
             )}
