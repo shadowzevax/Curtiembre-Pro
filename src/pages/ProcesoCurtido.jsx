@@ -10,7 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Eye, X, Table } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, X, Table, Filter } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -30,6 +32,7 @@ export default function ProcesoCurtido() {
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
   const [loteConsolidado, setLoteConsolidado] = useState(null);
   const [invSeleccionado, setInvSeleccionado] = useState(null);
+  const [filtroEstado, setFiltroEstado] = useState('todos');
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -43,10 +46,9 @@ export default function ProcesoCurtido() {
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
-      // FILTRO: solo registros en estado EN_PROCESO y etapa = limpieza
-      const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
-        .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'limpieza');
-      setInventarioEnProceso(filtrados);
+      // Para el selector del modal: solo etapa=limpieza y EN_PROCESO
+      // Para la columna "Código en Proceso" en tabla: necesitamos todos
+      setInventarioEnProceso(Array.isArray(invEnProceso) ? invEnProceso : []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -223,15 +225,69 @@ export default function ProcesoCurtido() {
 
   const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
 
-  const headers = ['Lote', 'Cantidad Pieles', 'Fecha Inicio', 'Peso Actual', 'Costo Total', 'Estado', 'Acciones'];
+  // ── LÓGICA DE ESTADO AUTOMÁTICO ──────────────────────────────────────────────
+  const calcularEstado = (item) => {
+    // CANCELADO: flag explícito
+    if (item.estado === 'cancelado') return 'cancelado';
+    // COMPLETADO: finalizar_curtido marcado
+    if (item.finalizar_curtido || item.estado === 'completado') {
+      // Validar que haya costos e insumos
+      if (!item.insumos_utilizados?.length || !item.costo_total_curtido) return 'bloqueado';
+      return 'completado';
+    }
+    // BLOQUEADO: tiene insumos pero costo 0, o no tiene inv_proceso_id
+    if (!item.inv_proceso_id && !item.codigo_lote) return 'bloqueado';
+    if (item.insumos_utilizados?.length > 0 && !item.costo_total_curtido) return 'bloqueado';
+    // EN PROCESO: tiene fecha inicio y tiene insumos registrados
+    if (item.insumos_utilizados?.length > 0 || item.peso_actual > 0) return 'en_proceso';
+    // PENDIENTE: creado pero sin operaciones
+    return 'pendiente';
+  };
+
+  const ESTADO_CONFIG = {
+    pendiente:   { label: 'PENDIENTE',   color: 'bg-yellow-100 text-yellow-800 border-yellow-300',  tooltip: 'Proceso creado pero sin operaciones iniciadas.' },
+    en_proceso:  { label: 'EN PROCESO',  color: 'bg-blue-100 text-blue-800 border-blue-300',         tooltip: 'Proceso iniciado, aún no finalizado.' },
+    completado:  { label: 'COMPLETADO',  color: 'bg-green-100 text-green-800 border-green-300',      tooltip: 'Todas las etapas finalizadas y validadas correctamente.' },
+    bloqueado:   { label: 'BLOQUEADO',   color: 'bg-red-100 text-red-800 border-red-300',            tooltip: 'Inconsistencia detectada: falta inventario, fórmula, costos o etapa incompleta.' },
+    cancelado:   { label: 'CANCELADO',   color: 'bg-gray-100 text-gray-600 border-gray-300',         tooltip: 'Proceso anulado mediante autorización.' },
+  };
+
+  const EstadoBadge = ({ item }) => {
+    const estado = calcularEstado(item);
+    const cfg = ESTADO_CONFIG[estado] || ESTADO_CONFIG.pendiente;
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border cursor-default ${cfg.color}`}>
+              {cfg.label}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent><p className="text-xs max-w-[200px]">{cfg.tooltip}</p></TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  // ── FILTRO POR ESTADO ────────────────────────────────────────────────────────
+  const procesosFiltrados = filtroEstado === 'todos'
+    ? procesos
+    : procesos.filter(p => calcularEstado(p) === filtroEstado);
+
+  // ── TABLA: cabeceras y filas ─────────────────────────────────────────────────
+  const headers = ['Código en Proceso', 'Lote/Sublote', 'Cantidad Pieles', 'Fecha Inicio', 'Peso Actual', 'Peso Promedio', 'Costo Total', 'Estado', 'Acciones'];
   const renderRow = (item) => (
     <tr key={item.id}>
+      <td className="font-mono text-xs text-slate-600">
+        {inventarioEnProceso.find(i => i.id === item.inv_proceso_id)?.codigo || item.inv_proceso_id || '—'}
+      </td>
       <td className="font-mono font-bold">{item.codigo_lote}</td>
       <td>{item.cantidad_pieles}</td>
       <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
       <td>{item.peso_actual} kg</td>
+      <td>{item.peso_promedio ? `${parseFloat(item.peso_promedio).toFixed(3)} kg` : '—'}</td>
       <td className="text-right">{formatCurrency(item.costo_total_curtido)}</td>
-      <td><span className={`px-2 py-0.5 rounded text-xs ${item.estado === 'completado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{item.estado}</span></td>
+      <td><EstadoBadge item={item} /></td>
       <td>
         <div className="flex space-x-1">
           <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
@@ -243,7 +299,9 @@ export default function ProcesoCurtido() {
     </tr>
   );
 
-  const invFiltrados = inventarioEnProceso.filter(inv => {
+  // Para el selector del modal: solo etapa=limpieza y EN_PROCESO
+  const invParaSelector = inventarioEnProceso.filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'limpieza');
+  const invFiltrados = invParaSelector.filter(inv => {
     if (!searchEnProceso) return true;
     const s = searchEnProceso.toLowerCase();
     return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
@@ -256,8 +314,29 @@ export default function ProcesoCurtido() {
         actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" />Nuevo Curtido</Button>}
       />
       <Card id="tabla-imprimible">
-        <CardHeader><CardTitle>Listado de Procesos de Curtido</CardTitle></CardHeader>
-        <CardContent>{loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesos} renderRow={renderRow} />}</CardContent>
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Listado de Procesos de Curtido</CardTitle>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-500" />
+              <span className="text-sm text-slate-500">Filtrar por estado:</span>
+              <Select value={filtroEstado} onValueChange={setFiltroEstado}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="pendiente">Pendiente</SelectItem>
+                  <SelectItem value="en_proceso">En Proceso</SelectItem>
+                  <SelectItem value="completado">Completado</SelectItem>
+                  <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                  <SelectItem value="cancelado">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>{loading ? <p>Cargando...</p> : <DataTable headers={headers} data={procesosFiltrados} renderRow={renderRow} />}</CardContent>
       </Card>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
