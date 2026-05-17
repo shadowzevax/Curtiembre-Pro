@@ -364,17 +364,6 @@ export default function ProcesoRecurtido() {
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader
-        title="Proceso de Recurtido"
-        description="Panel de control operativo — seguimiento en tiempo real de sublotes y avance del proceso."
-        onPrint={() => window.print()}
-        actionButton={
-          <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
-            <Plus className="w-4 h-4 mr-2" />Nuevo Sublote Recurtido
-          </Button>
-        }
-      />
-
       <RecurtidoControlPanel
         procesos={procesos}
         inventarioEnProceso={inventarioEnProceso}
@@ -386,6 +375,8 @@ export default function ProcesoRecurtido() {
         onDelete={handleDelete}
         onVerDetalle={(proc) => { setSelectedItem(proc); setShowDetailModal(true); }}
         onVerConsolidado={(lote) => { setLoteConsolidado(lote); setShowConsolidadoModal(true); }}
+        onNuevoSublote={() => handleOpenModal()}
+        onImprimir={() => window.print()}
       />
 
       {/* ── MODAL NUEVO / EDITAR SUBLOTE ─────────────────────────────────── */}
