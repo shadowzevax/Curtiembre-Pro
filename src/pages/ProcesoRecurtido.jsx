@@ -402,16 +402,34 @@ export default function ProcesoRecurtido() {
     : [];
   const tieneSublotes = sublotesDelPadre.length > 0;
 
-  // Lote efectivo para mostrar en tabla (si hay sublotes, usar el sublote seleccionado; si no, el padre)
+  // Lote efectivo para mostrar en tabla
   const loteControlActual = subloteControl || lotePadreControl || loteActivoControl || lotesCodigos[0] || '';
-  const sublotesControl = getSublotesLote(loteControlActual);
+
+  // Si hay lote padre seleccionado sin sublote específico → mostrar TODOS los procesos del padre
+  const sublotesControl = (() => {
+    if (lotePadreControl && !subloteControl && tieneSublotes) {
+      // Traer todos los procesos cuyos codigo_lote pertenecen al padre
+      return procesos
+        .filter(p => getLotePadre(p.codigo_lote) === lotePadreControl)
+        .sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+    }
+    return getSublotesLote(loteControlActual);
+  })();
+
   const totalHojasControl = (() => {
+    if (lotePadreControl && !subloteControl && tieneSublotes) {
+      // Sumar hojas de todos los sublotes del padre en inventarioEnProceso
+      const invSublotes = inventarioEnProceso.filter(i => getLotePadre(i.codigo_lote) === lotePadreControl);
+      return invSublotes.reduce((s, i) => s + (i.cantidad_hojas || 0), 0)
+        || sublotesControl.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
+    }
     const inv = inventarioEnProceso.find(i => i.codigo_lote === loteControlActual);
     return inv?.cantidad_hojas || sublotesControl.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
   })();
-  const totalRecurtidoControl = getTotalHojasRecurtidas(loteControlActual);
+
+  const totalRecurtidoControl = sublotesControl.reduce((sum, p) => sum + (parseFloat(p.cantidad_pieles) || 0), 0);
   const faltanHojas = Math.max(0, totalHojasControl - totalRecurtidoControl);
-  const generalFinalizado = isRecurtidoGeneralFinalizado(loteControlActual);
+  const generalFinalizado = sublotesControl.some(p => p.finalizar_recurtido_general === true);
   const todosFinalizados = sublotesControl.length > 0 && sublotesControl.every(p => p.estado === 'completado');
   const puedeFinalizarGeneral = todosFinalizados && faltanHojas === 0 && !generalFinalizado && sublotesControl.length > 0;
 
