@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Eye, X, Table, CheckCircle2, Circle, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, X, Table, CheckCircle2, Circle, AlertCircle, Ban, Lock } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -328,9 +328,63 @@ export default function ProcesoLimpieza() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar este proceso?')) return;
-    try { await ProcesoProduccion.delete(id); loadData(); } catch (error) { console.error(error); }
+  // ── LÓGICA INTELIGENTE ELIMINAR / ANULAR ────────────────────────────────────
+  const puedeEliminarFisico = (item) => {
+    // Solo si está en borrador completo: sin costos, sin insumos, sin avance
+    if (item.estado === 'completado' || item.estado === 'en_proceso') return false;
+    if (item.finalizar_remojo || item.estado_remojo === 'finalizado') return false;
+    if (item.finalizar_pelambre || item.estado_pelambre === 'finalizado') return false;
+    if ((item.insumos_utilizados?.length || 0) > 0) return false;
+    if ((item.costo_remojo || 0) > 0 || (item.costo_pelambre || 0) > 0) return false;
+    return true;
+  };
+
+  const getMotivoBloqueo = (item) => {
+    const motivos = [];
+    if (item.estado === 'completado') motivos.push('Limpieza ya finalizada');
+    if (item.finalizar_remojo || item.estado_remojo === 'finalizado') motivos.push('Remojo ya fue finalizado');
+    if (item.finalizar_pelambre || item.estado_pelambre === 'finalizado') motivos.push('Pelambre ya fue finalizado');
+    if ((item.insumos_utilizados?.length || 0) > 0) motivos.push('Tiene consumos de insumos registrados');
+    if ((item.costo_remojo || 0) > 0) motivos.push('Tiene costos de Remojo asociados');
+    if ((item.costo_pelambre || 0) > 0) motivos.push('Tiene costos de Pelambre asociados');
+    return motivos;
+  };
+
+  const handleDelete = async (item) => {
+    const puedeEliminar = puedeEliminarFisico(item);
+    const motivos = getMotivoBloqueo(item);
+
+    if (item.estado === 'anulado') {
+      alert('Este proceso ya está anulado.');
+      return;
+    }
+
+    if (!puedeEliminar) {
+      // Ofrecer anulación
+      const confirmar = window.confirm(
+        `⚠️ No se puede eliminar este registro.\n\nMotivo(s):\n• ${motivos.join('\n• ')}\n\n¿Desea ANULAR el proceso en su lugar?\n\nAl anularlo:\n✔ Se conservará en base de datos\n✔ Cambiará su estado a "Anulado"\n✔ No aparecerá en procesos activos\n✔ Permanecerá disponible para auditoría`
+      );
+      if (!confirmar) return;
+      const segundaConfirmacion = window.confirm(
+        '¿Está seguro de realizar esta acción?\nEste proceso puede afectar trazabilidad e inventarios.'
+      );
+      if (!segundaConfirmacion) return;
+      try {
+        await ProcesoProduccion.update(item.id, {
+          estado: 'anulado',
+          fecha_anulacion: new Date().toISOString(),
+          observaciones: (item.observaciones || '') + `\n[ANULADO: ${new Date().toLocaleString('es-CO')}]`
+        });
+        await loadData();
+        alert('✅ Proceso anulado correctamente. Permanece en base de datos para auditoría.');
+      } catch (error) { console.error(error); }
+    } else {
+      const confirmar = window.confirm(
+        '¿Está seguro de realizar esta acción?\nEste proceso puede afectar trazabilidad e inventarios.\n\n¿Eliminar definitivamente este proceso?'
+      );
+      if (!confirmar) return;
+      try { await ProcesoProduccion.delete(item.id); loadData(); } catch (error) { console.error(error); }
+    }
   };
 
   const todosLosItems = [...insumos.map(i => ({ ...i, tipo: 'insumo' })), ...productos.map(p => ({ ...p, tipo: 'producto' }))];
@@ -340,13 +394,17 @@ export default function ProcesoLimpieza() {
   const pelhambreDone = currentItem?.estado_pelambre === 'finalizado';
   const puedeFinalizarLimpieza = remojoDone && pelhambreDone;
 
-  const headers = ['Lote', 'Estado Remojo', 'Estado Pelambre', 'Fecha Inicio', 'Peso Actual', 'Costo Remojo', 'Costo Pelambre', 'Estado', 'Acciones'];
+  const headers = ['Código en Proceso', 'Cantidad Hojas', 'Estado Remojo', 'Estado Pelambre', 'Fecha Inicio', 'Peso Actual', 'Costo Remojo', 'Costo Pelambre', 'Estado General del Proceso', 'Acciones'];
   const renderRow = (item) => {
     const estadoR = item.estado_remojo || (item.finalizar_remojo ? 'finalizado' : 'pendiente');
     const estadoP = item.estado_pelambre || (item.finalizar_pelambre ? 'finalizado' : 'pendiente');
+    // Cantidad hojas: traer del inventario en proceso relacionado, o del campo cantidad_pieles
+    const invRel = inventarioEnProceso.find(i => i.id === item.inv_proceso_id);
+    const cantHojas = invRel?.cantidad_hojas ?? item.cantidad_pieles ?? '—';
     return (
       <tr key={item.id}>
         <td className="font-mono font-bold">{item.codigo_lote}</td>
+        <td className="text-center font-semibold text-blue-700">{cantHojas}</td>
         <td>
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${estadoR === 'finalizado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
             {estadoR === 'finalizado' ? '✔ Finalizado' : 'Pendiente'}
@@ -371,7 +429,17 @@ export default function ProcesoLimpieza() {
             <Button variant="outline" size="sm" onClick={() => { setLoteConsolidado(item.codigo_lote); setShowConsolidadoModal(true); }}><Table className="w-4 h-4 text-emerald-600" /></Button>
             <Button variant="outline" size="sm" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Eye className="w-4 h-4" /></Button>
             <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}><Edit className="w-4 h-4" /></Button>
-            <Button variant="destructive" size="sm" onClick={() => handleDelete(item.id)}><Trash2 className="w-4 h-4" /></Button>
+            {item.estado === 'anulado' ? (
+              <span className="px-2 py-1 text-xs bg-gray-200 text-gray-500 rounded font-medium flex items-center gap-1">
+                <Ban className="w-3 h-3" />Anulado
+              </span>
+            ) : puedeEliminarFisico(item) ? (
+              <Button variant="destructive" size="sm" onClick={() => handleDelete(item)}><Trash2 className="w-4 h-4" /></Button>
+            ) : (
+              <Button variant="outline" size="sm" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => handleDelete(item)} title="No puede eliminarse. Haga clic para anular.">
+                <Lock className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </td>
       </tr>

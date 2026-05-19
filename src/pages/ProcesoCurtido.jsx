@@ -34,21 +34,23 @@ export default function ProcesoCurtido() {
   const [invSeleccionado, setInvSeleccionado] = useState(null);
   const [filtroEstado, setFiltroEstado] = useState('todos');
 
+  const [procesosLimpieza, setProcesosLimpieza] = useState([]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, invEnProceso] = await Promise.all([
+      const [procesosData, insumosData, productosData, invEnProceso, limpiezaData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'curtido' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        InventarioEnProceso.list()
+        InventarioEnProceso.list(),
+        ProcesoProduccion.filter({ tipo_proceso: 'limpieza' })
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
-      // Para el selector del modal: solo etapa=limpieza y EN_PROCESO
-      // Para la columna "Código en Proceso" en tabla: necesitamos todos
       setInventarioEnProceso(Array.isArray(invEnProceso) ? invEnProceso : []);
+      setProcesosLimpieza(Array.isArray(limpiezaData) ? limpiezaData : []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -275,14 +277,11 @@ export default function ProcesoCurtido() {
     : procesos.filter(p => calcularEstado(p) === filtroEstado);
 
   // ── TABLA: cabeceras y filas ─────────────────────────────────────────────────
-  const headers = ['Código en Proceso', 'Lote/Sublote', 'Cantidad Pieles', 'Fecha Inicio', 'Peso Actual', 'Peso Promedio', 'Costo Total', 'Estado', 'Acciones'];
+  const headers = ['Código en Proceso', 'Cantidad Hojas', 'Fecha Inicio', 'Peso Actual', 'Peso Promedio', 'Costo Total', 'Estado General del Proceso', 'Acciones'];
   const renderRow = (item) => (
     <tr key={item.id}>
-      <td className="font-mono text-xs text-slate-600">
-        {inventarioEnProceso.find(i => i.id === item.inv_proceso_id)?.codigo || item.inv_proceso_id || '—'}
-      </td>
       <td className="font-mono font-bold">{item.codigo_lote}</td>
-      <td>{item.cantidad_pieles}</td>
+      <td className="text-center font-semibold text-blue-700">{item.cantidad_pieles}</td>
       <td>{new Date(item.fecha_inicio).toLocaleDateString()}</td>
       <td>{item.peso_actual} kg</td>
       <td>{item.peso_promedio ? `${parseFloat(item.peso_promedio).toFixed(3)} kg` : '—'}</td>
@@ -371,7 +370,7 @@ export default function ProcesoCurtido() {
             </div>
 
             <div className="grid grid-cols-4 gap-4">
-              <div><Label>Cantidad Pieles</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
+              <div><Label>Cantidad Hojas</Label><Input type="number" value={currentItem?.cantidad_pieles || ''} onChange={e => {
                 const cant = parseFloat(e.target.value) || 0;
                 const peso = parseFloat(currentItem.peso_actual) || 0;
                 setCurrentItem({...currentItem, cantidad_pieles: cant, peso_promedio: cant > 0 ? peso / cant : 0});
@@ -400,33 +399,50 @@ export default function ProcesoCurtido() {
                   </thead>
                   <tbody>
                     {(currentItem?.insumos_utilizados || []).map((item, index) => (
-                      <tr key={index} className="border-t">
-                        <td className="p-2">
-                          <Select value={item.insumo_id} onValueChange={v => handleInsumoChange(index, 'insumo_id', v)}>
-                            <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                            <SelectContent>
-                              {todosLosItems.map(ins => <SelectItem key={ins.id} value={ins.id}>{ins.codigo || ins.referencia} - {ins.nombre || ins.descripcion}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="p-2"><Input value={item.producto} readOnly className="bg-gray-50" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" value={item.dosificacion} onChange={e => handleInsumoChange(index, 'dosificacion', e.target.value)} className="text-right" /></td>
-                        <td className="p-2"><Input value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" value={item.costo_unitario} onChange={e => handleInsumoChange(index, 'costo_unitario', e.target.value)} className="text-right" /></td>
-                        <td className="p-2">
-                          <Select value={String(item.iva)} onValueChange={v => handleInsumoChange(index, 'iva', parseFloat(v))}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0.19">19%</SelectItem><SelectItem value="0.05">5%</SelectItem><SelectItem value="0">0%</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="p-2 text-right font-medium text-emerald-700">{formatCurrency(item.valor_total)}</td>
-                        <td className="p-2"><Button type="button" variant="ghost" size="icon" onClick={() => removeInsumo(index)}><X className="w-4 h-4 text-red-500" /></Button></td>
-                      </tr>
+                     <tr key={index} className="border-t">
+                       <td className="p-2">
+                         <Select value={item.insumo_id} onValueChange={v => handleInsumoChange(index, 'insumo_id', v)}>
+                           <SelectTrigger className="w-full"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                           <SelectContent>
+                             {todosLosItems.map(ins => <SelectItem key={ins.id} value={ins.id}>{ins.codigo || ins.referencia} - {ins.nombre || ins.descripcion}</SelectItem>)}
+                           </SelectContent>
+                         </Select>
+                       </td>
+                       <td className="p-2"><Input value={item.producto} readOnly className="bg-gray-50" /></td>
+                       <td className="p-2"><Input type="number" step="0.01" value={item.dosificacion} onChange={e => handleInsumoChange(index, 'dosificacion', e.target.value)} className="text-right" /></td>
+                       <td className="p-2"><Input value={item.cantidad} readOnly className="text-right bg-blue-50 font-medium" /></td>
+                       <td className="p-2"><Input type="number" step="0.01" value={item.costo_unitario} onChange={e => handleInsumoChange(index, 'costo_unitario', e.target.value)} className="text-right" /></td>
+                       <td className="p-2">
+                         <Select value={String(item.iva)} onValueChange={v => handleInsumoChange(index, 'iva', parseFloat(v))}>
+                           <SelectTrigger><SelectValue /></SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="0.19">19%</SelectItem><SelectItem value="0.05">5%</SelectItem><SelectItem value="0">0%</SelectItem>
+                           </SelectContent>
+                         </Select>
+                       </td>
+                       <td className="p-2 text-right font-medium text-emerald-700">{formatCurrency(item.valor_total)}</td>
+                       <td className="p-2"><Button type="button" variant="ghost" size="icon" onClick={() => removeInsumo(index)}><X className="w-4 h-4 text-red-500" /></Button></td>
+                     </tr>
                     ))}
-                  </tbody>
-                </table>
+                    {/* LÍNEA DE TOTALES */}
+                    {(currentItem?.insumos_utilizados || []).length > 0 && (() => {
+                     const items = currentItem.insumos_utilizados;
+                     const totalCant = items.reduce((s, i) => s + (parseFloat(i.cantidad) || 0), 0);
+                     const totalCostoUnit = items.reduce((s, i) => s + (parseFloat(i.costo_unitario) || 0), 0);
+                     const totalGeneral = items.reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
+                     return (
+                       <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-sm">
+                         <td className="p-2 text-slate-700" colSpan={3}>TOTALES</td>
+                         <td className="p-2 text-right text-blue-800">{totalCant.toFixed(3)}</td>
+                         <td className="p-2 text-right text-slate-700">{formatCurrency(totalCostoUnit)}</td>
+                         <td className="p-2"></td>
+                         <td className="p-2 text-right text-emerald-800">{formatCurrency(totalGeneral)}</td>
+                         <td className="p-2"></td>
+                       </tr>
+                     );
+                    })()}
+                    </tbody>
+                    </table>
               </div>
             </div>
 
@@ -434,6 +450,58 @@ export default function ProcesoCurtido() {
               <Label>Costo Total Curtido</Label>
               <div className="mt-2 p-3 bg-white rounded border font-bold text-xl text-emerald-700">{formatCurrency(currentItem?.costo_total_curtido || 0)}</div>
             </div>
+
+            {/* BLOQUE RESUMEN REMOJO - PELAMBRE */}
+            {currentItem?.codigo_lote && (() => {
+              const procLimpieza = procesosLimpieza.find(p => p.codigo_lote === currentItem.codigo_lote);
+              if (!procLimpieza) return null;
+              // Hojas remojo
+              const hojasRemojo = procLimpieza.cantidad_pieles || 0;
+              // Hojas pelambre (puede coincidir con remojo o tener valor separado)
+              const insumosPelambre = (procLimpieza.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
+              const hojasPelambre = insumosPelambre.length > 0 ? hojasRemojo : 0;
+              // Costo acumulado total de limpieza
+              const costoTotal = (procLimpieza.costo_remojo || 0) + (procLimpieza.costo_pelambre || 0);
+              const totalHojas = hojasRemojo || 1;
+              const costoUnitario = costoTotal / totalHojas;
+              return (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-indigo-700 text-white px-4 py-2 font-bold text-sm">
+                    Resumen Etapas Previas: Remojo – Pelambre (desde Limpieza)
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-indigo-50">
+                      <tr>
+                        <th className="p-2 text-left">Etapa</th>
+                        <th className="p-2 text-right">Cant. Hojas</th>
+                        <th className="p-2 text-right">Costo Unitario / Hoja</th>
+                        <th className="p-2 text-right font-bold">Costo Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t bg-blue-50">
+                        <td className="p-2 font-semibold text-blue-800">Remojo</td>
+                        <td className="p-2 text-right">{hojasRemojo}</td>
+                        <td className="p-2 text-right">{formatCurrency(hojasRemojo > 0 ? (procLimpieza.costo_remojo || 0) / hojasRemojo : 0)}</td>
+                        <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(procLimpieza.costo_remojo || 0)}</td>
+                      </tr>
+                      <tr className="border-t bg-purple-50">
+                        <td className="p-2 font-semibold text-purple-800">Pelambre</td>
+                        <td className="p-2 text-right">{hojasRemojo}</td>
+                        <td className="p-2 text-right">{formatCurrency(hojasRemojo > 0 ? (procLimpieza.costo_pelambre || 0) / hojasRemojo : 0)}</td>
+                        <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(procLimpieza.costo_pelambre || 0)}</td>
+                      </tr>
+                      <tr className="bg-indigo-50 border-t-2 border-indigo-300 font-bold">
+                        <td className="p-2 text-indigo-900">TOTAL LIMPIEZA</td>
+                        <td className="p-2 text-right text-indigo-900">{hojasRemojo}</td>
+                        <td className="p-2 text-right text-indigo-900">{formatCurrency(costoUnitario)}</td>
+                        <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(costoTotal)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 

@@ -513,7 +513,7 @@ export default function ProcesoRecurtido() {
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="p-2 text-left font-medium">Código en Proceso</th>
-                      <th className="p-2 text-left font-medium">Color Base</th>
+                      <th className="p-2 text-left font-medium">Partida Base</th>
                       <th className="p-2 text-center font-medium">Sublote #</th>
                       <th className="p-2 text-right font-medium">Cant. Hojas</th>
                       <th className="p-2 text-center font-medium">Estado</th>
@@ -582,6 +582,56 @@ export default function ProcesoRecurtido() {
                   )}
                 </table>
               </div>
+
+              {/* ── RESUMEN GENERAL DE RECURTIDO ────────────────────────────── */}
+              {sublotesControl.length > 0 && (() => {
+                // Agrupar por partida base (codigo_color / nombre_color)
+                const porPartida = {};
+                sublotesControl.forEach(p => {
+                  const partida = p.nombre_color || p.codigo_color || 'Sin Partida';
+                  if (!porPartida[partida]) porPartida[partida] = { hojas: 0, costo: 0 };
+                  porPartida[partida].hojas += parseFloat(p.cantidad_pieles) || 0;
+                  porPartida[partida].costo += (p.subtotal_humectacion || 0) + (p.subtotal_recromado || 0) + (p.subtotal_recurtido || 0);
+                });
+                const partidas = Object.entries(porPartida);
+                const totalHojasResumen = partidas.reduce((s, [, v]) => s + v.hojas, 0);
+                const totalCostoResumen = partidas.reduce((s, [, v]) => s + v.costo, 0);
+                return (
+                  <div className="border rounded-lg overflow-hidden mb-4">
+                    <div className="bg-purple-800 text-white px-4 py-2 font-bold text-sm">
+                      Resumen General de Recurtido
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-purple-50">
+                        <tr>
+                          <th className="p-2 text-left font-medium">Partida Base</th>
+                          <th className="p-2 text-right font-medium">Cant. Hojas Recurtidas</th>
+                          <th className="p-2 text-right font-medium">Costo Unitario / Hoja</th>
+                          <th className="p-2 text-right font-medium">Costo Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {partidas.map(([partida, vals]) => (
+                          <tr key={partida} className="border-t">
+                            <td className="p-2 font-semibold text-purple-900">{partida}</td>
+                            <td className="p-2 text-right font-bold">{vals.hojas}</td>
+                            <td className="p-2 text-right">{formatCurrency(vals.hojas > 0 ? vals.costo / vals.hojas : 0)}</td>
+                            <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(vals.costo)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-purple-100 font-bold border-t-2 border-purple-300">
+                          <td className="p-2 text-purple-900">TOTAL RECURTIDO</td>
+                          <td className="p-2 text-right text-purple-900">{totalHojasResumen}</td>
+                          <td className="p-2 text-right text-purple-900">{formatCurrency(totalHojasResumen > 0 ? totalCostoResumen / totalHojasResumen : 0)}</td>
+                          <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(totalCostoResumen)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                );
+              })()}
 
               {/* Botón Finalizar General */}
               <div className="flex items-center justify-between">
@@ -670,20 +720,11 @@ export default function ProcesoRecurtido() {
 
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <Label>Código Color Base</Label>
+                <Label>Partida Base</Label>
                 <Select value={currentItem?.codigo_color || ''} onValueChange={v => setCurrentItem({...currentItem, codigo_color: v, nombre_color: COLORES_MAP[v] || ''})}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar partida base..." /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(COLORES_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{k} — {v}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Nombre Color Base</Label>
-                <Select value={currentItem?.nombre_color || ''} onValueChange={v => setCurrentItem({...currentItem, nombre_color: v, codigo_color: COLORES_INV[v] || ''})}>
-                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {Object.values(COLORES_MAP).map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -783,7 +824,7 @@ export default function ProcesoRecurtido() {
             <div className="space-y-2 text-sm">
               <p><span className="font-semibold">Código Lote:</span> {selectedItem.codigo_lote}</p>
               <p><span className="font-semibold">Sublote #:</span> {selectedItem.numero_sublote_recurtido}</p>
-              <p><span className="font-semibold">Color:</span> {selectedItem.codigo_color} — {selectedItem.nombre_color}</p>
+              <p><span className="font-semibold">Partida Base:</span> {selectedItem.codigo_color} — {selectedItem.nombre_color}</p>
               <p><span className="font-semibold">Actividad:</span> <span className="capitalize">{selectedItem.actividad}</span></p>
               <p><span className="font-semibold">Cantidad Hojas:</span> {selectedItem.cantidad_pieles}</p>
               <p><span className="font-semibold">Fecha Inicio:</span> {new Date(selectedItem.fecha_inicio).toLocaleDateString()}</p>
