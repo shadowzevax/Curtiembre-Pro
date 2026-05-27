@@ -116,7 +116,8 @@ export default function Pintura() {
     const nuevoItem = {
       item_num: consumoCueroItems.length + 1,
       item_id: '', codigo: '', descripcion: '', tipo_cuero: '', tipo_acabado: '', color_final: '',
-      cantidad_hojas: 0, merma_produccion: 0, hojas_buenas: 0, costo_promedio: 0, costo_total_cuero: 0
+      cantidad_hojas: 0, merma_produccion: 0, hojas_buenas: 0, costo_promedio: 0, costo_total_cuero: 0,
+      origen_proceso: '', estado_item: 'pendiente'
     };
     const updated = [...consumoCueroItems, nuevoItem];
     setConsumoCueroItems(updated);
@@ -536,6 +537,7 @@ export default function Pintura() {
                   <thead className="bg-purple-50">
                     <tr>
                       <th className="border p-2 w-10">ITEM</th>
+                      <th className="border p-2">ORIGEN DEL PROCESO</th>
                       <th className="border p-2">CÓDIGO (Inv. en Proceso)</th>
                       <th className="border p-2">DESCRIPCIÓN</th>
                       <th className="border p-2">U.M.</th>
@@ -547,11 +549,12 @@ export default function Pintura() {
                       <th className="border p-2 text-right">COSTO TOTAL</th>
                       <th className="border p-2 text-right">MERMA (HOJAS)</th>
                       <th className="border p-2 text-right">HOJAS BUENAS</th>
+                      <th className="border p-2">ESTADO DEL ITEM</th>
                       <th className="border p-2 w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {consumoCueroItems.length === 0 && <tr><td colSpan={13} className="p-3 text-center text-gray-400">No hay items agregados.</td></tr>}
+                    {consumoCueroItems.length === 0 && <tr><td colSpan={15} className="p-3 text-center text-gray-400">No hay items agregados.</td></tr>}
                     {consumoCueroItems.map((prod, idx) => {
                       const cantConsumir = parseFloat(prod.cantidad_hojas) || 0;
                       const stockDisp = prod.cantidad_disponible || 0;
@@ -561,6 +564,17 @@ export default function Pintura() {
                         <React.Fragment key={idx}>
                         <tr className="border-t">
                           <td className="border p-2 text-center font-bold text-purple-700 bg-purple-50">{prod.item_num}</td>
+                          {/* ORIGEN DEL PROCESO */}
+                          <td className="border p-2 min-w-[130px]">
+                            <Select value={prod.origen_proceso || ''} disabled={esFinalizado} onValueChange={v => handleConsumoCueroChange(idx, 'origen_proceso', v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="limpieza">Limpieza</SelectItem>
+                                <SelectItem value="curtido">Curtido</SelectItem>
+                                <SelectItem value="recurtido">Recurtido</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
                           {/* CÓDIGO */}
                           <td className="border p-2 min-w-[180px]">
                             <Select value={prod.item_id || ''} disabled={esFinalizado} onValueChange={v => handleConsumoCueroChange(idx, 'item_id', v)}>
@@ -631,13 +645,27 @@ export default function Pintura() {
                           </td>
                           {/* HOJAS BUENAS */}
                           <td className="border p-2 w-24"><Input value={prod.hojas_buenas || 0} readOnly className="h-8 text-xs text-right bg-green-50 font-bold text-green-700" /></td>
+                          {/* ESTADO DEL ITEM */}
+                          <td className="border p-2 min-w-[140px]">
+                            <Select value={prod.estado_item || 'pendiente'} disabled={esFinalizado} onValueChange={v => handleConsumoCueroChange(idx, 'estado_item', v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pendiente">Pendiente</SelectItem>
+                                <SelectItem value="en_pintura">En Pintura</SelectItem>
+                                <SelectItem value="pintado_parcial">Pintado Parcial</SelectItem>
+                                <SelectItem value="finalizado">Finalizado</SelectItem>
+                                <SelectItem value="devuelto">Devuelto</SelectItem>
+                                <SelectItem value="reproceso">Reproceso</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
                           <td className="border p-2 text-center">
                             {!esFinalizado && <Button type="button" variant="ghost" size="sm" onClick={() => eliminarConsumoCuero(idx)}><X className="w-4 h-4 text-red-500" /></Button>}
                           </td>
                         </tr>
                         {stockPanelIdx === idx && prod.item_id && (
                           <tr className="bg-indigo-50">
-                            <td colSpan={13} className="border p-3">
+                            <td colSpan={15} className="border p-3">
                               <div className="flex flex-wrap gap-4 items-center text-xs">
                                 <span className="font-bold text-indigo-700">📦 Stock:</span>
                                 <span><b>Disponible:</b> {stockDisp} {prod.unidad_medida || 'HOJA'}</span>
@@ -655,13 +683,14 @@ export default function Pintura() {
                   {consumoCueroItems.length > 0 && (
                     <tfoot className="bg-purple-100 font-bold text-xs">
                       <tr>
-                        <td colSpan={4} className="border p-2 text-right">TOTALES:</td>
+                        <td colSpan={5} className="border p-2 text-right">TOTALES:</td>
                         <td className="border p-2 text-right">{totalHojasDeCuero}</td>
                         <td colSpan={3} className="border p-2"></td>
                         <td className="border p-2"></td>
                         <td className="border p-2 text-right text-green-700">{formatCurrency(consumoCueroItems.reduce((s, c) => s + (c.costo_total_cuero || 0), 0))}</td>
                         <td className="border p-2 text-right text-red-700">{consumoCueroItems.reduce((s, c) => s + (parseFloat(c.merma_produccion) || 0), 0)}</td>
                         <td className="border p-2 text-right text-green-700">{consumoCueroItems.reduce((s, c) => s + (parseFloat(c.hojas_buenas) || 0), 0)}</td>
+                        <td className="border p-2"></td>
                         <td className="border p-2"></td>
                       </tr>
                     </tfoot>

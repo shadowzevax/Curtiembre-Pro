@@ -516,6 +516,158 @@ export default function ProcesoRecepcion() {
             <div><Label>Nombre Curtidor</Label><Input value={currentItem?.nombre_curtidor || ''} onChange={e => setCurrentItem({...currentItem, nombre_curtidor: e.target.value})} /></div>
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
+            {/* ════════════════════════════════════════════════════════════════
+                BLOQUE: CONTROL DE COSTOS DEL PROCESO
+            ════════════════════════════════════════════════════════════════ */}
+            {(() => {
+              const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+              const costoCompraUnitario = parseFloat(currentItem?.costo_compra_unitario) || 0;
+              const costoCompraTotal = hojas * costoCompraUnitario;
+              const costoSalada = parseFloat(currentItem?.costo_salada) || 0;
+              const costoTransporte = parseFloat(currentItem?.costo_transporte) || 0;
+              const costoDescargue = parseFloat(currentItem?.costo_descargue) || 0;
+              const otrosCostos = parseFloat(currentItem?.otros_costos_recepcion) || 0;
+              const costoTotalRecepcion = costoCompraTotal + costoSalada + costoTransporte + costoDescargue + otrosCostos;
+              const costoPromedioHoja = hojas > 0 ? costoTotalRecepcion / hojas : 0;
+              // Sincronizar valores calculados en currentItem si cambiaron
+              const syncIfNeeded = () => {
+                if (
+                  (currentItem?.costo_compra_total !== costoCompraTotal) ||
+                  (currentItem?.costo_total_recepcion !== costoTotalRecepcion) ||
+                  (currentItem?.costo_promedio_por_hoja_recepcion !== costoPromedioHoja)
+                ) {
+                  // No usar setState en render: los valores se leen en tiempo real
+                }
+              };
+              return (
+                <div className="border-2 border-emerald-400 rounded-xl overflow-hidden">
+                  {/* Header */}
+                  <div className="bg-emerald-700 text-white px-5 py-3">
+                    <h3 className="font-bold text-base tracking-wide">📊 Control de Costos del Proceso</h3>
+                    <p className="text-xs text-emerald-200 mt-0.5">Costos iniciales del lote — se heredarán automáticamente a Limpieza, Curtido, Recurtido y Pintura</p>
+                  </div>
+
+                  {/* Sección 1: Costo del Cuero */}
+                  <div className="bg-emerald-50 px-5 py-4 border-b border-emerald-200">
+                    <p className="text-xs font-bold text-emerald-800 uppercase mb-3">① Costo del Cuero</p>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <Label className="text-emerald-900 font-semibold">Costo Compra Unitario</Label>
+                        <div className="relative mt-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">$</span>
+                          <Input
+                            type="number" min="0" step="1"
+                            value={currentItem?.costo_compra_unitario || ''}
+                            placeholder="0"
+                            className="pl-6"
+                            onChange={e => {
+                              const val = Math.max(0, parseFloat(e.target.value) || 0);
+                              const h = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+                              const compTotal = h * val;
+                              const s = parseFloat(currentItem?.costo_salada) || 0;
+                              const t = parseFloat(currentItem?.costo_transporte) || 0;
+                              const d = parseFloat(currentItem?.costo_descargue) || 0;
+                              const o = parseFloat(currentItem?.otros_costos_recepcion) || 0;
+                              const totalRec = compTotal + s + t + d + o;
+                              setCurrentItem({
+                                ...currentItem,
+                                costo_compra_unitario: val,
+                                costo_compra_total: compTotal,
+                                costo_total_recepcion: totalRec,
+                                costo_promedio_por_hoja_recepcion: h > 0 ? totalRec / h : 0
+                              });
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">Valor unitario por hoja de cuero</p>
+                      </div>
+                      <div>
+                        <Label className="text-emerald-900 font-semibold">Costo Compra Total <span className="text-xs font-normal text-slate-400">(automático)</span></Label>
+                        <div className="mt-1 px-3 py-2 bg-white border border-emerald-300 rounded font-bold text-emerald-800 text-sm">
+                          {formatCurrency(costoCompraTotal)}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">Cantidad Hojas × Costo Unitario</p>
+                      </div>
+                      <div className="flex items-end">
+                        <div className="w-full px-3 py-2 bg-emerald-100 border border-emerald-300 rounded text-xs text-emerald-700">
+                          <span className="font-semibold">Hojas en lote:</span> <strong className="text-emerald-900">{hojas}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sección 2: Costos Operativos de Recepción */}
+                  <div className="bg-blue-50 px-5 py-4 border-b border-blue-200">
+                    <p className="text-xs font-bold text-blue-800 uppercase mb-3">② Costos Operativos de Recepción</p>
+                    <div className="grid grid-cols-4 gap-4">
+                      {[
+                        { field: 'costo_salada', label: 'Costo Salada', hint: 'Costo de salado del lote' },
+                        { field: 'costo_transporte', label: 'Costo Transporte', hint: 'Flete o transporte del cuero' },
+                        { field: 'costo_descargue', label: 'Costo Descargue de Pieles', hint: 'Manipulación y descargue' },
+                        { field: 'otros_costos_recepcion', label: 'Otros Costos', hint: 'Otros gastos de recepción' },
+                      ].map(({ field, label, hint }) => (
+                        <div key={field}>
+                          <Label className="text-blue-900 font-semibold text-xs">{label}</Label>
+                          <div className="relative mt-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">$</span>
+                            <Input
+                              type="number" min="0" step="1"
+                              value={currentItem?.[field] || ''}
+                              placeholder="0"
+                              className="pl-6"
+                              onChange={e => {
+                                const val = Math.max(0, parseFloat(e.target.value) || 0);
+                                const h = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+                                const cu = parseFloat(currentItem?.costo_compra_unitario) || 0;
+                                const compTotal = h * cu;
+                                const updated = { ...currentItem, [field]: val };
+                                const totalRec = compTotal
+                                  + (field === 'costo_salada' ? val : parseFloat(currentItem?.costo_salada) || 0)
+                                  + (field === 'costo_transporte' ? val : parseFloat(currentItem?.costo_transporte) || 0)
+                                  + (field === 'costo_descargue' ? val : parseFloat(currentItem?.costo_descargue) || 0)
+                                  + (field === 'otros_costos_recepcion' ? val : parseFloat(currentItem?.otros_costos_recepcion) || 0);
+                                setCurrentItem({
+                                  ...updated,
+                                  costo_compra_total: compTotal,
+                                  costo_total_recepcion: totalRec,
+                                  costo_promedio_por_hoja_recepcion: h > 0 ? totalRec / h : 0
+                                });
+                              }}
+                            />
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">{hint}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sección 3: Costo Acumulado Inicial del Lote */}
+                  <div className="bg-slate-800 text-white px-5 py-4">
+                    <p className="text-xs font-bold text-slate-300 uppercase mb-3">③ Costo Acumulado Inicial del Lote</p>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <p className="text-slate-300 text-xs mb-1">Costo Total Recepción <span className="text-slate-500">(automático)</span></p>
+                        <p className="text-2xl font-bold text-yellow-300">{formatCurrency(costoTotalRecepcion)}</p>
+                        <div className="mt-2 space-y-1 text-xs text-slate-400">
+                          <div className="flex justify-between"><span>Compra Total:</span><span className="text-slate-200">{formatCurrency(costoCompraTotal)}</span></div>
+                          <div className="flex justify-between"><span>+ Salada:</span><span className="text-slate-200">{formatCurrency(costoSalada)}</span></div>
+                          <div className="flex justify-between"><span>+ Transporte:</span><span className="text-slate-200">{formatCurrency(costoTransporte)}</span></div>
+                          <div className="flex justify-between"><span>+ Descargue:</span><span className="text-slate-200">{formatCurrency(costoDescargue)}</span></div>
+                          <div className="flex justify-between"><span>+ Otros:</span><span className="text-slate-200">{formatCurrency(otrosCostos)}</span></div>
+                        </div>
+                      </div>
+                      <div className="border-l border-slate-600 pl-6 flex flex-col justify-center">
+                        <p className="text-slate-300 text-xs mb-1">Costo Promedio Actual por Hoja</p>
+                        <p className="text-3xl font-bold text-emerald-300">{formatCurrency(costoPromedioHoja)}</p>
+                        <p className="text-xs text-slate-400 mt-2">Este valor viajará automáticamente a: Limpieza → Curtido → Recurtido → Pintura</p>
+                        {hojas === 0 && <p className="text-xs text-red-400 mt-1 font-semibold">⚠️ Ingrese la Cantidad de Hojas para calcular el costo promedio.</p>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <div className="flex items-center space-x-2 mb-2">
                 <Checkbox checked={currentItem?.dividir_lote || false} onCheckedChange={v => { setCurrentItem({...currentItem, dividir_lote: v}); if (!v) setSublotes([]); }} id="dividir" />
