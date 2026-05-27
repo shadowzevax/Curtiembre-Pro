@@ -290,15 +290,22 @@ export default function ProcesoLimpieza() {
         const invActual = inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id);
 
         if (finalizandoLimpieza) {
-          // Limpieza completa: avanzar etapa → listo para curtido
+          // Calcular nuevo costo acumulado y costo promedio para enviar a Curtido
+          const costoAcumAnterior = parseFloat(invActual?.costo_acumulado) || 0;
+          const nuevoCostoAcumulado = costoAcumAnterior + costoProceso;
+          const cantHojasActuales = parseFloat(dataToSave.cantidad_pieles) || parseFloat(invActual?.cantidad_hojas) || 1;
+          const nuevoCostoPromedio = cantHojasActuales > 0 ? nuevoCostoAcumulado / cantHojasActuales : 0;
+
+          // Limpieza completa: avanzar etapa → listo para curtido, enviar costo promedio actualizado
           await InventarioEnProceso.update(currentItem.inv_proceso_id, {
             etapa_actual: 'limpieza',
             estado_actual: 'EN_PROCESO',
             estado_proceso: 'piel_limpia',
             peso_actual: dataToSave.peso_actual || (invActual?.peso_actual || 0),
-            costo_acumulado: (invActual?.costo_acumulado || 0) + costoProceso
+            costo_acumulado: nuevoCostoAcumulado,
+            costo_promedio: nuevoCostoPromedio
           });
-          console.log(`✅ Limpieza COMPLETA. Tabla central: etapa → limpieza (piel_limpia)`);
+          console.log(`✅ Limpieza COMPLETA. Tabla central: etapa → limpieza (piel_limpia). Nuevo costo acumulado: ${nuevoCostoAcumulado}, Costo promedio/hoja: ${nuevoCostoPromedio}`);
         } else if (remojoDone) {
           // Solo remojo finalizado: mantener en limpieza pero en_proceso
           await InventarioEnProceso.update(currentItem.inv_proceso_id, {
@@ -615,83 +622,180 @@ export default function ProcesoLimpieza() {
               </div>
             </div>
 
-            {/* TABLA DESGLOSE DE COSTOS POR SECCIÓN — Acumulativa: Remojo + Pelambre */}
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-slate-700 text-white px-4 py-2 font-bold text-sm">Resumen de Costos por Sección</div>
-              <table className="w-full text-sm">
-                <thead className="bg-slate-100">
-                  <tr>
-                    <th className="p-2 text-left border-b">Sección</th>
-                    <th className="p-2 text-right border-b">Costo BASE SIN IVA</th>
-                    <th className="p-2 text-right border-b">IVA</th>
-                    <th className="p-2 text-right border-b font-bold">COSTO TOTAL</th>
-                    <th className="p-2 text-center border-b">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    // REMOJO: prioridad: 1) snapshot costo_remojo_sin_iva, 2) insumos_remojo_guardados, 3) insumos_utilizados seccion remojo
-                    const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';
-                    let costoBaseRemojo, ivaRemojo;
-                    if (currentItem?.costo_remojo_sin_iva != null && parseFloat(currentItem.costo_remojo_sin_iva) > 0) {
-                      costoBaseRemojo = parseFloat(currentItem.costo_remojo_sin_iva) || 0;
-                      ivaRemojo = parseFloat(currentItem.iva_remojo) || 0;
-                    } else {
-                      // Buscar en insumos_remojo_guardados o en insumos_utilizados con seccion remojo
-                      const itemsRemojo = (currentItem?.insumos_remojo_guardados?.length > 0
-                        ? currentItem.insumos_remojo_guardados
-                        : (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion));
-                      costoBaseRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
-                      ivaRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
-                    }
+            {/* ══════════════════════════════════════════════════════════════════
+                BLOQUE DE TRAZABILIDAD DE COSTOS — 3 PARTES
+            ══════════════════════════════════════════════════════════════════ */}
+            {(() => {
+              // ── Datos del inventario relacionado (fuente de herencia desde Recepción) ──
+              const invRel = currentItem?.inv_proceso_id
+                ? inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id)
+                : null;
 
-                    // PELAMBRE: calcular desde insumos actuales con seccion === 'pelambre'
-                    const itemsPelambre = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
-                    const costoBasePelambre = itemsPelambre.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
-                    const ivaPelambre = itemsPelambre.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+              // Costo acumulado heredado desde Recepción
+              const costoAcumRecepcion = parseFloat(invRel?.costo_acumulado) || 0;
+              // Cantidad hojas recibidas
+              const cantHojasRecibidas = parseFloat(invRel?.cantidad_hojas || currentItem?.cantidad_pieles) || 0;
+              // Costo promedio inicial por hoja (calculado en Recepción)
+              const costoPromedioInicial = cantHojasRecibidas > 0 ? costoAcumRecepcion / cantHojasRecibidas : 0;
 
-                    const totalBase = costoBaseRemojo + costoBasePelambre;
-                    const totalIva = ivaRemojo + ivaPelambre;
+              // ── Cálculo de costos de Limpieza (Remojo + Pelambre) ──
+              const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';
+              let costoBaseRemojo, ivaRemojo;
+              if (currentItem?.costo_remojo_sin_iva != null && parseFloat(currentItem.costo_remojo_sin_iva) > 0) {
+                costoBaseRemojo = parseFloat(currentItem.costo_remojo_sin_iva) || 0;
+                ivaRemojo = parseFloat(currentItem.iva_remojo) || 0;
+              } else {
+                const itemsRemojo = (currentItem?.insumos_remojo_guardados?.length > 0
+                  ? currentItem.insumos_remojo_guardados
+                  : (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'remojo' || !i.seccion));
+                costoBaseRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+                ivaRemojo = itemsRemojo.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
+              }
+              const itemsPelambre = (currentItem?.insumos_utilizados || []).filter(i => i.seccion === 'pelambre');
+              const costoBasePelambre = itemsPelambre.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)), 0);
+              const ivaPelambre = itemsPelambre.reduce((sum, i) => sum + ((parseFloat(i.cantidad)||0)*(parseFloat(i.costo_unitario)||0)*(parseFloat(i.iva)||0)), 0);
 
-                    return (
-                      <>
-                        <tr className="border-t bg-blue-50">
-                          <td className="p-2 font-semibold capitalize text-blue-800">Remojo</td>
-                          <td className="p-2 text-right text-slate-700">{formatCurrency(costoBaseRemojo)}</td>
-                          <td className="p-2 text-right text-orange-600">{formatCurrency(ivaRemojo)}</td>
-                          <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoBaseRemojo + ivaRemojo)}</td>
-                          <td className="p-2 text-center">
-                            {remojoFinalizado
-                              ? <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✔ Finalizado</span>
-                              : <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">Pendiente</span>}
-                          </td>
-                        </tr>
-                        <tr className="border-t bg-purple-50">
-                          <td className="p-2 font-semibold capitalize text-purple-800">Pelambre</td>
-                          <td className="p-2 text-right text-slate-700">{formatCurrency(costoBasePelambre)}</td>
-                          <td className="p-2 text-right text-orange-600">{formatCurrency(ivaPelambre)}</td>
-                          <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoBasePelambre + ivaPelambre)}</td>
-                          <td className="p-2 text-center">
-                            {currentItem?.estado_pelambre === 'finalizado'
-                              ? <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✔ Finalizado</span>
-                              : remojoFinalizado
-                                ? <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">En Registro</span>
-                                : <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-400">Bloqueado</span>}
-                          </td>
-                        </tr>
-                        <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold">
-                          <td className="p-2 text-slate-800">TOTAL LIMPIEZA</td>
-                          <td className="p-2 text-right text-slate-800">{formatCurrency(totalBase)}</td>
-                          <td className="p-2 text-right text-orange-700">{formatCurrency(totalIva)}</td>
-                          <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(totalBase + totalIva)}</td>
-                          <td className="p-2"></td>
-                        </tr>
-                      </>
-                    );
-                  })()}
-                </tbody>
-              </table>
-            </div>
+              const totalBase = costoBaseRemojo + costoBasePelambre;
+              const totalIva = ivaRemojo + ivaPelambre;
+              const totalLimpieza = totalBase + totalIva;
+              const costoTotalRemojo = costoBaseRemojo + ivaRemojo;
+              const costoTotalPelambre = costoBasePelambre + ivaPelambre;
+
+              // ── Trazabilidad ──
+              const nuevoCostoAcumulado = costoAcumRecepcion + totalLimpieza;
+              const cantHojasActuales = parseFloat(currentItem?.cantidad_pieles) || cantHojasRecibidas;
+              const nuevoCostoPromedioPorHoja = cantHojasActuales > 0 ? nuevoCostoAcumulado / cantHojasActuales : 0;
+
+              const estadoTrazabilidad = currentItem?.estado === 'completado'
+                ? 'Enviado a Curtido'
+                : (remojoFinalizado || currentItem?.estado_pelambre === 'finalizado')
+                  ? 'Actualizado'
+                  : 'Pendiente';
+
+              const colorEstadoTraz = estadoTrazabilidad === 'Enviado a Curtido'
+                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                : estadoTrazabilidad === 'Actualizado'
+                  ? 'bg-blue-100 text-blue-700 border-blue-300'
+                  : 'bg-yellow-100 text-yellow-700 border-yellow-300';
+
+              return (
+                <div className="space-y-0 border rounded-lg overflow-hidden">
+
+                  {/* ── PARTE 1: COSTOS HEREDADOS ── */}
+                  <div className="bg-amber-700 text-white px-4 py-2 font-bold text-sm tracking-wide">
+                    📥 PARTE 1 — COSTOS HEREDADOS (desde Recepción)
+                  </div>
+                  <div className="bg-amber-50 border-b border-amber-200 p-3 grid grid-cols-3 gap-3">
+                    <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                      <p className="text-xs text-amber-700 font-semibold mb-1">Costo Acumulado Recepción</p>
+                      <p className="text-base font-bold text-amber-800">{formatCurrency(costoAcumRecepcion)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Solo lectura · Heredado automáticamente</p>
+                    </div>
+                    <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                      <p className="text-xs text-amber-700 font-semibold mb-1">Cantidad Hojas Recibidas</p>
+                      <p className="text-base font-bold text-amber-800">{cantHojasRecibidas} hojas</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Solo lectura · Desde Recepción</p>
+                    </div>
+                    <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                      <p className="text-xs text-amber-700 font-semibold mb-1">Costo Promedio Inicial por Hoja</p>
+                      <p className="text-base font-bold text-amber-800">{formatCurrency(costoPromedioInicial)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">= Costo Recepción ÷ Cant. Hojas</p>
+                    </div>
+                  </div>
+
+                  {/* ── PARTE 2: RESUMEN DE COSTOS POR SECCIÓN ── */}
+                  <div className="bg-slate-700 text-white px-4 py-2 font-bold text-sm tracking-wide">
+                    📊 PARTE 2 — RESUMEN DE COSTOS POR SECCIÓN
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="p-2 text-left border-b">Sección</th>
+                        <th className="p-2 text-right border-b">Costo BASE SIN IVA</th>
+                        <th className="p-2 text-right border-b">IVA</th>
+                        <th className="p-2 text-right border-b font-bold">COSTO TOTAL</th>
+                        <th className="p-2 text-center border-b">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t bg-blue-50">
+                        <td className="p-2 font-semibold text-blue-800">Remojo</td>
+                        <td className="p-2 text-right text-slate-700">{formatCurrency(costoBaseRemojo)}</td>
+                        <td className="p-2 text-right text-orange-600">{formatCurrency(ivaRemojo)}</td>
+                        <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoTotalRemojo)}</td>
+                        <td className="p-2 text-center">
+                          {remojoFinalizado
+                            ? <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✔ Finalizado</span>
+                            : <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">Pendiente</span>}
+                        </td>
+                      </tr>
+                      <tr className="border-t bg-purple-50">
+                        <td className="p-2 font-semibold text-purple-800">Pelambre</td>
+                        <td className="p-2 text-right text-slate-700">{formatCurrency(costoBasePelambre)}</td>
+                        <td className="p-2 text-right text-orange-600">{formatCurrency(ivaPelambre)}</td>
+                        <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(costoTotalPelambre)}</td>
+                        <td className="p-2 text-center">
+                          {currentItem?.estado_pelambre === 'finalizado'
+                            ? <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">✔ Finalizado</span>
+                            : remojoFinalizado
+                              ? <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">En Registro</span>
+                              : <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-400">Bloqueado</span>}
+                        </td>
+                      </tr>
+                      <tr className="bg-slate-100 border-t-2 border-slate-400 font-bold">
+                        <td className="p-2 text-slate-800 uppercase tracking-wide">TOTAL LIMPIEZA</td>
+                        <td className="p-2 text-right text-slate-700">{formatCurrency(totalBase)}</td>
+                        <td className="p-2 text-right text-orange-700">{formatCurrency(totalIva)}</td>
+                        <td className="p-2 text-right text-emerald-800 text-base">{formatCurrency(totalLimpieza)}</td>
+                        <td className="p-2"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* ── PARTE 3: TRAZABILIDAD Y COSTO ACTUALIZADO ── */}
+                  <div className="bg-emerald-700 text-white px-4 py-2 font-bold text-sm tracking-wide">
+                    🔗 PARTE 3 — TRAZABILIDAD Y COSTO ACTUALIZADO (enviará a Curtido)
+                  </div>
+                  <div className="bg-emerald-50 p-3 grid grid-cols-3 gap-3">
+                    <div className="bg-white rounded border border-emerald-200 p-2 text-center">
+                      <p className="text-xs text-emerald-700 font-semibold mb-1">Costo Acumulado Anterior</p>
+                      <p className="text-base font-bold text-slate-800">{formatCurrency(costoAcumRecepcion)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Heredado desde Recepción</p>
+                    </div>
+                    <div className="bg-white rounded border border-emerald-200 p-2 text-center">
+                      <p className="text-xs text-emerald-700 font-semibold mb-1">Costo Total Limpieza</p>
+                      <p className="text-base font-bold text-blue-700">{formatCurrency(totalLimpieza)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Remojo + Pelambre</p>
+                    </div>
+                    <div className="bg-white rounded border border-emerald-300 p-2 text-center ring-1 ring-emerald-400">
+                      <p className="text-xs text-emerald-700 font-semibold mb-1">Nuevo Costo Acumulado</p>
+                      <p className="text-lg font-extrabold text-emerald-800">{formatCurrency(nuevoCostoAcumulado)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">= Anterior + Total Limpieza</p>
+                    </div>
+                    <div className="bg-white rounded border border-emerald-200 p-2 text-center">
+                      <p className="text-xs text-emerald-700 font-semibold mb-1">Cantidad Actual de Hojas</p>
+                      <p className="text-base font-bold text-slate-800">{cantHojasActuales} hojas</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Hojas activas del lote</p>
+                    </div>
+                    <div className="bg-white rounded border border-emerald-300 p-2 text-center ring-1 ring-emerald-400">
+                      <p className="text-xs text-emerald-700 font-semibold mb-1">Nuevo Costo Promedio por Hoja</p>
+                      <p className="text-lg font-extrabold text-emerald-800">{formatCurrency(nuevoCostoPromedioPorHoja)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">= Nuevo Acumulado ÷ Cant. Hojas</p>
+                    </div>
+                    <div className="bg-white rounded border border-emerald-200 p-2 text-center">
+                      <p className="text-xs text-emerald-700 font-semibold mb-1">Estado de Trazabilidad</p>
+                      <span className={`text-xs px-3 py-1 rounded-full border font-bold ${colorEstadoTraz}`}>
+                        {estadoTrazabilidad}
+                      </span>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {estadoTrazabilidad === 'Enviado a Curtido' ? '✅ Costo enviado al siguiente módulo' : estadoTrazabilidad === 'Actualizado' ? '🔄 En proceso de actualización' : '⏳ Esperando finalización de secciones'}
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })()}
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
