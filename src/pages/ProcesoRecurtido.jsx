@@ -335,22 +335,31 @@ export default function ProcesoRecurtido() {
 
       // Actualizar tabla central con datos de color y cantidad hojas desde los sublotes
       if (inv) {
-        const costoTotal = sublotes.reduce((sum, p) => sum + (p.subtotal_humectacion || 0) + (p.subtotal_recromado || 0) + (p.subtotal_recurtido || 0), 0);
-        const costoAcum = (inv.costo_acumulado || 0) + costoTotal;
+        const costoProductosRecurtido = sublotes.reduce((sum, p) => sum + (p.subtotal_humectacion || 0) + (p.subtotal_recromado || 0) + (p.subtotal_recurtido || 0), 0);
+        const costoHeredadoCurtido    = parseFloat(inv.costo_acumulado) || 0;
+        const nuevoCostoAcumulado     = costoHeredadoCurtido + costoProductosRecurtido;
         // Tomar color del primer sublote con color definido
         const subloteConColor = sublotes.find(p => p.codigo_color || p.nombre_color);
         const totalHojasRecurtidas = sublotes.reduce((sum, p) => sum + (parseFloat(p.cantidad_pieles) || 0), 0);
+        const cantHojasFinales = totalHojasRecurtidas > 0 ? totalHojasRecurtidas : (inv.cantidad_hojas || 0);
+        const pesoFinal = sublotes.reduce((max, p) => Math.max(max, parseFloat(p.peso_actual) || 0), parseFloat(inv.peso_actual) || 0);
+        const nuevoCostoPromHoja = cantHojasFinales > 0 ? nuevoCostoAcumulado / cantHojasFinales : 0;
+        const nuevoCostoPromKg   = pesoFinal > 0 ? nuevoCostoAcumulado / pesoFinal : 0;
+
         await InventarioEnProceso.update(inv.id, {
           etapa_actual: 'recurtido',
           estado_actual: 'FINALIZADO',
           estado_proceso: 'piel_recurtida',
-          costo_acumulado: costoAcum,
-          costo_promedio: totalHojasLote > 0 ? costoAcum / totalHojasLote : 0,
+          peso_actual: pesoFinal,
+          costo_acumulado: nuevoCostoAcumulado,
+          costo_promedio: nuevoCostoPromHoja,
+          costo_promedio_kg: nuevoCostoPromKg,
           // Sincronizar campos de color y cantidad hojas desde Recurtido
           codigo_color: subloteConColor?.codigo_color || inv.codigo_color || '',
           color_base: subloteConColor?.nombre_color || inv.color_base || '',
-          cantidad_hojas: totalHojasRecurtidas > 0 ? totalHojasRecurtidas : (inv.cantidad_hojas || 0),
+          cantidad_hojas: cantHojasFinales,
         });
+        console.log(`✅ Recurtido General finalizado. Nuevo costo acumulado: ${nuevoCostoAcumulado}, Promedio/hoja: ${nuevoCostoPromHoja}, Promedio/kg: ${nuevoCostoPromKg}`);
       }
 
       await loadData();
@@ -805,6 +814,148 @@ export default function ProcesoRecurtido() {
             <div className="bg-gray-50 p-4 rounded-lg">
               <div><Label>Subtotal Recurtido</Label><div className="mt-1 p-2 bg-white rounded border font-bold text-emerald-700">{formatCurrency(currentItem?.subtotal_recurtido || 0)}</div></div>
             </div>
+
+            {/* ══════════════════════════════════════════════════════════════════
+                NUEVO BLOQUE INDEPENDIENTE: CONTROL DE COSTOS DEL PROCESO
+            ══════════════════════════════════════════════════════════════════ */}
+            {(() => {
+              // ── Datos heredados desde InventarioEnProceso (Curtido) ──
+              const invRel = currentItem?.inv_proceso_id
+                ? inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id)
+                : invSeleccionado;
+
+              const costoHeredado            = parseFloat(invRel?.costo_acumulado) || 0;
+              const costoPromedioHeredadoHoja = parseFloat(invRel?.costo_promedio) || 0;
+              const cantHojas                = parseFloat(currentItem?.cantidad_pieles) || parseFloat(invRel?.cantidad_hojas) || 0;
+              const pesoActual               = parseFloat(currentItem?.peso_actual) || parseFloat(invRel?.peso_actual) || 0;
+              const costoPromedioHeredadoKg  = pesoActual > 0 ? costoHeredado / pesoActual : 0;
+
+              // ── Costo productos recurtido (suma de todos los ítems) ──
+              const costoProductosRecurtido  = (currentItem?.insumos_utilizados || []).reduce((sum, i) => sum + (parseFloat(i.valor_total) || 0), 0);
+
+              // ── Cálculos trazabilidad ──
+              const costoTotalAcumulado = costoHeredado + costoProductosRecurtido;
+              const costoPromHoja       = cantHojas > 0 ? costoTotalAcumulado / cantHojas : null;
+              const costoPromKg         = pesoActual > 0 ? costoTotalAcumulado / pesoActual : null;
+
+              // ── Estado costo ──
+              const tieneItems = (currentItem?.insumos_utilizados || []).length > 0;
+              const estadoCosto = currentItem?.finalizar_recurtido
+                ? 'Actualizado'
+                : !tieneItems
+                  ? 'Pendiente'
+                  : pesoActual === 0
+                    ? 'En proceso'
+                    : 'Calculado';
+
+              const estadoCostoColor = {
+                'Pendiente':   'bg-yellow-100 text-yellow-800 border-yellow-300',
+                'En proceso':  'bg-blue-100 text-blue-800 border-blue-300',
+                'Calculado':   'bg-emerald-100 text-emerald-800 border-emerald-300',
+                'Actualizado': 'bg-purple-100 text-purple-800 border-purple-300',
+              }[estadoCosto] || 'bg-gray-100 text-gray-700 border-gray-300';
+
+              const fechaActualizacion = new Date().toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+
+              return (
+                <div className="border-2 border-violet-400 rounded-lg overflow-hidden shadow-md">
+
+                  {/* Header bloque */}
+                  <div className="bg-violet-700 text-white px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-base tracking-wide">💰 CONTROL DE COSTOS DEL PROCESO — RECURTIDO</p>
+                      <p className="text-xs text-violet-200 mt-0.5">Trazabilidad financiera del cuero · Independiente del registro de productos químicos</p>
+                    </div>
+                    <span className={`text-xs px-3 py-1 rounded-full border font-bold ${estadoCostoColor}`}>{estadoCosto}</span>
+                  </div>
+
+                  {/* ── COSTOS HEREDADOS DESDE CURTIDO (solo lectura) ── */}
+                  <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
+                    <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-2">📥 Costo Heredado desde Curtido (solo lectura)</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                        <p className="text-xs text-amber-600 font-semibold mb-1">Costo Acumulado Heredado</p>
+                        <p className="text-lg font-extrabold text-amber-800">{formatCurrency(costoHeredado)}</p>
+                        <p className="text-xs text-slate-400">= Costo Total Acumulado Curtido</p>
+                      </div>
+                      <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                        <p className="text-xs text-amber-600 font-semibold mb-1">Costo Promedio Heredado / Hoja</p>
+                        <p className="text-base font-bold text-amber-700">{formatCurrency(costoPromedioHeredadoHoja)}</p>
+                        <p className="text-xs text-slate-400">Registrado en Curtido</p>
+                      </div>
+                      <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                        <p className="text-xs text-amber-600 font-semibold mb-1">Costo Promedio Heredado / Kg</p>
+                        <p className="text-base font-bold text-amber-700">{formatCurrency(costoPromedioHeredadoKg)}</p>
+                        <p className="text-xs text-slate-400">= Costo Heredado ÷ Peso Actual</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── TABLA PRINCIPAL DE CONTROL DE COSTOS ── */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-violet-800 text-white">
+                        <tr>
+                          <th className="p-2 text-right whitespace-nowrap">COSTO HEREDADO<br/>PROCESO ANTERIOR</th>
+                          <th className="p-2 text-right whitespace-nowrap">COSTO PRODUCTOS<br/>RECURTIDO</th>
+                          <th className="p-2 text-right whitespace-nowrap font-extrabold">COSTO TOTAL<br/>ACUMULADO</th>
+                          <th className="p-2 text-center whitespace-nowrap">CANTIDAD<br/>HOJAS</th>
+                          <th className="p-2 text-center whitespace-nowrap">PESO ACTUAL<br/>KG</th>
+                          <th className="p-2 text-right whitespace-nowrap">COSTO PROMEDIO<br/>POR HOJA</th>
+                          <th className="p-2 text-right whitespace-nowrap">COSTO PROMEDIO<br/>POR KG</th>
+                          <th className="p-2 text-center whitespace-nowrap">ESTADO<br/>COSTO</th>
+                          <th className="p-2 text-center whitespace-nowrap">FECHA<br/>ACTUALIZACIÓN</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="bg-white border-b hover:bg-violet-50 transition-colors">
+                          <td className="p-2 text-right font-semibold text-amber-700">{formatCurrency(costoHeredado)}</td>
+                          <td className="p-2 text-right font-semibold text-blue-700">{formatCurrency(costoProductosRecurtido)}</td>
+                          <td className="p-2 text-right font-extrabold text-violet-800 text-sm">{formatCurrency(costoTotalAcumulado)}</td>
+                          <td className="p-2 text-center font-bold text-slate-700">{cantHojas || <span className="text-gray-400">—</span>}</td>
+                          <td className="p-2 text-center font-bold text-slate-700">{pesoActual > 0 ? `${pesoActual} kg` : <span className="text-gray-400">—</span>}</td>
+                          <td className="p-2 text-right font-bold text-emerald-700">
+                            {costoPromHoja !== null ? formatCurrency(costoPromHoja) : <span className="text-gray-400 text-xs">N/A</span>}
+                          </td>
+                          <td className="p-2 text-right font-bold text-emerald-700">
+                            {costoPromKg !== null ? formatCurrency(costoPromKg) : <span className="text-gray-400 text-xs">N/A</span>}
+                          </td>
+                          <td className="p-2 text-center">
+                            <span className={`text-xs px-2 py-0.5 rounded-full border font-bold ${estadoCostoColor}`}>{estadoCosto}</span>
+                          </td>
+                          <td className="p-2 text-center text-slate-500 text-xs">{fechaActualizacion}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* ── FÓRMULAS RESUMEN ── */}
+                  <div className="bg-violet-50 border-t border-violet-200 px-4 py-2 grid grid-cols-3 gap-3">
+                    <div className="text-center">
+                      <p className="text-xs text-violet-600 font-semibold">Fórmula Costo Total</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{formatCurrency(costoHeredado)} + {formatCurrency(costoProductosRecurtido)} = <strong className="text-violet-800">{formatCurrency(costoTotalAcumulado)}</strong></p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-violet-600 font-semibold">Fórmula Costo / Hoja</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{formatCurrency(costoTotalAcumulado)} ÷ {cantHojas || 0} = <strong className="text-emerald-700">{costoPromHoja !== null ? formatCurrency(costoPromHoja) : 'N/A'}</strong></p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-violet-600 font-semibold">Fórmula Costo / Kg</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{formatCurrency(costoTotalAcumulado)} ÷ {pesoActual} kg = <strong className="text-emerald-700">{costoPromKg !== null ? formatCurrency(costoPromKg) : 'N/A'}</strong></p>
+                    </div>
+                  </div>
+
+                  {/* ── NOTA TRAZABILIDAD ── */}
+                  <div className="bg-slate-50 border-t border-slate-200 px-4 py-2 flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-semibold">🔗 Trazabilidad:</span>
+                    <span className="text-xs text-slate-500">
+                      El <strong>Costo Promedio por Hoja ({costoPromHoja !== null ? formatCurrency(costoPromHoja) : 'N/A'})</strong> y <strong>Costo Total Acumulado ({formatCurrency(costoTotalAcumulado)})</strong> se heredarán automáticamente a <strong>Pintura</strong> al finalizar el recurtido general.
+                    </span>
+                  </div>
+
+                </div>
+              );
+            })()}
 
             <div><Label>Observaciones</Label><Textarea value={currentItem?.observaciones || ''} onChange={e => setCurrentItem({...currentItem, observaciones: e.target.value})} rows={2} /></div>
 
