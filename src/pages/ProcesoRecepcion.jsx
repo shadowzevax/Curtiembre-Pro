@@ -521,7 +521,8 @@ export default function ProcesoRecepcion() {
             ════════════════════════════════════════════════════════════════ */}
             {(() => {
               const hojas = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
-              const costoCompraUnitario = parseFloat(currentItem?.costo_compra_unitario) || 0;
+              // Costo Compra Unitario = Costo Unitario registrado en el campo "Costo Unitario" (costo_promedio)
+              const costoCompraUnitario = parseFloat(currentItem?.costo_promedio) || 0;
               const costoCompraTotal = hojas * costoCompraUnitario;
               const costoSalada = parseFloat(currentItem?.costo_salada) || 0;
               const costoTransporte = parseFloat(currentItem?.costo_transporte) || 0;
@@ -557,29 +558,13 @@ export default function ProcesoRecepcion() {
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">$</span>
                           <Input
                             type="number" min="0" step="1"
-                            value={currentItem?.costo_compra_unitario || ''}
+                            value={currentItem?.costo_promedio || ''}
+                            readOnly
+                            className="pl-6 bg-amber-50 font-bold text-amber-800 cursor-not-allowed"
                             placeholder="0"
-                            className="pl-6"
-                            onChange={e => {
-                              const val = Math.max(0, parseFloat(e.target.value) || 0);
-                              const h = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
-                              const compTotal = h * val;
-                              const s = parseFloat(currentItem?.costo_salada) || 0;
-                              const t = parseFloat(currentItem?.costo_transporte) || 0;
-                              const d = parseFloat(currentItem?.costo_descargue) || 0;
-                              const o = parseFloat(currentItem?.otros_costos_recepcion) || 0;
-                              const totalRec = compTotal + s + t + d + o;
-                              setCurrentItem({
-                                ...currentItem,
-                                costo_compra_unitario: val,
-                                costo_compra_total: compTotal,
-                                costo_total_recepcion: totalRec,
-                                costo_promedio_por_hoja_recepcion: h > 0 ? totalRec / h : 0
-                              });
-                            }}
                           />
                         </div>
-                        <p className="text-xs text-slate-400 mt-0.5">Valor unitario por hoja de cuero</p>
+                        <p className="text-xs text-amber-600 mt-0.5">🔒 Automático · Igual al campo "Costo Unitario"</p>
                       </div>
                       <div>
                         <Label className="text-emerald-900 font-semibold">Costo Compra Total <span className="text-xs font-normal text-slate-400">(automático)</span></Label>

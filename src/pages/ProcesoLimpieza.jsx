@@ -631,12 +631,15 @@ export default function ProcesoLimpieza() {
                 ? inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id)
                 : null;
 
-              // Costo acumulado heredado desde Recepción
-              const costoAcumRecepcion = parseFloat(invRel?.costo_acumulado) || 0;
+              // Costo Acumulado Recepción = Costo Promedio Actual por Hoja generado en Recepción (costo_promedio)
+              // Esto garantiza trazabilidad correcta: hereda el costo promedio, no el acumulado bruto
+              const costoPromedioInicial = parseFloat(invRel?.costo_promedio) || 0;
               // Cantidad hojas recibidas
               const cantHojasRecibidas = parseFloat(invRel?.cantidad_hojas || currentItem?.cantidad_pieles) || 0;
-              // Costo promedio inicial por hoja (calculado en Recepción)
-              const costoPromedioInicial = cantHojasRecibidas > 0 ? costoAcumRecepcion / cantHojasRecibidas : 0;
+              // Costo acumulado recepción = costo_promedio × cantidad_hojas (reconstruido para trazabilidad)
+              const costoAcumRecepcion = costoPromedioInicial > 0
+                ? costoPromedioInicial * cantHojasRecibidas
+                : (parseFloat(invRel?.costo_acumulado) || 0);
 
               // ── Cálculo de costos de Limpieza (Remojo + Pelambre) ──
               const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';
@@ -689,7 +692,7 @@ export default function ProcesoLimpieza() {
                     <div className="bg-white rounded border border-amber-200 p-2 text-center">
                       <p className="text-xs text-amber-700 font-semibold mb-1">Costo Acumulado Recepción</p>
                       <p className="text-base font-bold text-amber-800">{formatCurrency(costoAcumRecepcion)}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">Solo lectura · Heredado automáticamente</p>
+                      <p className="text-xs text-slate-400 mt-0.5">🔒 = Costo Promedio/Hoja × Hojas (Recepción)</p>
                     </div>
                     <div className="bg-white rounded border border-amber-200 p-2 text-center">
                       <p className="text-xs text-amber-700 font-semibold mb-1">Cantidad Hojas Recibidas</p>
@@ -699,7 +702,7 @@ export default function ProcesoLimpieza() {
                     <div className="bg-white rounded border border-amber-200 p-2 text-center">
                       <p className="text-xs text-amber-700 font-semibold mb-1">Costo Promedio Inicial por Hoja</p>
                       <p className="text-base font-bold text-amber-800">{formatCurrency(costoPromedioInicial)}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">= Costo Recepción ÷ Cant. Hojas</p>
+                      <p className="text-xs text-slate-400 mt-0.5">🔒 = Costo Promedio Actual generado en Recepción</p>
                     </div>
                   </div>
 
