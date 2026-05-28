@@ -91,17 +91,28 @@ export default function ProcesoLimpieza() {
     setShowModal(true);
   };
 
-  const handleSelectInvProceso = (id) => {
+  const handleSelectInvProceso = async (id) => {
     const inv = inventarioEnProceso.find(i => i.id === id);
     if (!inv) return;
     setInvSeleccionado(inv);
     setSearchEnProceso('');
 
     // Buscar si ya existe un proceso de limpieza previo para este lote
-    const procesoExistente = procesos.find(p => p.codigo_lote === (inv.codigo_lote || inv.codigo));
+    const codigoLote = inv.codigo_lote || inv.codigo || '';
+    const procesoExistente = procesos.find(p => p.codigo_lote === codigoLote);
     const estadoRemojoExistente = procesoExistente?.estado_remojo || (procesoExistente?.finalizar_remojo ? 'finalizado' : 'pendiente');
     const estadoPelambreExistente = procesoExistente?.estado_pelambre || (procesoExistente?.finalizar_pelambre ? 'finalizado' : 'pendiente');
     const costoRemojoExistente = procesoExistente?.costo_remojo || 0;
+
+    // Buscar proceso de Recepción para heredar el "Costo Total Recepción"
+    let costoTotalRecepcionHeredado = 0;
+    try {
+      const procesosRecepcion = await ProcesoProduccion.filter({ tipo_proceso: 'recepcion', codigo_lote: codigoLote });
+      const procRec = Array.isArray(procesosRecepcion) && procesosRecepcion.length > 0 ? procesosRecepcion[0] : null;
+      costoTotalRecepcionHeredado = parseFloat(procRec?.costo_total_recepcion) || 0;
+    } catch (e) {
+      console.error('Error buscando recepción:', e);
+    }
 
     setCurrentItem(prev => {
       const cantidadPieles = inv.cantidad_hojas || prev.cantidad_pieles;
@@ -112,7 +123,7 @@ export default function ProcesoLimpieza() {
       return {
         ...prev,
         inv_proceso_id: inv.id,
-        codigo_lote: inv.codigo_lote || inv.codigo || '',
+        codigo_lote: codigoLote,
         cantidad_pieles: cantidadPieles,
         peso_actual: pesoActual,
         peso_promedio: pesoPromedio,
@@ -123,6 +134,8 @@ export default function ProcesoLimpieza() {
         finalizar_pelambre: estadoPelambreExistente === 'finalizado',
         costo_remojo: costoRemojoExistente,
         seccion: seccionInicial,
+        // Costo Total Recepción heredado (para "Costo Acumulado Anterior" en Parte 3)
+        costo_total_recepcion_heredado: costoTotalRecepcionHeredado,
         // Si hay proceso existente, cargar su ID para actualizar en lugar de crear nuevo
         id_proceso_existente: procesoExistente?.id || null,
       };
@@ -631,15 +644,12 @@ export default function ProcesoLimpieza() {
                 ? inventarioEnProceso.find(i => i.id === currentItem.inv_proceso_id)
                 : null;
 
-              // Costo Acumulado Recepción = Costo Promedio Actual por Hoja generado en Recepción (costo_promedio)
-              // Esto garantiza trazabilidad correcta: hereda el costo promedio, no el acumulado bruto
-              const costoPromedioInicial = parseFloat(invRel?.costo_promedio) || 0;
               // Cantidad hojas recibidas
               const cantHojasRecibidas = parseFloat(invRel?.cantidad_hojas || currentItem?.cantidad_pieles) || 0;
-              // Costo acumulado recepción = costo_promedio × cantidad_hojas (reconstruido para trazabilidad)
-              const costoAcumRecepcion = costoPromedioInicial > 0
-                ? costoPromedioInicial * cantHojasRecibidas
-                : (parseFloat(invRel?.costo_acumulado) || 0);
+              // Costo Promedio Inicial por Hoja: viene de costo_promedio de InventarioEnProceso (generado en Recepción)
+              const costoPromedioInicial = parseFloat(invRel?.costo_promedio) || 0;
+              // Costo Acumulado Recepción = "Costo Total Recepción" del proceso de Recepción (heredado directamente)
+              const costoAcumRecepcion = parseFloat(currentItem?.costo_total_recepcion_heredado) || parseFloat(invRel?.costo_acumulado) || 0;
 
               // ── Cálculo de costos de Limpieza (Remojo + Pelambre) ──
               const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';
@@ -692,7 +702,7 @@ export default function ProcesoLimpieza() {
                     <div className="bg-white rounded border border-amber-200 p-2 text-center">
                       <p className="text-xs text-amber-700 font-semibold mb-1">Costo Acumulado Recepción</p>
                       <p className="text-base font-bold text-amber-800">{formatCurrency(costoAcumRecepcion)}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">🔒 = Costo Promedio/Hoja × Hojas (Recepción)</p>
+                      <p className="text-xs text-slate-400 mt-0.5">🔒 = Costo Total Recepción (automático)</p>
                     </div>
                     <div className="bg-white rounded border border-amber-200 p-2 text-center">
                       <p className="text-xs text-amber-700 font-semibold mb-1">Cantidad Hojas Recibidas</p>
@@ -763,7 +773,7 @@ export default function ProcesoLimpieza() {
                     <div className="bg-white rounded border border-emerald-200 p-2 text-center">
                       <p className="text-xs text-emerald-700 font-semibold mb-1">Costo Acumulado Anterior</p>
                       <p className="text-base font-bold text-slate-800">{formatCurrency(costoAcumRecepcion)}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">Heredado desde Recepción</p>
+                      <p className="text-xs text-slate-400 mt-0.5">🔒 = Costo Total Recepción (automático)</p>
                     </div>
                     <div className="bg-white rounded border border-emerald-200 p-2 text-center">
                       <p className="text-xs text-emerald-700 font-semibold mb-1">Costo Total Limpieza</p>

@@ -603,7 +603,8 @@ export default function ProcesoRecepcion() {
                               onChange={e => {
                                 const val = Math.max(0, parseFloat(e.target.value) || 0);
                                 const h = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
-                                const cu = parseFloat(currentItem?.costo_compra_unitario) || 0;
+                                // Costo Compra Unitario = costo_promedio (campo "Costo Unitario" del encabezado)
+                                const cu = parseFloat(currentItem?.costo_promedio) || 0;
                                 const compTotal = h * cu;
                                 const updated = { ...currentItem, [field]: val };
                                 const totalRec = compTotal
