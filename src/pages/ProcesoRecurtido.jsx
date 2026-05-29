@@ -842,10 +842,14 @@ export default function ProcesoRecurtido() {
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Base / Color Base *</Label>
-                            <Input value={subloteActivo.color_base || ''}
-                              onChange={e => handleSubloteFieldChange('color_base', e.target.value)}
-                              placeholder="ej: NEGRO, CAFÉ, MIEL..."
-                              className="text-xs" />
+                            <Select value={subloteActivo.color_base || ''} onValueChange={v => handleSubloteFieldChange('color_base', v)}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar color..." /></SelectTrigger>
+                              <SelectContent>
+                                {['NEGRO','CAFÉ','AZUL','MIEL','BLANCO','QUEBRACHO','ROJO','VERDE'].map(c => (
+                                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Cantidad Hojas *</Label>
@@ -979,7 +983,7 @@ export default function ProcesoRecurtido() {
                               className="text-right text-xs h-8 w-20" />
                           </td>
                           <td className="p-2">
-                            <Input value={fmt2(ins.cantidad)} readOnly className="text-right text-xs h-8 bg-blue-50 font-medium w-24" />
+                            <Input value={(parseFloat(ins.cantidad) || 0).toFixed(3)} readOnly className="text-right text-xs h-8 bg-blue-50 font-medium w-24" />
                           </td>
                           <td className="p-2">
                             <Input type="number" step="0.01" value={ins.costo_unitario}
