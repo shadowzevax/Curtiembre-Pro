@@ -1,0 +1,272 @@
+{
+  "name": "OrdenCompra",
+  "type": "object",
+  "properties": {
+    "numero_id": {
+      "type": "string",
+      "description": "ID \u00fanico autogenerado formato COMP-AAAA-0001"
+    },
+    "prefijo": {
+      "type": "string",
+      "enum": [
+        "CH",
+        "CI",
+        "CSP",
+        "CGG",
+        "CV"
+      ],
+      "description": "Categor\u00eda interna de compra"
+    },
+    "tipo_item": {
+      "type": "string",
+      "enum": [
+        "materia_prima",
+        "insumo_quimico",
+        "servicio",
+        "activo_fijo"
+      ],
+      "description": "Naturaleza de lo adquirido"
+    },
+    "tipo_documento_proveedor": {
+      "type": "string",
+      "enum": [
+        "CC",
+        "SD",
+        "FE",
+        "NC",
+        "ND",
+        "REM"
+      ],
+      "description": "Tipo de documento emitido por el proveedor"
+    },
+    "tipo_documento": {
+      "type": "string",
+      "enum": [
+        "factura_electronica",
+        "cuenta_cobro",
+        "remision",
+        "otras_compras",
+        "nota_credito_proveedor"
+      ]
+    },
+    "prefijo_documento": {
+      "type": "string",
+      "enum": [
+        "CC",
+        "CV",
+        "FC",
+        "NC",
+        "ND",
+        "REM"
+      ]
+    },
+    "numero_documento": {
+      "type": "string",
+      "description": "N\u00famero del documento o factura"
+    },
+    "codigo_proveedor": {
+      "type": "string",
+      "description": "C\u00f3digo del proveedor desde Administraci\u00f3n/Terceros"
+    },
+    "documento_origen_id": {
+      "type": "string",
+      "description": "ID del documento origen para notas cr\u00e9dito"
+    },
+    "documento_origen_numero": {
+      "type": "string",
+      "description": "N\u00famero del documento origen"
+    },
+    "motivo_nota": {
+      "type": "string",
+      "description": "Motivo de la nota cr\u00e9dito/d\u00e9bito"
+    },
+    "afecta_inventario_nota": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si la nota cr\u00e9dito afecta inventario"
+    },
+    "afecta_contabilidad_nota": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si la nota cr\u00e9dito afecta contabilidad"
+    },
+    "proveedor_id": {
+      "type": "string",
+      "description": "ID del proveedor o nombre personalizado"
+    },
+    "cc_nit_proveedor": {
+      "type": "string"
+    },
+    "fecha_emision_documento": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de emisi\u00f3n del documento"
+    },
+    "fecha_recepcion_conforme": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de recepci\u00f3n conforme"
+    },
+    "fecha_orden": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_vencimiento": {
+      "type": "string",
+      "format": "date"
+    },
+    "condicion_pago": {
+      "type": "string",
+      "enum": [
+        "contado",
+        "credito",
+        "mixto"
+      ]
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "efectivo",
+        "banco"
+      ]
+    },
+    "cuenta_destino_id": {
+      "type": "string",
+      "description": "ID de caja o cuenta bancaria para el pago"
+    },
+    "cuenta_destino_nombre": {
+      "type": "string",
+      "description": "Nombre de la caja (CAJA GENERAL o CAJA MENOR)"
+    },
+    "valor_total_compra": {
+      "type": "number",
+      "default": 0
+    },
+    "valor_pagado": {
+      "type": "number",
+      "default": 0
+    },
+    "saldo_pendiente": {
+      "type": "number",
+      "default": 0
+    },
+    "tipo_compra": {
+      "type": "string",
+      "enum": [
+        "insumos",
+        "hojas",
+        "servicios_publicos",
+        "gastos_generales",
+        "pieles",
+        "otras"
+      ]
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "recibida",
+        "facturada",
+        "pagada"
+      ],
+      "default": "pendiente"
+    },
+    "estado_documento": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "pagado",
+        "parcial",
+        "anulado"
+      ],
+      "default": "pendiente",
+      "description": "Estado del documento de compra"
+    },
+    "codigo_lote_piel": {
+      "type": "string",
+      "description": "C\u00f3digo de lote para compras de pieles"
+    },
+    "afecta_inventario": {
+      "type": "boolean",
+      "default": true,
+      "description": "Indica si la compra afecta el inventario"
+    },
+    "codigo_lote_inventario": {
+      "type": "string",
+      "description": "C\u00f3digo de lote generado en inventario para trazabilidad"
+    },
+    "subtotal": {
+      "type": "number"
+    },
+    "iva_total": {
+      "type": "number",
+      "default": 0
+    },
+    "retefuente_total": {
+      "type": "number",
+      "default": 0
+    },
+    "total": {
+      "type": "number"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "soportes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "insumo_id": {
+            "type": "string"
+          },
+          "producto_id": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "unidad_medida": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "precio_unitario": {
+            "type": "number"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "iva": {
+            "type": "number",
+            "default": 0.19
+          },
+          "retefuente": {
+            "type": "number",
+            "default": 0
+          },
+          "categoria": {
+            "type": "string",
+            "description": "Categor\u00eda del producto para clasificaci\u00f3n en inventario"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "numero_documento",
+    "proveedor_id",
+    "fecha_emision_documento",
+    "tipo_compra"
+  ]
+}

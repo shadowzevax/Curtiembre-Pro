@@ -1,0 +1,490 @@
+{
+  "name": "ProcesoProduccion",
+  "type": "object",
+  "properties": {
+    "numero_proceso": {
+      "type": "string",
+      "description": "N\u00famero del proceso"
+    },
+    "tipo_proceso": {
+      "type": "string",
+      "enum": [
+        "recepcion",
+        "limpieza",
+        "curtido",
+        "acabado",
+        "recurtido",
+        "pintura"
+      ]
+    },
+    "id_consecutivo": {
+      "type": "string",
+      "description": "ID consecutivo \u00fanico (ej: PINT-0001-2026)"
+    },
+    "id_orden_compra_origen": {
+      "type": "string",
+      "description": "ID de la orden de compra origen (solo para recepci\u00f3n)"
+    },
+    "codigo_lote": {
+      "type": "string"
+    },
+    "codigo_sublote": {
+      "type": "string"
+    },
+    "codigo_color": {
+      "type": "string"
+    },
+    "nombre_color": {
+      "type": "string"
+    },
+    "nombre_proveedor": {
+      "type": "string",
+      "description": "Nombre del proveedor para trazabilidad"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha para subm\u00f3dulo pintura"
+    },
+    "fecha_entrega_pintor": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de entrega al pintor"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "borrador",
+        "en_proceso",
+        "finalizado",
+        "pendiente",
+        "completado",
+        "pausado"
+      ],
+      "default": "borrador"
+    },
+    "estado_pedido_pintura": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "parcial",
+        "terminado"
+      ],
+      "description": "Estado del pedido en pintura"
+    },
+    "proveedor_id": {
+      "type": "string"
+    },
+    "nombre_inventario": {
+      "type": "string"
+    },
+    "codigo_producto": {
+      "type": "string",
+      "description": "C\u00f3digo del producto del cat\u00e1logo"
+    },
+    "descripcion_producto": {
+      "type": "string",
+      "description": "Descripci\u00f3n del producto del cat\u00e1logo"
+    },
+    "no_documento": {
+      "type": "string",
+      "description": "N\u00famero de documento de compra"
+    },
+    "nombre_curtidor": {
+      "type": "string",
+      "description": "Nombre del curtidor responsable"
+    },
+    "responsable": {
+      "type": "string",
+      "description": "Responsable del proceso"
+    },
+    "pintor_responsable": {
+      "type": "string",
+      "description": "Pintor responsable"
+    },
+    "pedido_id": {
+      "type": "string",
+      "description": "ID del pedido relacionado"
+    },
+    "numero_pedido": {
+      "type": "string",
+      "description": "N\u00famero del pedido relacionado"
+    },
+    "cantidad_entrada": {
+      "type": "number",
+      "default": 0,
+      "description": "Cantidad de entrada desde inventario anterior"
+    },
+    "total_hojas_enviadas_pintura": {
+      "type": "number",
+      "default": 0,
+      "description": "Total de hojas enviadas a pintura"
+    },
+    "hojas_pintadas_recibidas": {
+      "type": "number",
+      "default": 0,
+      "description": "Hojas pintadas recibidas"
+    },
+    "hojas_pendientes_pintar": {
+      "type": "number",
+      "default": 0,
+      "description": "Hojas pendientes por pintar"
+    },
+    "entregas_parciales": {
+      "type": "array",
+      "description": "Registro de entregas parciales del pintor",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha_entrega": {
+            "type": "string",
+            "format": "date"
+          },
+          "cantidad_hojas_pintadas": {
+            "type": "number"
+          },
+          "observaciones": {
+            "type": "string"
+          },
+          "confirmado": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    },
+    "cantidad_total_lote": {
+      "type": "number"
+    },
+    "cantidad_total_lote_hojas": {
+      "type": "number"
+    },
+    "cantidad_total_lote_pieles": {
+      "type": "number"
+    },
+    "cantidad_pieles": {
+      "type": "number"
+    },
+    "peso_total": {
+      "type": "number"
+    },
+    "peso_actual": {
+      "type": "number"
+    },
+    "peso_promedio": {
+      "type": "number"
+    },
+    "peso_promedio_estandar_por_piel": {
+      "type": "number"
+    },
+    "dividir_lote": {
+      "type": "boolean",
+      "default": false
+    },
+    "num_sublotes": {
+      "type": "number"
+    },
+    "sublotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "seccion": {
+      "type": "string",
+      "enum": [
+        "remojo",
+        "pelambre",
+        "humectacion",
+        "recromado",
+        "recurtido"
+      ]
+    },
+    "actividad": {
+      "type": "string",
+      "enum": [
+        "humectacion",
+        "recromado",
+        "recurtido"
+      ]
+    },
+    "operario_id": {
+      "type": "string",
+      "description": "ID del operario responsable"
+    },
+    "operario": {
+      "type": "string",
+      "description": "Nombre del operario para acabado"
+    },
+    "clase_cuero": {
+      "type": "string"
+    },
+    "cantidad_hojas": {
+      "type": "number"
+    },
+    "tipo_terminado_deseado": {
+      "type": "string"
+    },
+    "color_a_producir": {
+      "type": "string"
+    },
+    "cantidad_hojas_por_color": {
+      "type": "number"
+    },
+    "porcentaje_pintura_aplicada": {
+      "type": "number"
+    },
+    "acabado_final_requerido": {
+      "type": "string"
+    },
+    "costo_mano_obra": {
+      "type": "number"
+    },
+    "costo_insumos": {
+      "type": "number"
+    },
+    "costo_maquinaria": {
+      "type": "number"
+    },
+    "costo_remojo": {
+      "type": "number"
+    },
+    "costo_pelambre": {
+      "type": "number"
+    },
+    "costo_total_limpieza": {
+      "type": "number"
+    },
+    "costo_total_curtido": {
+      "type": "number"
+    },
+    "costo_total_acabado": {
+      "type": "number"
+    },
+    "costo_abatanado": {
+      "type": "number"
+    },
+    "costo_planchado": {
+      "type": "number"
+    },
+    "costo_esmerilado": {
+      "type": "number"
+    },
+    "subtotal_humectacion": {
+      "type": "number"
+    },
+    "subtotal_recromado": {
+      "type": "number"
+    },
+    "subtotal_recurtido": {
+      "type": "number"
+    },
+    "finalizar_remojo": {
+      "type": "boolean",
+      "default": false
+    },
+    "finalizar_pelambre": {
+      "type": "boolean",
+      "default": false
+    },
+    "finalizar_curtido": {
+      "type": "boolean",
+      "default": false
+    },
+    "finalizar_recurtido": {
+      "type": "boolean",
+      "default": false
+    },
+    "finalizar_acabado": {
+      "type": "boolean",
+      "default": false
+    },
+    "servicios_maquinaria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nombre_servicio": {
+            "type": "string"
+          },
+          "cantidad_pieles": {
+            "type": "number"
+          },
+          "valor_unitario": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "servicios_mano_obra": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nombre_servicio": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "valor": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "otros_costos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "descripcion": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "valor": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "otros_conceptos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "concepto": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "valor": {
+            "type": "number"
+          },
+          "valor_total": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "consumos": {
+      "type": "array",
+      "description": "Consumos de insumos para pintura",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id_consumo": {
+            "type": "string"
+          },
+          "id_pintura": {
+            "type": "string"
+          },
+          "id_pedido": {
+            "type": "string"
+          },
+          "clase_cuero": {
+            "type": "string",
+            "enum": [
+              "napa",
+              "napa_mate",
+              "opaco",
+              "envejecido"
+            ]
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "cantidad_utilizada": {
+            "type": "number"
+          },
+          "unidad_medida": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "observaciones": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "borrador",
+              "en_proceso",
+              "finalizado"
+            ],
+            "default": "borrador"
+          }
+        }
+      }
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "insumos_utilizados": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "insumo_id": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "producto": {
+            "type": "string"
+          },
+          "dosificacion": {
+            "type": "number"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "precio_unitario": {
+            "type": "number"
+          },
+          "costo_unitario": {
+            "type": "number"
+          },
+          "iva": {
+            "type": "number"
+          },
+          "valor_total": {
+            "type": "number"
+          },
+          "seccion": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "numero_proceso",
+    "tipo_proceso",
+    "fecha_inicio"
+  ]
+}

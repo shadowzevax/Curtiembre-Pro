@@ -1,0 +1,23 @@
+{
+  "name": "ConciliacionDetalle",
+  "type": "object",
+  "properties": {
+    "conciliacion_id": {
+      "type": "string"
+    },
+    "movimiento_bancario_id": {
+      "type": "string"
+    },
+    "valor": {
+      "type": "number"
+    },
+    "estado_conciliado": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "conciliacion_id",
+    "movimiento_bancario_id"
+  ]
+}

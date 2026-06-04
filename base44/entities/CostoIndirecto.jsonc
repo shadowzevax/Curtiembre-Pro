@@ -1,0 +1,77 @@
+{
+  "name": "CostoIndirecto",
+  "type": "object",
+  "properties": {
+    "tipo_costo": {
+      "type": "string",
+      "enum": [
+        "servicio_maquinaria",
+        "mano_obra",
+        "otros_costos"
+      ],
+      "description": "Tipo de costo indirecto"
+    },
+    "codigo_lote": {
+      "type": "string",
+      "description": "C\u00f3digo del lote relacionado"
+    },
+    "fecha_servicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del servicio o costo"
+    },
+    "nombre_servicio": {
+      "type": "string",
+      "description": "Nombre del servicio, mano de obra u otro costo"
+    },
+    "cantidad_pieles": {
+      "type": "number",
+      "description": "Cantidad en pieles"
+    },
+    "valor_unitario": {
+      "type": "number",
+      "description": "Valor unitario del servicio o costo"
+    },
+    "valor_total": {
+      "type": "number",
+      "description": "Valor total calculado"
+    },
+    "subtotal": {
+      "type": "number",
+      "description": "Subtotal del tipo de costo"
+    },
+    "cantidad_carnaza_kls": {
+      "type": "number",
+      "description": "Cantidad de carnaza en kilogramos (para otros costos)"
+    },
+    "valor_unitario_carnaza": {
+      "type": "number",
+      "description": "Valor unitario de carnaza (para otros costos)"
+    },
+    "valor_total_carnaza": {
+      "type": "number",
+      "description": "Valor total de carnaza (para otros costos)"
+    },
+    "costos_por_piel_puesta_en_pasto": {
+      "type": "number",
+      "description": "Costos por piel puesta en pasto"
+    },
+    "promedio_pie_hoja": {
+      "type": "number",
+      "description": "Promedio pie por hoja"
+    },
+    "costo_pintura_terminada_hoja": {
+      "type": "number",
+      "description": "Costo de pintura terminada por hoja"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tipo_costo",
+    "codigo_lote",
+    "fecha_servicio",
+    "nombre_servicio"
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "name": "MovimientoLibroDiario",
+  "type": "object",
+  "properties": {
+    "consecutivo": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo_movimiento": {
+      "type": "string",
+      "enum": [
+        "ingreso",
+        "egreso"
+      ]
+    },
+    "tipo_tercero": {
+      "type": "string",
+      "enum": [
+        "cliente",
+        "proveedor",
+        "empleado",
+        "otro"
+      ]
+    },
+    "tipo_documento_soporte": {
+      "type": "string",
+      "enum": [
+        "recibo_caja",
+        "factura",
+        "cuenta_cobro",
+        "nota_contable",
+        "comprobante_interno"
+      ]
+    },
+    "numero_documento": {
+      "type": "string"
+    },
+    "tercero_id": {
+      "type": "string"
+    },
+    "tercero_nombre": {
+      "type": "string"
+    },
+    "cuenta_afectada": {
+      "type": "string"
+    },
+    "descripcion": {
+      "type": "string"
+    },
+    "valor_ingreso": {
+      "type": "number",
+      "default": 0
+    },
+    "valor_egreso": {
+      "type": "number",
+      "default": 0
+    },
+    "medio_pago": {
+      "type": "string",
+      "enum": [
+        "efectivo",
+        "transferencia",
+        "cheque",
+        "otro"
+      ]
+    },
+    "saldo_anterior": {
+      "type": "number",
+      "default": 0
+    },
+    "saldo_final": {
+      "type": "number",
+      "default": 0
+    },
+    "origen_modulo": {
+      "type": "string"
+    },
+    "referencia_origen_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fecha",
+    "tipo_movimiento",
+    "valor_ingreso",
+    "valor_egreso"
+  ]
+}

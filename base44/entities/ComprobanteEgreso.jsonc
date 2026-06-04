@@ -1,0 +1,80 @@
+{
+  "name": "ComprobanteEgreso",
+  "type": "object",
+  "properties": {
+    "numero_comprobante": {
+      "type": "string",
+      "description": "N\u00famero consecutivo del comprobante"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo_egreso": {
+      "type": "string",
+      "enum": [
+        "compra",
+        "pago_credito",
+        "gasto",
+        "otro_egreso"
+      ],
+      "description": "Tipo de egreso"
+    },
+    "tercero_id": {
+      "type": "string"
+    },
+    "tercero_nombre": {
+      "type": "string"
+    },
+    "concepto": {
+      "type": "string"
+    },
+    "valor": {
+      "type": "number"
+    },
+    "medio_pago": {
+      "type": "string",
+      "enum": [
+        "efectivo",
+        "transferencia",
+        "cheque",
+        "nequi",
+        "daviplata"
+      ],
+      "default": "efectivo"
+    },
+    "cuenta_origen_id": {
+      "type": "string",
+      "description": "ID de caja o cuenta bancaria origen"
+    },
+    "cuenta_origen_nombre": {
+      "type": "string"
+    },
+    "compra_id": {
+      "type": "string",
+      "description": "ID de la compra asociada (si aplica)"
+    },
+    "cuenta_por_pagar_id": {
+      "type": "string",
+      "description": "ID de cuenta por pagar que se cancela (si aplica)"
+    },
+    "asiento_contable_id": {
+      "type": "string",
+      "description": "ID del asiento contable generado"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "generado_automaticamente": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "fecha",
+    "tercero_nombre",
+    "concepto",
+    "valor",
+    "medio_pago"
+  ]
+}

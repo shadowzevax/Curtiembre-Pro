@@ -1,0 +1,45 @@
+{
+  "name": "TransferenciaInterna",
+  "type": "object",
+  "properties": {
+    "cuenta_origen_id": {
+      "type": "string",
+      "description": "ID de la cuenta origen"
+    },
+    "cuenta_destino_id": {
+      "type": "string",
+      "description": "ID de la cuenta destino"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "valor": {
+      "type": "number"
+    },
+    "concepto": {
+      "type": "string"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "confirmado",
+        "anulado"
+      ],
+      "default": "confirmado"
+    },
+    "movimiento_origen_id": {
+      "type": "string"
+    },
+    "movimiento_destino_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "cuenta_origen_id",
+    "cuenta_destino_id",
+    "fecha",
+    "valor"
+  ]
+}

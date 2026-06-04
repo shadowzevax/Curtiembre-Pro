@@ -1,0 +1,82 @@
+{
+  "name": "ProductoCatalogo",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo interno \u00fanico del producto"
+    },
+    "nombre_comercial": {
+      "type": "string",
+      "description": "Nombre comercial del producto"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Referencia seg\u00fan el proveedor"
+    },
+    "unidad_medida": {
+      "type": "string"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "materia_prima",
+        "insumos_quimicos",
+        "productos_terminados",
+        "productos_en_proceso"
+      ]
+    },
+    "tipo_producto": {
+      "type": "string",
+      "enum": [
+        "piel_cruda_fresca",
+        "piel_salada",
+        "crosta",
+        "retal_de_cuero",
+        "cuero_en_proceso",
+        "anilina",
+        "pigmento",
+        "sellador",
+        "resina",
+        "fijador",
+        "neutralizante",
+        "desengrasante",
+        "curtiente",
+        "recurtiente",
+        "engrasante",
+        "acido",
+        "colorante",
+        "auxiliar_de_acabado"
+      ]
+    },
+    "maneja_inventario": {
+      "type": "boolean",
+      "default": true
+    },
+    "stock_minimo": {
+      "type": "number",
+      "default": 0
+    },
+    "stock_maximo": {
+      "type": "number",
+      "default": 0
+    },
+    "proveedor_principal_id": {
+      "type": "string",
+      "description": "ID del proveedor principal"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activo",
+        "inactivo"
+      ],
+      "default": "activo"
+    }
+  },
+  "required": [
+    "codigo",
+    "descripcion",
+    "categoria"
+  ]
+}

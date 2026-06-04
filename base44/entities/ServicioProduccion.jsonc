@@ -1,0 +1,92 @@
+{
+  "name": "ServicioProduccion",
+  "type": "object",
+  "properties": {
+    "tipo_servicio": {
+      "type": "string",
+      "enum": [
+        "secado_llano",
+        "dividida",
+        "escurrida",
+        "rebajada",
+        "templado_cuero",
+        "medida",
+        "esmerilado",
+        "abatanado"
+      ]
+    },
+    "codigo_lote": {
+      "type": "string"
+    },
+    "fecha_envio": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_entrega": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_servicio": {
+      "type": "string",
+      "format": "date"
+    },
+    "cantidad": {
+      "type": "number",
+      "description": "Cantidad del servicio"
+    },
+    "unidad_medida": {
+      "type": "string",
+      "description": "Unidad de medida del servicio"
+    },
+    "cantidad_hojas": {
+      "type": "number"
+    },
+    "cantidad_pieles": {
+      "type": "number"
+    },
+    "costo_unitario": {
+      "type": "number",
+      "description": "Costo unitario del servicio"
+    },
+    "costo_total": {
+      "type": "number",
+      "description": "Costo total calculado"
+    },
+    "costo_servicio": {
+      "type": "number"
+    },
+    "proveedor_area": {
+      "type": "string",
+      "description": "Proveedor o \u00e1rea interna"
+    },
+    "responsable": {
+      "type": "string",
+      "description": "Responsable del servicio"
+    },
+    "estado_servicio": {
+      "type": "string",
+      "enum": [
+        "en_proceso",
+        "entregado",
+        "cerrado"
+      ],
+      "default": "en_proceso"
+    },
+    "incluye_costo_lote": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si incluye en costo del lote"
+    },
+    "documento_soporte": {
+      "type": "string",
+      "description": "URL del documento soporte"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tipo_servicio",
+    "codigo_lote"
+  ]
+}

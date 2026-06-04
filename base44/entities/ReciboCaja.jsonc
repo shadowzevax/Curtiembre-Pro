@@ -1,0 +1,80 @@
+{
+  "name": "ReciboCaja",
+  "type": "object",
+  "properties": {
+    "numero_recibo": {
+      "type": "string",
+      "description": "N\u00famero consecutivo del recibo"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo_ingreso": {
+      "type": "string",
+      "enum": [
+        "venta",
+        "pago_credito",
+        "otro_ingreso"
+      ],
+      "description": "Tipo de ingreso"
+    },
+    "tercero_id": {
+      "type": "string"
+    },
+    "tercero_nombre": {
+      "type": "string"
+    },
+    "concepto": {
+      "type": "string"
+    },
+    "valor": {
+      "type": "number"
+    },
+    "medio_pago": {
+      "type": "string",
+      "enum": [
+        "efectivo",
+        "transferencia",
+        "nequi",
+        "daviplata",
+        "tarjeta",
+        "pse"
+      ],
+      "default": "efectivo"
+    },
+    "cuenta_destino_id": {
+      "type": "string",
+      "description": "ID de caja o cuenta bancaria destino"
+    },
+    "cuenta_destino_nombre": {
+      "type": "string"
+    },
+    "venta_id": {
+      "type": "string",
+      "description": "ID de la venta asociada (si aplica)"
+    },
+    "cuenta_por_cobrar_id": {
+      "type": "string",
+      "description": "ID de cuenta por cobrar que se cancela (si aplica)"
+    },
+    "asiento_contable_id": {
+      "type": "string",
+      "description": "ID del asiento contable generado"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "generado_automaticamente": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "fecha",
+    "tercero_nombre",
+    "concepto",
+    "valor",
+    "medio_pago"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "TipoGasto",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del tipo de gasto"
+    },
+    "descripcion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

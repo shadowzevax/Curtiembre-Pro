@@ -1,0 +1,87 @@
+{
+  "name": "TrasladoInventario",
+  "type": "object",
+  "properties": {
+    "numero_traslado": {
+      "type": "string",
+      "description": "N\u00famero consecutivo del traslado"
+    },
+    "fecha_traslado": {
+      "type": "string",
+      "format": "date"
+    },
+    "ubicacion_origen": {
+      "type": "string",
+      "description": "Ubicaci\u00f3n o bodega de origen"
+    },
+    "ubicacion_destino": {
+      "type": "string",
+      "description": "Ubicaci\u00f3n o bodega de destino"
+    },
+    "responsable_entrega": {
+      "type": "string",
+      "description": "Persona responsable de entregar"
+    },
+    "responsable_recibe": {
+      "type": "string",
+      "description": "Persona que recibe el traslado"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "en_transito",
+        "recibido",
+        "cancelado"
+      ],
+      "default": "pendiente"
+    },
+    "motivo": {
+      "type": "string",
+      "description": "Motivo del traslado"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "producto_id": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "cantidad_trasladada": {
+            "type": "number"
+          },
+          "cantidad_recibida": {
+            "type": "number"
+          },
+          "unidad_medida": {
+            "type": "string"
+          },
+          "categoria": {
+            "type": "string"
+          },
+          "costo_unitario": {
+            "type": "number"
+          },
+          "observaciones_item": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "fecha_traslado",
+    "ubicacion_origen",
+    "ubicacion_destino"
+  ]
+}

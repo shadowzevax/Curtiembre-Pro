@@ -140,6 +140,7 @@ export default function Pintura() {
         id_consecutivo: idConsecutivo,
         fecha_inicio: new Date().toISOString().split('T')[0],
         fecha_entrega_pintor: new Date().toISOString().split('T')[0],
+        fecha_inicio_pintura: new Date().toISOString().split('T')[0],
         pintor_responsable: '',
         estado_pedido_pintura: 'pendiente',
         observaciones: '',
@@ -477,7 +478,7 @@ export default function Pintura() {
           <form onSubmit={handleSave} className="space-y-5">
 
             {/* ═══ ENCABEZADO ═══ */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <Label>ID/Consecutivo</Label>
                 <Input value={currentItem.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold" />
@@ -486,6 +487,11 @@ export default function Pintura() {
                 <Label>Fecha Entrega al Pintor *</Label>
                 <Input type="date" value={currentItem.fecha_entrega_pintor || ''} disabled={esFinalizado}
                   onChange={e => setCurrentItem({...currentItem, fecha_entrega_pintor: e.target.value})} required />
+              </div>
+              <div>
+                <Label>Fecha Inicio de Pintura *</Label>
+                <Input type="date" value={currentItem.fecha_inicio_pintura || ''} disabled={esFinalizado}
+                  onChange={e => setCurrentItem({...currentItem, fecha_inicio_pintura: e.target.value})} required />
               </div>
               <div>
                 <Label>Pintor / Responsable</Label>
@@ -681,13 +687,6 @@ export default function Pintura() {
                               className={`text-xs ${hojasRestantesDistribucion < 0 ? 'border-red-400 bg-red-50' : ''}`} />
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Peso Asignado (kg)</Label>
-                            <Input type="number" min="0" step="0.01" value={subloteActivo.peso_asignado || ''}
-                              disabled={esFinalizado}
-                              onChange={e => handleSubloteFieldChange('peso_asignado', parseFloat(e.target.value) || 0)}
-                              className="text-xs" />
-                          </div>
-                          <div>
                             <Label className="text-xs font-bold text-orange-800">% Participación</Label>
                             <Input readOnly value={`${(subloteActivo.pct_participacion || 0).toFixed(1)}%`}
                               className="bg-blue-50 text-xs text-center font-bold text-blue-800 cursor-not-allowed" />
@@ -724,65 +723,87 @@ export default function Pintura() {
                   )}
                 </div>
                 <div className="overflow-x-auto bg-white">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
+                    <colgroup>
+                      <col className="w-[35%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[6%]" />
+                    </colgroup>
                     <thead className="bg-blue-50">
                       <tr>
                         <th className="p-2 text-left">Código / Producto</th>
                         <th className="p-2 text-right">Cantidad</th>
                         <th className="p-2 text-right">Costo Unit.</th>
-                        <th className="p-2 text-right">IVA</th>
+                        <th className="p-2 text-center">% IVA</th>
+                        <th className="p-2 text-right">IVA ($)</th>
                         <th className="p-2 text-right">Valor Total</th>
                         <th className="p-2"></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(subloteActivo.insumos || []).map((ins, insIdx) => (
-                        <tr key={insIdx} className="border-t">
-                          <td className="p-2">
-                            <Select value={ins.item_id || ''} onValueChange={v => handleInsumoChange(insIdx, 'item_id', v)} disabled={esFinalizado}>
-                              <SelectTrigger className="text-xs h-8"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                              <SelectContent>{todosLosItems.map(i => <SelectItem key={i.id} value={i.id}>{i.codigo} — {i.descripcion}</SelectItem>)}</SelectContent>
-                            </Select>
-                            {ins.producto && <p className="text-xs text-slate-400 mt-0.5 pl-1">{ins.producto}</p>}
-                          </td>
-                          <td className="p-2">
-                            <Input type="number" step="0.01" value={ins.cantidad} disabled={esFinalizado}
-                              onChange={e => handleInsumoChange(insIdx, 'cantidad', parseFloat(e.target.value) || 0)}
-                              className="text-right text-xs h-8 w-24" />
-                          </td>
-                          <td className="p-2">
-                            <Input type="number" step="0.01" value={ins.costo_unitario} disabled={esFinalizado}
-                              onChange={e => handleInsumoChange(insIdx, 'costo_unitario', parseFloat(e.target.value) || 0)}
-                              className="text-right text-xs h-8 w-28" />
-                          </td>
-                          <td className="p-2">
-                            <Select value={String(ins.iva)} onValueChange={v => handleInsumoChange(insIdx, 'iva', parseFloat(v))} disabled={esFinalizado}>
-                              <SelectTrigger className="text-xs h-8 w-20"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0.19">19%</SelectItem>
-                                <SelectItem value="0.05">5%</SelectItem>
-                                <SelectItem value="0">0%</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="p-2 text-right font-bold text-emerald-700">{formatCurrency(ins.valor_total)}</td>
-                          <td className="p-2">
-                            {!esFinalizado && (
-                              <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveInsumo(insIdx)} className="h-7 w-7">
-                                <X className="w-3 h-3 text-red-500" />
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {(subloteActivo.insumos || []).map((ins, insIdx) => {
+                        const cant = parseFloat(ins.cantidad) || 0;
+                        const cu = parseFloat(ins.costo_unitario) || 0;
+                        const ivaPct = parseFloat(ins.iva) || 0;
+                        const valorIva = cant * cu * ivaPct;
+                        return (
+                          <tr key={insIdx} className="border-t align-top">
+                            <td className="p-2">
+                              <Select value={ins.item_id || ''} onValueChange={v => handleInsumoChange(insIdx, 'item_id', v)} disabled={esFinalizado}>
+                                <SelectTrigger className="text-xs h-8 w-full"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                <SelectContent>{todosLosItems.map(i => <SelectItem key={i.id} value={i.id}>{i.codigo} — {i.descripcion}</SelectItem>)}</SelectContent>
+                              </Select>
+                              {ins.producto && <p className="text-xs text-slate-400 mt-0.5 pl-1 truncate">{ins.producto}</p>}
+                            </td>
+                            <td className="p-2">
+                              <Input type="number" step="0.01" value={ins.cantidad} disabled={esFinalizado}
+                                onChange={e => handleInsumoChange(insIdx, 'cantidad', parseFloat(e.target.value) || 0)}
+                                className="text-right text-xs h-8 w-full" />
+                            </td>
+                            <td className="p-2">
+                              <Input type="number" step="0.01" value={ins.costo_unitario} disabled={esFinalizado}
+                                onChange={e => handleInsumoChange(insIdx, 'costo_unitario', parseFloat(e.target.value) || 0)}
+                                className="text-right text-xs h-8 w-full" />
+                            </td>
+                            <td className="p-2">
+                              <Select value={String(ins.iva)} onValueChange={v => handleInsumoChange(insIdx, 'iva', parseFloat(v))} disabled={esFinalizado}>
+                                <SelectTrigger className="text-xs h-8 w-full"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="0.19">19%</SelectItem>
+                                  <SelectItem value="0.05">5%</SelectItem>
+                                  <SelectItem value="0">0%</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="p-2">
+                              <Input readOnly value={formatCurrency(valorIva)} className="text-right text-xs h-8 w-full bg-yellow-50 font-medium text-yellow-800" />
+                            </td>
+                            <td className="p-2">
+                              <Input readOnly value={formatCurrency(ins.valor_total)} className="text-right text-xs h-8 w-full bg-emerald-50 font-bold text-emerald-700" />
+                            </td>
+                            <td className="p-2">
+                              {!esFinalizado && (
+                                <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveInsumo(insIdx)} className="h-7 w-7">
+                                  <X className="w-3 h-3 text-red-500" />
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {(subloteActivo.insumos || []).length === 0 && (
-                        <tr><td colSpan={6} className="p-4 text-center text-slate-400">Sin ítems. Haga clic en "Agregar Ítem".</td></tr>
+                        <tr><td colSpan={7} className="p-4 text-center text-slate-400">Sin ítems. Haga clic en "Agregar Ítem".</td></tr>
                       )}
                     </tbody>
                     {(subloteActivo.insumos || []).length > 0 && (
                       <tfoot>
                         <tr className="bg-blue-100 font-bold border-t-2">
                           <td colSpan={4} className="p-2 text-right text-xs">TOTAL INSUMOS:</td>
+                          <td className="p-2 text-right text-yellow-800">{formatCurrency((subloteActivo.insumos || []).reduce((s, i) => { const c = parseFloat(i.cantidad)||0; const cu = parseFloat(i.costo_unitario)||0; const iv = parseFloat(i.iva)||0; return s + c*cu*iv; }, 0))}</td>
                           <td className="p-2 text-right text-emerald-800">{formatCurrency((subloteActivo.insumos || []).reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0))}</td>
                           <td></td>
                         </tr>
@@ -801,26 +822,34 @@ export default function Pintura() {
                       </Button>
                     )}
                   </div>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
+                    <colgroup>
+                      <col className="w-[30%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[6%]" />
+                    </colgroup>
                     <thead className="bg-green-50">
                       <tr>
-                        <th className="p-1 text-left">Detalle</th>
-                        <th className="p-1 text-right">Cant. Hojas</th>
-                        <th className="p-1 text-right">Valor/Hoja</th>
-                        <th className="p-1 text-right">Total</th>
-                        <th className="p-1 text-left">Obs.</th>
-                        <th className="p-1"></th>
+                        <th className="p-2 text-left border-b border-green-200">Detalle</th>
+                        <th className="p-2 text-right border-b border-green-200">Cant. Hojas</th>
+                        <th className="p-2 text-right border-b border-green-200">Valor/Hoja</th>
+                        <th className="p-2 text-right border-b border-green-200">Valor Total</th>
+                        <th className="p-2 text-left border-b border-green-200">Obs.</th>
+                        <th className="p-2 border-b border-green-200"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {(subloteActivo.mano_obra || []).map((mo, moIdx) => (
                         <tr key={moIdx} className="border-t">
-                          <td className="p-1"><Input value={mo.detalle} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'detalle', e.target.value)} className="h-7 text-xs" /></td>
-                          <td className="p-1"><Input type="number" value={mo.cantidad_hojas} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'cantidad_hojas', e.target.value)} className="h-7 text-xs text-right w-20" /></td>
-                          <td className="p-1"><Input type="number" value={mo.valor_por_hoja} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'valor_por_hoja', e.target.value)} className="h-7 text-xs text-right w-24" /></td>
-                          <td className="p-1"><Input value={formatCurrency(mo.total)} readOnly className="h-7 text-xs text-right bg-green-50 font-bold w-28" /></td>
-                          <td className="p-1"><Input value={mo.observacion || ''} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'observacion', e.target.value)} className="h-7 text-xs" /></td>
-                          <td className="p-1">{!esFinalizado && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManoObra(moIdx)} className="h-6 w-6"><X className="w-3 h-3 text-red-500" /></Button>}</td>
+                          <td className="p-2"><Input value={mo.detalle} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'detalle', e.target.value)} className="h-8 text-xs w-full" /></td>
+                          <td className="p-2"><Input type="number" value={mo.cantidad_hojas} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'cantidad_hojas', e.target.value)} className="h-8 text-xs text-right w-full" /></td>
+                          <td className="p-2"><Input type="number" value={mo.valor_por_hoja} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'valor_por_hoja', e.target.value)} className="h-8 text-xs text-right w-full" /></td>
+                          <td className="p-2"><Input value={formatCurrency(mo.total)} readOnly className="h-8 text-xs text-right bg-green-50 font-bold w-full" /></td>
+                          <td className="p-2"><Input value={mo.observacion || ''} disabled={esFinalizado} onChange={e => handleManoObraChange(moIdx, 'observacion', e.target.value)} className="h-8 text-xs w-full" /></td>
+                          <td className="p-2 text-center">{!esFinalizado && <Button type="button" variant="ghost" size="icon" onClick={() => handleRemoveManoObra(moIdx)} className="h-7 w-7"><X className="w-3 h-3 text-red-500" /></Button>}</td>
                         </tr>
                       ))}
                       {(subloteActivo.mano_obra || []).length === 0 && <tr><td colSpan={6} className="p-2 text-center text-slate-400">Sin mano de obra.</td></tr>}
@@ -828,8 +857,8 @@ export default function Pintura() {
                     {(subloteActivo.mano_obra || []).length > 0 && (
                       <tfoot>
                         <tr className="bg-green-100 font-bold border-t-2">
-                          <td colSpan={3} className="p-1 text-right text-xs">TOTAL MO:</td>
-                          <td className="p-1 text-right text-green-800">{formatCurrency((subloteActivo.mano_obra || []).reduce((s, m) => s + (parseFloat(m.total) || 0), 0))}</td>
+                          <td colSpan={3} className="p-2 text-right text-xs">TOTAL MANO DE OBRA:</td>
+                          <td className="p-2 text-right text-green-800">{formatCurrency((subloteActivo.mano_obra || []).reduce((s, m) => s + (parseFloat(m.total) || 0), 0))}</td>
                           <td colSpan={2}></td>
                         </tr>
                       </tfoot>
@@ -949,17 +978,6 @@ export default function Pintura() {
                           return ini > 0 ? `${((1 - buenas / ini) * 100).toFixed(1)}%` : '—';
                         })()}
                         className="bg-orange-50 text-xs font-bold text-orange-800 cursor-not-allowed" />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-bold text-red-800">Peso Inicial (kg)</Label>
-                      <Input readOnly value={subloteActivo.peso_asignado || 0} className="bg-slate-50 text-xs cursor-not-allowed" />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-bold text-red-800">Peso Final (kg)</Label>
-                      <Input type="number" min="0" step="0.01" value={subloteActivo.peso_final || ''}
-                        disabled={esFinalizado}
-                        onChange={e => handleSubloteFieldChange('peso_final', parseFloat(e.target.value) || 0)}
-                        className="text-xs" />
                     </div>
                     <div>
                       <Label className="text-xs font-bold text-red-800">Obs. de Calidad</Label>

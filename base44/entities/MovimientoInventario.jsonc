@@ -1,0 +1,43 @@
+{
+  "name": "MovimientoInventario",
+  "type": "object",
+  "properties": {
+    "tipo_movimiento": {
+      "type": "string",
+      "enum": [
+        "entrada",
+        "salida",
+        "ajuste"
+      ]
+    },
+    "insumo_id": {
+      "type": "string"
+    },
+    "cantidad": {
+      "type": "number"
+    },
+    "costo_unitario": {
+      "type": "number"
+    },
+    "fecha_movimiento": {
+      "type": "string",
+      "format": "date"
+    },
+    "referencia": {
+      "type": "string",
+      "description": "N\u00famero de factura, orden, etc."
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "usuario_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tipo_movimiento",
+    "insumo_id",
+    "cantidad",
+    "fecha_movimiento"
+  ]
+}

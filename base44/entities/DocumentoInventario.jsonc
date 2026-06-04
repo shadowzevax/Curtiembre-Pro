@@ -1,0 +1,70 @@
+{
+  "name": "DocumentoInventario",
+  "type": "object",
+  "properties": {
+    "tipo_documento": {
+      "type": "string",
+      "enum": [
+        "inventario_inicial",
+        "ajuste_entrada",
+        "ajuste_salida"
+      ]
+    },
+    "numero_documento": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "motivo_ajuste": {
+      "type": "string"
+    },
+    "responsable": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "codigo_producto": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "unidad_medida": {
+            "type": "string"
+          },
+          "existencia_actual": {
+            "type": "number"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "nueva_existencia": {
+            "type": "number"
+          },
+          "costo_unitario": {
+            "type": "number"
+          },
+          "costo_total": {
+            "type": "number"
+          },
+          "nuevo_costo_promedio": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "tipo_documento",
+    "fecha",
+    "numero_documento"
+  ]
+}

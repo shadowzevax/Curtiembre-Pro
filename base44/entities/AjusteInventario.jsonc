@@ -1,0 +1,61 @@
+{
+  "name": "AjusteInventario",
+  "type": "object",
+  "properties": {
+    "consecutivo": {
+      "type": "string",
+      "description": "Consecutivo autom\u00e1tico AJ001, AJ002, etc."
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del ajuste"
+    },
+    "quien_elaboro": {
+      "type": "string",
+      "description": "Nombre de quien elabor\u00f3 el ajuste"
+    },
+    "producto_id": {
+      "type": "string",
+      "description": "ID del producto/insumo ajustado"
+    },
+    "producto_codigo": {
+      "type": "string",
+      "description": "C\u00f3digo del producto"
+    },
+    "producto_nombre": {
+      "type": "string",
+      "description": "Nombre del producto"
+    },
+    "stock_actual": {
+      "type": "number",
+      "description": "Stock actual del sistema"
+    },
+    "cantidad_fisica": {
+      "type": "number",
+      "description": "Cantidad f\u00edsica contada"
+    },
+    "diferencia": {
+      "type": "number",
+      "description": "Diferencia entre cantidad f\u00edsica y stock actual"
+    },
+    "tipo_inventario": {
+      "type": "string",
+      "enum": [
+        "materia_prima",
+        "insumo",
+        "producto_terminado"
+      ],
+      "description": "Tipo de inventario ajustado"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "consecutivo",
+    "fecha",
+    "producto_id",
+    "tipo_inventario"
+  ]
+}

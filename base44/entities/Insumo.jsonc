@@ -1,0 +1,72 @@
+{
+  "name": "Insumo",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo del insumo"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del insumo"
+    },
+    "descripcion": {
+      "type": "string"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "pieles",
+        "quimicos",
+        "colorantes",
+        "grasas",
+        "hojas_materia_prima",
+        "hojas_procesadas",
+        "herramientas",
+        "otros"
+      ]
+    },
+    "unidad_medida": {
+      "type": "string"
+    },
+    "stock_actual": {
+      "type": "number",
+      "default": 0
+    },
+    "stock_minimo": {
+      "type": "number",
+      "default": 0
+    },
+    "iva": {
+      "type": "string",
+      "enum": [
+        "grabado_19",
+        "grabado_5",
+        "excluido",
+        "excento"
+      ]
+    },
+    "costo_promedio": {
+      "type": "number",
+      "default": 0
+    },
+    "precio_venta_1": {
+      "type": "number",
+      "default": 0
+    },
+    "precio_venta_2": {
+      "type": "number",
+      "default": 0
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "codigo",
+    "nombre",
+    "categoria",
+    "unidad_medida"
+  ]
+}

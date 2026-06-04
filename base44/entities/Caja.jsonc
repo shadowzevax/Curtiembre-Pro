@@ -1,0 +1,67 @@
+{
+  "name": "Caja",
+  "type": "object",
+  "properties": {
+    "caja_id": {
+      "type": "string",
+      "description": "ID \u00fanico de la caja generado autom\u00e1ticamente"
+    },
+    "codigo_caja": {
+      "type": "string",
+      "description": "C\u00f3digo \u00fanico de la caja"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre de la caja"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "general",
+        "menor"
+      ],
+      "description": "Tipo de caja"
+    },
+    "responsable_id": {
+      "type": "string",
+      "description": "ID del empleado responsable"
+    },
+    "fecha_apertura": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de apertura de la caja"
+    },
+    "saldo_inicial": {
+      "type": "number",
+      "default": 0,
+      "description": "Saldo inicial de la caja"
+    },
+    "limite_monto": {
+      "type": "number",
+      "default": 0,
+      "description": "L\u00edmite de monto para caja menor"
+    },
+    "saldo_actual": {
+      "type": "number",
+      "default": 0,
+      "description": "Saldo actual de la caja"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activa",
+        "inactiva"
+      ],
+      "default": "activa",
+      "description": "Estado de la caja"
+    },
+    "observaciones": {
+      "type": "string",
+      "description": "Observaciones adicionales"
+    }
+  },
+  "required": [
+    "nombre",
+    "tipo"
+  ]
+}

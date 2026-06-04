@@ -1,0 +1,117 @@
+{
+  "name": "CuentaPorPagar",
+  "type": "object",
+  "properties": {
+    "id_cuenta": {
+      "type": "string",
+      "description": "ID autom\u00e1tico de la cuenta"
+    },
+    "proveedor_id": {
+      "type": "string",
+      "description": "ID del proveedor"
+    },
+    "proveedor_nombre": {
+      "type": "string",
+      "description": "Nombre del proveedor"
+    },
+    "proveedor_nit": {
+      "type": "string",
+      "description": "NIT del proveedor"
+    },
+    "tipo_documento": {
+      "type": "string",
+      "description": "Tipo de documento origen"
+    },
+    "numero_documento": {
+      "type": "string",
+      "description": "N\u00famero del documento origen"
+    },
+    "documento_origen_id": {
+      "type": "string",
+      "description": "ID del documento de compra origen"
+    },
+    "modulo_origen": {
+      "type": "string",
+      "default": "compras",
+      "description": "M\u00f3dulo de origen"
+    },
+    "fecha_documento": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del documento"
+    },
+    "fecha_vencimiento": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de vencimiento"
+    },
+    "condicion_pago": {
+      "type": "string",
+      "enum": [
+        "credito"
+      ],
+      "default": "credito"
+    },
+    "dias_credito": {
+      "type": "number",
+      "default": 0
+    },
+    "valor_total": {
+      "type": "number",
+      "description": "Valor total del documento"
+    },
+    "valor_pagado": {
+      "type": "number",
+      "default": 0,
+      "description": "Valor pagado acumulado"
+    },
+    "saldo_pendiente": {
+      "type": "number",
+      "description": "Saldo pendiente por pagar"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "parcial",
+        "pagada",
+        "anulada"
+      ],
+      "default": "pendiente"
+    },
+    "historial_pagos": {
+      "type": "array",
+      "description": "Historial de pagos realizados",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha_pago": {
+            "type": "string",
+            "format": "date"
+          },
+          "valor_pago": {
+            "type": "number"
+          },
+          "forma_pago": {
+            "type": "string"
+          },
+          "referencia": {
+            "type": "string"
+          },
+          "comprobante_egreso_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "proveedor_id",
+    "numero_documento",
+    "fecha_documento",
+    "valor_total"
+  ]
+}

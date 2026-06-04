@@ -1,0 +1,81 @@
+{
+  "name": "MovimientoBancario",
+  "type": "object",
+  "properties": {
+    "cuenta_id": {
+      "type": "string",
+      "description": "ID de la cuenta bancaria"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo_movimiento": {
+      "type": "string",
+      "enum": [
+        "ingreso",
+        "egreso",
+        "transferencia"
+      ],
+      "description": "Tipo de movimiento"
+    },
+    "concepto": {
+      "type": "string",
+      "description": "Concepto del movimiento"
+    },
+    "referencia": {
+      "type": "string",
+      "description": "N\u00famero de transacci\u00f3n o referencia externa"
+    },
+    "tercero_id": {
+      "type": "string",
+      "description": "ID del tercero"
+    },
+    "tercero_nombre": {
+      "type": "string"
+    },
+    "valor": {
+      "type": "number",
+      "default": 0
+    },
+    "saldo_posterior": {
+      "type": "number",
+      "description": "Saldo despu\u00e9s del movimiento"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "confirmado",
+        "anulado"
+      ],
+      "default": "confirmado"
+    },
+    "cuenta_destino_id": {
+      "type": "string",
+      "description": "Para transferencias entre cuentas"
+    },
+    "documento_origen_tipo": {
+      "type": "string",
+      "description": "Tipo del documento origen"
+    },
+    "documento_origen_id": {
+      "type": "string",
+      "description": "ID del documento que origin\u00f3 el movimiento"
+    },
+    "es_automatico": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si fue generado autom\u00e1ticamente desde otro m\u00f3dulo"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "cuenta_id",
+    "fecha",
+    "tipo_movimiento",
+    "valor"
+  ]
+}

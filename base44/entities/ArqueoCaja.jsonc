@@ -1,0 +1,37 @@
+{
+  "name": "ArqueoCaja",
+  "type": "object",
+  "properties": {
+    "caja_id": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "billetes_monedas_detalle": {
+      "type": "string",
+      "description": "JSON string with detail"
+    },
+    "total_fisico": {
+      "type": "number"
+    },
+    "total_sistema": {
+      "type": "number"
+    },
+    "diferencia": {
+      "type": "number"
+    },
+    "observacion": {
+      "type": "string"
+    },
+    "usuario_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "caja_id",
+    "fecha",
+    "total_fisico"
+  ]
+}

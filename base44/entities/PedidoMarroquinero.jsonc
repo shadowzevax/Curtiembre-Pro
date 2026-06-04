@@ -1,0 +1,132 @@
+{
+  "name": "PedidoMarroquinero",
+  "type": "object",
+  "properties": {
+    "numero_pedido": {
+      "type": "string",
+      "description": "N\u00famero ID del pedido individual formato 2026-0001"
+    },
+    "pedido_consolidado": {
+      "type": "string",
+      "description": "N\u00famero del pedido consolidado formato PED-2026-0001"
+    },
+    "fecha_solicitud": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha desde que se reciben solicitudes"
+    },
+    "cliente_id": {
+      "type": "string",
+      "description": "ID del cliente/marroquinero"
+    },
+    "nombre_marroquinero": {
+      "type": "string",
+      "description": "Nombre del marroquinero"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "consolidado",
+        "en_produccion",
+        "entregado"
+      ],
+      "default": "pendiente"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "codigo_color": {
+            "type": "string",
+            "description": "C\u00f3digo del color desde cat\u00e1logo"
+          },
+          "color": {
+            "type": "string"
+          },
+          "can": {
+            "type": "number",
+            "default": 0
+          },
+          "point": {
+            "type": "number",
+            "default": 0
+          },
+          "eti": {
+            "type": "number",
+            "default": 0
+          },
+          "ilusion": {
+            "type": "number",
+            "default": 0
+          },
+          "talype": {
+            "type": "number",
+            "default": 0
+          },
+          "cobra": {
+            "type": "number",
+            "default": 0
+          },
+          "damasco": {
+            "type": "number",
+            "default": 0
+          },
+          "boa": {
+            "type": "number",
+            "default": 0
+          },
+          "babilla": {
+            "type": "number",
+            "default": 0
+          },
+          "piedra": {
+            "type": "number",
+            "default": 0
+          },
+          "puntos": {
+            "type": "number",
+            "default": 0
+          },
+          "mandala": {
+            "type": "number",
+            "default": 0
+          },
+          "poro_fino": {
+            "type": "number",
+            "default": 0
+          },
+          "opaco": {
+            "type": "number",
+            "default": 0
+          },
+          "opaco_mate": {
+            "type": "number",
+            "default": 0
+          },
+          "envejecido": {
+            "type": "number",
+            "default": 0
+          },
+          "total": {
+            "type": "number",
+            "default": 0
+          }
+        }
+      }
+    },
+    "total_hojas": {
+      "type": "number",
+      "default": 0,
+      "description": "Total de hojas del pedido"
+    }
+  },
+  "required": [
+    "fecha_solicitud",
+    "nombre_marroquinero"
+  ]
+}

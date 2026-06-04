@@ -1,0 +1,57 @@
+{
+  "name": "Servicio",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo del servicio"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del servicio"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n del servicio"
+    },
+    "categoria": {
+      "type": "string",
+      "description": "Categor\u00eda del servicio"
+    },
+    "tipo_servicio": {
+      "type": "string",
+      "enum": [
+        "servicio_venta",
+        "servicio_compra",
+        "ambos"
+      ],
+      "default": "ambos",
+      "description": "Tipo de servicio"
+    },
+    "afecta_produccion": {
+      "type": "boolean",
+      "default": false,
+      "description": "Indica si afecta producci\u00f3n"
+    },
+    "precio_base": {
+      "type": "number",
+      "default": 0,
+      "description": "Precio base del servicio"
+    },
+    "unidad_medida": {
+      "type": "string",
+      "description": "Unidad de medida"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activo",
+        "inactivo"
+      ],
+      "default": "activo"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

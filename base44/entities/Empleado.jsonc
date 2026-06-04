@@ -1,0 +1,60 @@
+{
+  "name": "Empleado",
+  "type": "object",
+  "properties": {
+    "codigo_personal": {
+      "type": "string",
+      "description": "C\u00f3digo autom\u00e1tico del personal (PER-001)"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo del empleado"
+    },
+    "identificacion": {
+      "type": "string",
+      "description": "N\u00famero de identificaci\u00f3n"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Tel\u00e9fono de contacto"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Correo electr\u00f3nico"
+    },
+    "tipo_personal": {
+      "type": "string",
+      "enum": [
+        "operario",
+        "ayudante",
+        "ocasional"
+      ],
+      "description": "Tipo de personal"
+    },
+    "cargo": {
+      "type": "string",
+      "description": "Cargo del empleado"
+    },
+    "direccion": {
+      "type": "string",
+      "description": "Direcci\u00f3n de residencia"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activo",
+        "inactivo"
+      ],
+      "default": "activo",
+      "description": "Estado del empleado"
+    },
+    "observaciones": {
+      "type": "string",
+      "description": "Observaciones adicionales"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

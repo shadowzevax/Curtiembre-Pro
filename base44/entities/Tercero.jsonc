@@ -1,0 +1,111 @@
+{
+  "name": "Tercero",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo \u00fanico del tercero (TER-001)"
+    },
+    "es_cliente": {
+      "type": "boolean",
+      "default": false,
+      "description": "Indica si es cliente"
+    },
+    "es_proveedor": {
+      "type": "boolean",
+      "default": false,
+      "description": "Indica si es proveedor"
+    },
+    "tipo_tercero": {
+      "type": "string",
+      "enum": [
+        "cliente",
+        "proveedor",
+        "transportador",
+        "trabajador",
+        "otro"
+      ],
+      "description": "Tipo de tercero (campo legacy)"
+    },
+    "tipo_persona": {
+      "type": "string",
+      "enum": [
+        "natural",
+        "juridica"
+      ],
+      "description": "Tipo de persona"
+    },
+    "tipo_identificacion": {
+      "type": "string",
+      "enum": [
+        "nit",
+        "cedula"
+      ],
+      "description": "Tipo de identificaci\u00f3n"
+    },
+    "numero_identificacion": {
+      "type": "string",
+      "description": "N\u00famero de identificaci\u00f3n (NIT o C\u00e9dula)"
+    },
+    "dv": {
+      "type": "string",
+      "description": "D\u00edgito de verificaci\u00f3n"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo o raz\u00f3n social"
+    },
+    "nombre_comercial": {
+      "type": "string",
+      "description": "Nombre comercial"
+    },
+    "pais": {
+      "type": "string",
+      "default": "Colombia"
+    },
+    "departamento": {
+      "type": "string"
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad o municipio"
+    },
+    "direccion": {
+      "type": "string"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "N\u00famero de tel\u00e9fono/celular"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Correo electr\u00f3nico"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true
+    },
+    "fecha_creacion": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de creaci\u00f3n del registro"
+    },
+    "regimen_tributario": {
+      "type": "string",
+      "enum": [
+        "regimen_ordinario",
+        "regimen_simple",
+        "regimen_especial"
+      ],
+      "description": "R\u00e9gimen tributario del tercero"
+    },
+    "rut": {
+      "type": "string",
+      "description": "URL del archivo RUT"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

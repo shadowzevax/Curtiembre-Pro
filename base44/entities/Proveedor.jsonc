@@ -1,0 +1,102 @@
+{
+  "name": "Proveedor",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo autom\u00e1tico del proveedor (PROV-001)"
+    },
+    "tipo_tercero": {
+      "type": "string",
+      "enum": [
+        "cliente",
+        "proveedor",
+        "transportador",
+        "trabajador",
+        "otro"
+      ],
+      "description": "Tipo de tercero"
+    },
+    "tipo_persona": {
+      "type": "string",
+      "enum": [
+        "natural",
+        "juridica"
+      ],
+      "description": "Tipo de persona"
+    },
+    "tipo_identificacion": {
+      "type": "string",
+      "enum": [
+        "nit",
+        "cedula"
+      ],
+      "description": "Tipo de identificaci\u00f3n"
+    },
+    "numero_identificacion": {
+      "type": "string",
+      "description": "N\u00famero de identificaci\u00f3n (NIT o C\u00e9dula)"
+    },
+    "dv": {
+      "type": "string",
+      "description": "D\u00edgito de verificaci\u00f3n"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo o raz\u00f3n social"
+    },
+    "nombre_comercial": {
+      "type": "string",
+      "description": "Nombre o raz\u00f3n comercial"
+    },
+    "pais": {
+      "type": "string",
+      "default": "Colombia"
+    },
+    "departamento": {
+      "type": "string"
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad o municipio"
+    },
+    "direccion": {
+      "type": "string"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "N\u00famero de tel\u00e9fono/celular"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Correo electr\u00f3nico"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "insumos",
+        "pieles",
+        "hojas",
+        "servicios"
+      ],
+      "description": "Tipo de proveedor"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true
+    },
+    "rut": {
+      "type": "string",
+      "description": "URL del archivo RUT"
+    },
+    "nit": {
+      "type": "string",
+      "description": "Campo heredado para compatibilidad"
+    }
+  },
+  "required": [
+    "nombre",
+    "tipo"
+  ]
+}

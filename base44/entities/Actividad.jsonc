@@ -1,0 +1,39 @@
+{
+  "name": "Actividad",
+  "type": "object",
+  "properties": {
+    "codigo_actividad": {
+      "type": "string",
+      "description": "C\u00f3digo \u00fanico de la actividad"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre de la actividad"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n de la actividad"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "produccion",
+        "administrativo",
+        "ventas",
+        "otro"
+      ],
+      "default": "produccion"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activa",
+        "inactiva"
+      ],
+      "default": "activa"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

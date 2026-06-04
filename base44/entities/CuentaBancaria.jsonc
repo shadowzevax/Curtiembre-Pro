@@ -1,0 +1,72 @@
+{
+  "name": "CuentaBancaria",
+  "type": "object",
+  "properties": {
+    "codigo_cuenta": {
+      "type": "string",
+      "description": "C\u00f3digo \u00fanico de la cuenta"
+    },
+    "tipo_cuenta": {
+      "type": "string",
+      "enum": [
+        "cuenta_corriente",
+        "cuenta_ahorros",
+        "nequi",
+        "daviplata",
+        "otra_billetera"
+      ],
+      "description": "Tipo de cuenta bancaria o billetera"
+    },
+    "banco": {
+      "type": "string",
+      "description": "Nombre del banco o billetera digital"
+    },
+    "numero_cuenta": {
+      "type": "string",
+      "description": "N\u00famero de cuenta"
+    },
+    "titular": {
+      "type": "string",
+      "description": "Titular de la cuenta"
+    },
+    "saldo_inicial": {
+      "type": "number",
+      "default": 0,
+      "description": "Saldo inicial de la cuenta"
+    },
+    "saldo_actual": {
+      "type": "number",
+      "default": 0,
+      "description": "Saldo actual de la cuenta"
+    },
+    "moneda": {
+      "type": "string",
+      "default": "COP",
+      "enum": [
+        "COP",
+        "USD"
+      ]
+    },
+    "fecha_apertura": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de apertura de la cuenta"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activa",
+        "inactiva"
+      ],
+      "default": "activa"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tipo_cuenta",
+    "banco",
+    "numero_cuenta"
+  ]
+}

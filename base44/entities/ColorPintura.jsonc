@@ -1,0 +1,39 @@
+{
+  "name": "ColorPintura",
+  "type": "object",
+  "properties": {
+    "codigo_color": {
+      "type": "string",
+      "description": "C\u00f3digo \u00fanico del color"
+    },
+    "nombre_color": {
+      "type": "string",
+      "description": "Nombre del color"
+    },
+    "familia_grupo": {
+      "type": "string",
+      "description": "Familia o grupo de color"
+    },
+    "color_base_hoja": {
+      "type": "string",
+      "description": "Color base de la hoja"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activo",
+        "inactivo"
+      ],
+      "default": "activo",
+      "description": "Estado del color"
+    },
+    "observaciones": {
+      "type": "string",
+      "description": "Observaciones adicionales"
+    }
+  },
+  "required": [
+    "codigo_color",
+    "nombre_color"
+  ]
+}

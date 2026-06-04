@@ -1,0 +1,65 @@
+{
+  "name": "CuentaContable",
+  "type": "object",
+  "properties": {
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "empresa": {
+      "type": "string",
+      "enum": [
+        "MARROQUINERIA ARTECUEROS SAS",
+        "ARTECUEROS"
+      ]
+    },
+    "prefijo": {
+      "type": "string"
+    },
+    "cc_nit": {
+      "type": "string"
+    },
+    "tipo_cuenta": {
+      "type": "string",
+      "enum": [
+        "gastos",
+        "otros_ingresos",
+        "cuentas_pagar",
+        "cuentas_cobrar",
+        "traslado_efectivo"
+      ]
+    },
+    "concepto": {
+      "type": "string"
+    },
+    "valor": {
+      "type": "number"
+    },
+    "referencia": {
+      "type": "string"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "pagada",
+        "cobrada",
+        "anulada"
+      ],
+      "default": "pendiente"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "proveedor_cliente_id": {
+      "type": "string",
+      "description": "ID del proveedor o cliente relacionado"
+    }
+  },
+  "required": [
+    "fecha",
+    "tipo_cuenta",
+    "concepto",
+    "valor"
+  ]
+}

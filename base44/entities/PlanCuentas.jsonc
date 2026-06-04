@@ -1,0 +1,64 @@
+{
+  "name": "PlanCuentas",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo de la cuenta contable (ej: 1105)"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre de la cuenta"
+    },
+    "tipo_cuenta": {
+      "type": "string",
+      "enum": [
+        "activo",
+        "pasivo",
+        "patrimonio",
+        "ingreso",
+        "gasto"
+      ],
+      "description": "Tipo de cuenta contable"
+    },
+    "nivel": {
+      "type": "number",
+      "description": "Nivel jer\u00e1rquico de la cuenta (1-5)"
+    },
+    "cuenta_padre": {
+      "type": "string",
+      "description": "C\u00f3digo de la cuenta padre"
+    },
+    "naturaleza": {
+      "type": "string",
+      "enum": [
+        "debito",
+        "credito"
+      ],
+      "description": "Naturaleza de la cuenta"
+    },
+    "acepta_movimientos": {
+      "type": "boolean",
+      "default": true,
+      "description": "Indica si la cuenta acepta movimientos directos"
+    },
+    "saldo_actual": {
+      "type": "number",
+      "default": 0
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "activa",
+        "inactiva"
+      ],
+      "default": "activa"
+    }
+  },
+  "required": [
+    "codigo",
+    "nombre",
+    "tipo_cuenta",
+    "naturaleza"
+  ]
+}

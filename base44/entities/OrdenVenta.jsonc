@@ -1,0 +1,213 @@
+{
+  "name": "OrdenVenta",
+  "type": "object",
+  "properties": {
+    "numero_id": {
+      "type": "string",
+      "description": "ID \u00fanico autogenerado formato PREFIJO-AAAA-0001"
+    },
+    "prefijo": {
+      "type": "string",
+      "description": "Prefijo del documento de venta"
+    },
+    "tipo_documento": {
+      "type": "string",
+      "enum": [
+        "factura_electronica",
+        "cuenta_cobro",
+        "remision",
+        "otras_ventas",
+        "nota_credito_cliente",
+        "nota_debito_cliente"
+      ]
+    },
+    "tipo_documento_venta": {
+      "type": "string",
+      "description": "Tipo de documento de venta (FE, CC, VSD, NC, ND, REM)"
+    },
+    "prefijo_documento": {
+      "type": "string",
+      "default": "FV"
+    },
+    "numero_documento": {
+      "type": "string",
+      "description": "N\u00famero del documento o factura"
+    },
+    "codigo_cliente": {
+      "type": "string",
+      "description": "C\u00f3digo del cliente desde Administraci\u00f3n/Terceros"
+    },
+    "documento_origen_id": {
+      "type": "string",
+      "description": "ID del documento origen para notas"
+    },
+    "documento_origen_numero": {
+      "type": "string",
+      "description": "N\u00famero del documento origen"
+    },
+    "motivo_nota": {
+      "type": "string",
+      "description": "Motivo de la nota cr\u00e9dito/d\u00e9bito"
+    },
+    "afecta_inventario_nota": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si la nota afecta inventario"
+    },
+    "afecta_impuestos_nota": {
+      "type": "boolean",
+      "default": true
+    },
+    "afecta_cartera_nota": {
+      "type": "boolean",
+      "default": true
+    },
+    "usuario_responsable": {
+      "type": "string"
+    },
+    "cliente_id": {
+      "type": "string",
+      "description": "ID del cliente o nombre personalizado"
+    },
+    "cc_nit_cliente": {
+      "type": "string"
+    },
+    "direccion_cliente": {
+      "type": "string"
+    },
+    "telefono_cliente": {
+      "type": "string"
+    },
+    "fecha_orden": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_vencimiento": {
+      "type": "string",
+      "format": "date"
+    },
+    "condicion_pago": {
+      "type": "string",
+      "enum": [
+        "contado",
+        "credito",
+        "mixto"
+      ]
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "efectivo",
+        "transferencia",
+        "nequi",
+        "daviplata",
+        "tarjeta",
+        "pse",
+        "consignacion",
+        "otro"
+      ]
+    },
+    "cuenta_destino_id": {
+      "type": "string",
+      "description": "ID de caja o cuenta bancaria para el cobro"
+    },
+    "cuenta_destino_nombre": {
+      "type": "string",
+      "description": "Nombre de la caja (CAJA GENERAL o CAJA MENOR)"
+    },
+    "valor_total_venta": {
+      "type": "number",
+      "default": 0
+    },
+    "valor_pagado": {
+      "type": "number",
+      "default": 0
+    },
+    "saldo_pendiente": {
+      "type": "number",
+      "default": 0
+    },
+    "tipo_venta": {
+      "type": "string",
+      "enum": [
+        "productos",
+        "servicios"
+      ]
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "cotizacion",
+        "confirmada",
+        "en_proceso",
+        "despachada",
+        "facturada",
+        "cobrada"
+      ],
+      "default": "cotizacion"
+    },
+    "subtotal": {
+      "type": "number"
+    },
+    "iva_total": {
+      "type": "number",
+      "default": 0
+    },
+    "retefuente_total": {
+      "type": "number",
+      "default": 0
+    },
+    "total": {
+      "type": "number"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "soportes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "producto_id": {
+            "type": "string"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "cantidad": {
+            "type": "number"
+          },
+          "precio_unitario": {
+            "type": "number"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "iva": {
+            "type": "number",
+            "default": 0.19
+          },
+          "retefuente": {
+            "type": "number",
+            "default": 0
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "numero_documento",
+    "cliente_id",
+    "fecha_orden",
+    "tipo_venta"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "name": "AsientoContable",
+  "type": "object",
+  "properties": {
+    "numero_asiento": {
+      "type": "string",
+      "description": "N\u00famero consecutivo del asiento"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo_asiento": {
+      "type": "string",
+      "enum": [
+        "apertura",
+        "movimiento",
+        "ajuste",
+        "cierre"
+      ],
+      "default": "movimiento"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n general del asiento"
+    },
+    "origen_modulo": {
+      "type": "string",
+      "description": "M\u00f3dulo de origen (ventas, compras, etc.)"
+    },
+    "referencia_origen_id": {
+      "type": "string",
+      "description": "ID del documento origen"
+    },
+    "detalle": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cuenta_codigo": {
+            "type": "string",
+            "description": "C\u00f3digo de la cuenta"
+          },
+          "cuenta_nombre": {
+            "type": "string"
+          },
+          "debe": {
+            "type": "number",
+            "default": 0
+          },
+          "haber": {
+            "type": "number",
+            "default": 0
+          },
+          "tercero_id": {
+            "type": "string"
+          },
+          "tercero_nombre": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "total_debe": {
+      "type": "number",
+      "default": 0
+    },
+    "total_haber": {
+      "type": "number",
+      "default": 0
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "borrador",
+        "contabilizado",
+        "anulado"
+      ],
+      "default": "contabilizado"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fecha",
+    "descripcion"
+  ]
+}

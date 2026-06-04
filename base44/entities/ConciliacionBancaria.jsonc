@@ -1,0 +1,42 @@
+{
+  "name": "ConciliacionBancaria",
+  "type": "object",
+  "properties": {
+    "cuenta_bancaria_id": {
+      "type": "string"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date"
+    },
+    "saldo_banco": {
+      "type": "number",
+      "default": 0
+    },
+    "saldo_sistema": {
+      "type": "number",
+      "default": 0
+    },
+    "diferencia": {
+      "type": "number",
+      "default": 0
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "abierta",
+        "cerrada"
+      ],
+      "default": "abierta"
+    }
+  },
+  "required": [
+    "cuenta_bancaria_id",
+    "fecha_inicio",
+    "fecha_fin"
+  ]
+}

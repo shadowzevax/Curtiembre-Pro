@@ -1,0 +1,68 @@
+{
+  "name": "RecetaPintura",
+  "type": "object",
+  "properties": {
+    "tipo_cuero_terminado": {
+      "type": "string",
+      "enum": [
+        "cuero_napa",
+        "cuero_envejecido",
+        "cuero_opaco",
+        "cuero_napa_mate"
+      ],
+      "description": "Tipo de cuero terminado"
+    },
+    "nombre_receta": {
+      "type": "string",
+      "description": "Nombre de la receta"
+    },
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo de la receta"
+    },
+    "cantidad_base_por_hoja": {
+      "type": "number",
+      "description": "Cantidad base por hoja"
+    },
+    "costo_total_productos": {
+      "type": "number",
+      "description": "Costo total de productos de pintura"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string"
+          },
+          "producto": {
+            "type": "string"
+          },
+          "grs": {
+            "type": "number",
+            "description": "Gramos del producto"
+          },
+          "precio_por_gr": {
+            "type": "number",
+            "description": "Precio por cada gramo"
+          },
+          "valor_total": {
+            "type": "number",
+            "description": "grs * precio_por_gr"
+          },
+          "observaciones": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tipo_cuero_terminado",
+    "nombre_receta"
+  ]
+}

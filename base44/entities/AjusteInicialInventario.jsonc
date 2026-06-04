@@ -1,0 +1,53 @@
+{
+  "name": "AjusteInicialInventario",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo del producto desde cat\u00e1logo"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n del producto desde cat\u00e1logo"
+    },
+    "producto_id": {
+      "type": "string",
+      "description": "ID del producto en el cat\u00e1logo"
+    },
+    "cantidad_real": {
+      "type": "number",
+      "description": "Cantidad f\u00edsica real con la que inicia el sistema"
+    },
+    "costo_unitario_estimado": {
+      "type": "number",
+      "description": "Costo unitario estimado del producto"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de inicio de operaciones"
+    },
+    "categoria": {
+      "type": "string",
+      "description": "Categor\u00eda del producto para determinar inventario destino"
+    },
+    "unidad_medida": {
+      "type": "string",
+      "description": "Unidad de medida"
+    },
+    "movimiento_generado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Indica si ya se gener\u00f3 el movimiento de inventario"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "codigo",
+    "cantidad_real",
+    "costo_unitario_estimado",
+    "fecha"
+  ]
+}

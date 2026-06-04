@@ -1,0 +1,82 @@
+{
+  "name": "TransferenciaCaja",
+  "type": "object",
+  "properties": {
+    "numero_transferencia": {
+      "type": "string",
+      "description": "N\u00famero consecutivo autom\u00e1tico"
+    },
+    "origen_caja_id": {
+      "type": "string",
+      "description": "ID de la caja origen"
+    },
+    "origen_codigo": {
+      "type": "string",
+      "description": "C\u00f3digo de la caja origen"
+    },
+    "origen_nombre": {
+      "type": "string",
+      "description": "Nombre de la caja origen"
+    },
+    "destino_caja_id": {
+      "type": "string",
+      "description": "ID de la caja destino"
+    },
+    "destino_codigo": {
+      "type": "string",
+      "description": "C\u00f3digo de la caja destino"
+    },
+    "destino_nombre": {
+      "type": "string",
+      "description": "Nombre de la caja destino"
+    },
+    "valor": {
+      "type": "number",
+      "description": "Valor de la transferencia"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de la transferencia"
+    },
+    "concepto": {
+      "type": "string",
+      "description": "Concepto de la transferencia"
+    },
+    "responsable": {
+      "type": "string",
+      "description": "Responsable de la transferencia"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "registrada",
+        "aplicada",
+        "anulada"
+      ],
+      "default": "registrada",
+      "description": "Estado de la transferencia"
+    },
+    "observaciones_referencia": {
+      "type": "string",
+      "description": "Observaciones o referencia"
+    },
+    "movimiento_origen_id": {
+      "type": "string",
+      "description": "ID del movimiento generado en caja origen"
+    },
+    "movimiento_destino_id": {
+      "type": "string",
+      "description": "ID del movimiento generado en caja destino"
+    },
+    "usuario_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "origen_caja_id",
+    "destino_caja_id",
+    "valor",
+    "fecha"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "MovimientoCaja",
+  "type": "object",
+  "properties": {
+    "caja_id": {
+      "type": "string",
+      "description": "ID de la caja"
+    },
+    "nombre_caja": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del movimiento"
+    },
+    "tipo_movimiento": {
+      "type": "string",
+      "enum": [
+        "entrada",
+        "salida"
+      ]
+    },
+    "concepto": {
+      "type": "string"
+    },
+    "documento_origen_tipo": {
+      "type": "string"
+    },
+    "documento_origen_id": {
+      "type": "string"
+    },
+    "responsable": {
+      "type": "string"
+    },
+    "valor": {
+      "type": "number",
+      "default": 0
+    },
+    "saldo_resultante": {
+      "type": "number",
+      "default": 0
+    },
+    "observacion": {
+      "type": "string"
+    },
+    "documento_soporte": {
+      "type": "string"
+    },
+    "usuario_creacion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "caja_id",
+    "fecha",
+    "tipo_movimiento",
+    "valor"
+  ]
+}
