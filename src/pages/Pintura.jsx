@@ -95,16 +95,30 @@ export default function Pintura() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const cueroDisponible = inventarioEnProceso.filter(i =>
-    (i.cantidad_hojas || 0) > 0 &&
-    (i.etapa_actual === 'recurtido' || i.etapa_actual === 'curtido' || i.etapa_actual === 'limpieza')
-  );
+  // Al editar un borrador, las hojas comprometidas por ESE documento se suman de vuelta
+  // para que el cuero aparezca como "disponible" y el usuario pueda seguir trabajando.
+  // Usamos hojasAConsumir (estado local) que refleja lo que ya estaba guardado al cargar.
+  const esBorradorEdicion = isEditing && currentItem?.estado_pedido_pintura !== 'terminado';
+  const hojasComprometidasEdicion = esBorradorEdicion ? hojasAConsumir : 0;
+
+  const cueroDisponible = inventarioEnProceso.filter(i => {
+    const etapaOk = i.etapa_actual === 'recurtido' || i.etapa_actual === 'curtido' || i.etapa_actual === 'limpieza';
+    if (!etapaOk) return false;
+    // Incluir el cuero seleccionado en edición aunque tenga 0 hojas (están comprometidas)
+    if (isEditing && currentItem?.inv_proceso_id === i.id) return true;
+    return (i.cantidad_hojas || 0) > 0;
+  });
   const cueroFiltrado = cueroDisponible.filter(i => {
     const matchSearch = !searchCuero || (i.codigo_lote || '').toLowerCase().includes(searchCuero.toLowerCase()) || (i.descripcion || '').toLowerCase().includes(searchCuero.toLowerCase()) || (i.color_base || '').toLowerCase().includes(searchCuero.toLowerCase());
     const matchColor = !filtroCueroColor || (i.color_base || '').toUpperCase() === filtroCueroColor;
     const matchEtapa = !filtroCueroEtapa || i.etapa_actual === filtroCueroEtapa;
     return matchSearch && matchColor && matchEtapa;
   });
+
+  // Hojas reales disponibles del cuero seleccionado (sumando las comprometidas por este doc en edición)
+  const hojasRealesDisponibles = cueroSeleccionado
+    ? (cueroSeleccionado.cantidad_hojas || 0) + hojasComprometidasEdicion
+    : 0;
 
   const handleOpenModal = (item = null) => {
     setIsEditing(!!item);
@@ -267,6 +281,11 @@ export default function Pintura() {
 
     const esFinalizacion = currentItem.finalizar_pintura;
     if (esFinalizacion) {
+      // Validar que hojas pendientes = 0
+      if (hojasRestantesDistribucion !== 0) {
+        alert(`❌ No es posible finalizar: quedan ${hojasRestantesDistribucion} hojas pendientes por distribuir en sublotes.`);
+        return;
+      }
       const errores = validarParaFinalizar();
       if (errores.length > 0) {
         alert('❌ No es posible finalizar el proceso:\n\n' + errores.map(e => '• ' + e).join('\n'));
@@ -276,7 +295,8 @@ export default function Pintura() {
 
     try {
       const res = getResumen();
-      const estadoAuto = esFinalizacion ? 'terminado' : 'parcial';
+      // Borrador = 'borrador', Finalizado = 'terminado'
+      const estadoAuto = esFinalizacion ? 'terminado' : 'borrador';
       const dataToSave = {
         ...currentItem,
         inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
@@ -294,22 +314,21 @@ export default function Pintura() {
         estado_pedido_pintura: estadoAuto,
       };
 
+      // BORRADOR: solo guardar el registro, NO tocar inventario
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
         await ProcesoProduccion.create(dataToSave);
-        // Al crear (borrador), descontar hojas del inventario en proceso
-        if (cueroSeleccionado && !esFinalizacion) {
-          const nuevaCantidad = Math.max(0, (cueroSeleccionado.cantidad_hojas || 0) - hojasAConsumir);
-          await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
-        }
+        // NO descontar inventario al guardar borrador
       }
 
       if (esFinalizacion) {
         const fechaHoy = new Date().toISOString().split('T')[0];
-        // Descontar hojas del Inventario en Proceso si es edición y aún no se descontó
-        if (isEditing && cueroSeleccionado) {
-          const nuevaCantidad = Math.max(0, (cueroSeleccionado.cantidad_hojas || 0) - hojasAConsumir);
+        // SOLO al finalizar: descontar hojas del Inventario en Proceso
+        if (cueroSeleccionado) {
+          // El inventario nunca fue descontado (borrador no toca inventario), descontar ahora al finalizar
+          const hojasActualesInventario = cueroSeleccionado.cantidad_hojas || 0;
+          const nuevaCantidad = Math.max(0, hojasActualesInventario - hojasAConsumir);
           await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
         }
         for (const sub of sublotes) {
@@ -449,7 +468,11 @@ export default function Pintura() {
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar' : 'Nueva'} Pintura {esFinalizado && <span className="text-red-500 text-sm ml-2">(FINALIZADO - Solo lectura)</span>}</DialogTitle>
+            <DialogTitle>
+              {isEditing ? 'Editar' : 'Nueva'} Pintura
+              {esFinalizado && <span className="text-red-500 text-sm ml-2">(FINALIZADO - Solo lectura)</span>}
+              {esBorradorEdicion && <span className="text-amber-600 text-sm ml-2 font-semibold">📝 BORRADOR — Continuando distribución de sublotes</span>}
+            </DialogTitle>
           </DialogHeader>
           {currentItem && (
             <form onSubmit={handleSave} className="space-y-5">
@@ -522,7 +545,7 @@ export default function Pintura() {
                       <div><span className="font-semibold text-indigo-700">Descripción/Nombre:</span> {cueroSeleccionado.descripcion || cueroSeleccionado.color_base || '—'}</div>
                       <div><span className="font-semibold text-indigo-700">Color Base:</span> <strong>{cueroSeleccionado.color_base || '—'}</strong></div>
                       <div><span className="font-semibold text-indigo-700">Cód. Lote Padre (trazabilidad):</span> <span className="font-mono">{cueroSeleccionado.codigo_lote_padre || '—'}</span></div>
-                      <div><span className="font-semibold text-indigo-700">Hojas Disponibles:</span> <strong className="text-green-700 text-base">{cueroSeleccionado.cantidad_hojas}</strong></div>
+                      <div><span className="font-semibold text-indigo-700">Hojas Disponibles:</span> <strong className="text-green-700 text-base">{hojasRealesDisponibles}</strong>{hojasComprometidasEdicion > 0 && <span className="text-xs text-amber-600 ml-1">(incl. {hojasComprometidasEdicion} comprometidas)</span>}</div>
                       <div><span className="font-semibold text-indigo-700">Área Disponible (m²):</span> {cueroSeleccionado.peso_actual ? `${cueroSeleccionado.peso_actual} kg` : '—'}</div>
                       <div><span className="font-semibold text-indigo-700">Costo Promedio Unit.:</span> <strong className="text-amber-700">{formatCurrency(cueroSeleccionado.costo_promedio)}</strong></div>
                       <div><span className="font-semibold text-indigo-700">Etapa Actual:</span> <span className="uppercase font-bold text-blue-700">{cueroSeleccionado.etapa_actual}</span></div>
@@ -532,13 +555,13 @@ export default function Pintura() {
                     <div className="mt-3 flex items-end gap-4">
                       <div className="w-56">
                         <Label className="text-xs font-bold text-indigo-700">Hojas a Consumir *</Label>
-                        <Input type="number" min="1" max={cueroSeleccionado.cantidad_hojas} value={hojasAConsumir || ''} disabled={esFinalizado}
+                        <Input type="number" min="1" max={hojasRealesDisponibles} value={hojasAConsumir || ''} disabled={esFinalizado}
                           onChange={e => { const val = parseFloat(e.target.value) || 0; setHojasAConsumir(val); setSublotes(prev => recalcPct(prev, val)); }}
-                          className={`mt-1 text-xs ${hojasAConsumir > (cueroSeleccionado.cantidad_hojas || 0) ? 'border-red-500 bg-red-50' : ''}`} />
-                        <p className="text-xs text-slate-400 mt-0.5">Máx: <strong>{cueroSeleccionado.cantidad_hojas}</strong></p>
+                          className={`mt-1 text-xs ${hojasAConsumir > hojasRealesDisponibles ? 'border-red-500 bg-red-50' : ''}`} />
+                        <p className="text-xs text-slate-400 mt-0.5">Máx: <strong>{hojasRealesDisponibles}</strong></p>
                       </div>
-                      <div className={`flex-1 p-3 rounded border text-xs font-medium ${hojasAConsumir > (cueroSeleccionado.cantidad_hojas || 0) ? 'bg-red-50 border-red-300 text-red-700' : hojasAConsumir > 0 ? 'bg-green-50 border-green-300 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                        {hojasAConsumir > (cueroSeleccionado.cantidad_hojas || 0) ? `❌ Excede el disponible en ${hojasAConsumir - cueroSeleccionado.cantidad_hojas} hojas` : hojasAConsumir > 0 ? `✔ Consumirá ${hojasAConsumir} de ${cueroSeleccionado.cantidad_hojas} hojas. Quedarán ${cueroSeleccionado.cantidad_hojas - hojasAConsumir} en inventario.` : 'Ingrese la cantidad de hojas a consumir'}
+                      <div className={`flex-1 p-3 rounded border text-xs font-medium ${hojasAConsumir > hojasRealesDisponibles ? 'bg-red-50 border-red-300 text-red-700' : hojasAConsumir > 0 ? 'bg-green-50 border-green-300 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                        {hojasAConsumir > hojasRealesDisponibles ? `❌ Excede el disponible en ${hojasAConsumir - hojasRealesDisponibles} hojas` : hojasAConsumir > 0 ? `✔ Consumirá ${hojasAConsumir} de ${hojasRealesDisponibles} hojas disponibles. Quedarán ${hojasRealesDisponibles - hojasAConsumir} en inventario.` : 'Ingrese la cantidad de hojas a consumir'}
                       </div>
                     </div>
                   )}
@@ -556,14 +579,36 @@ export default function Pintura() {
                     {!esFinalizado && <Button type="button" onClick={handleAgregarSublote} className="bg-white text-orange-700 hover:bg-orange-50 text-xs h-8"><Plus className="w-3 h-3 mr-1" />Agregar Sublote</Button>}
                   </div>
 
-                  {/* Indicadores */}
-                  <div className="bg-orange-50 border-b border-orange-200 px-5 py-2 flex flex-wrap gap-4 text-xs">
-                    <span>Total a distribuir: <strong>{hojasAConsumir}</strong></span>
-                    <span>|</span><span>Asignadas: <strong className={totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-orange-800'}>{totalHojasAsignadas}</strong></span>
-                    <span>|</span><span>Pendientes: <strong className={hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-orange-700'}>{hojasRestantesDistribucion}</strong></span>
-                    <span>|</span><span>Sublotes: <strong>{sublotes.length}</strong></span>
-                    {hojasRestantesDistribucion === 0 && sublotes.length > 0 && <span className="text-green-700 font-bold">✔ Distribución completa</span>}
-                    {hojasRestantesDistribucion < 0 && <span className="text-red-700 font-bold">✖ Excede el total</span>}
+                  {/* Indicador visual de distribución — siempre visible */}
+                  <div className="bg-orange-50 border-b border-orange-200 px-5 py-3">
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      <div className="flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-4 py-2">
+                        <span className="text-orange-600 font-semibold">📋 Total hojas seleccionadas:</span>
+                        <span className="font-extrabold text-orange-900 text-base">{hojasAConsumir}</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-4 py-2">
+                        <span className="text-blue-600 font-semibold">✅ Hojas distribuidas:</span>
+                        <span className={`font-extrabold text-base ${totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-blue-800'}`}>{totalHojasAsignadas}</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white border border-amber-300 rounded-lg px-4 py-2">
+                        <span className={`font-semibold ${hojasRestantesDistribucion < 0 ? 'text-red-600' : hojasRestantesDistribucion === 0 ? 'text-green-600' : 'text-amber-700'}`}>
+                          {hojasRestantesDistribucion < 0 ? '❌' : hojasRestantesDistribucion === 0 ? '🎯' : '⏳'} Hojas pendientes por distribuir:
+                        </span>
+                        <span className={`font-extrabold text-base ${hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-amber-800'}`}>
+                          {hojasRestantesDistribucion}
+                        </span>
+                      </div>
+                      {hojasRestantesDistribucion === 0 && sublotes.length > 0 && (
+                        <div className="flex items-center gap-1 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-green-700 font-bold text-sm">
+                          ✔ Distribución completa
+                        </div>
+                      )}
+                      {hojasRestantesDistribucion < 0 && (
+                        <div className="flex items-center gap-1 bg-red-100 border border-red-300 rounded-lg px-4 py-2 text-red-700 font-bold text-sm">
+                          ✖ Excede el total asignado
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Tabla resumen de sublotes */}
