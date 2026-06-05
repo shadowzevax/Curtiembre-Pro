@@ -19,6 +19,8 @@ export default function CatalogoProductos() {
     const [isEditing, setIsEditing] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
+    // Expose productos for other modules
+    window.__catalogoProductos = productos;
 
     useEffect(() => {
         loadData();
@@ -276,6 +278,20 @@ export default function CatalogoProductos() {
                                         <SelectItem value="catalizadores">Catalizadores</SelectItem>
                                         <SelectItem value="detergentes_auxiliares">Detergentes y Auxiliares de Limpieza</SelectItem>
                                         <SelectItem value="acidos_bases">Ácidos y Bases (pH Ajustadores)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label>Tipo de Acabado</Label>
+                                <Select value={currentItem?.tipo_acabado || ''} onValueChange={v => setCurrentItem({...currentItem, tipo_acabado: v})}>
+                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="NAPA">NAPA</SelectItem>
+                                        <SelectItem value="NAPA_MATE">NAPA MATE</SelectItem>
+                                        <SelectItem value="OPACO">OPACO</SelectItem>
+                                        <SelectItem value="ENVEJECIDO">ENVEJECIDO</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

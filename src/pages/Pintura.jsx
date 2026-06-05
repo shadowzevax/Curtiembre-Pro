@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura } from '@/entities/all';
+import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, ProductoCatalogo } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ const COLORES_BASE = ['NEGRO', 'CAFÉ', 'AZUL', 'MIEL', 'BLANCO', 'QUEBRACHO', '
 const newSublote = (idx, codigoBase) => ({
   id_temp: `sub-${Date.now()}-${idx}`,
   codigo_sublote: codigoBase ? `${codigoBase}-PIN-${String(idx + 1).padStart(2, '0')}` : `SUB-${String(idx + 1).padStart(2, '0')}`,
+  producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '',
   tipo_acabado: '', color_final: '', cantidad_hojas: 0, pct_participacion: 0,
   observaciones: '', estado: 'pendiente', insumos: [], mano_obra: [],
   hojas_iniciales: 0, hojas_buenas: 0, hojas_defectuosas: 0, hojas_rechazadas: 0, obs_calidad: '',
@@ -56,6 +57,7 @@ export default function Pintura() {
   const [insumosQuimicos, setInsumosQuimicos] = useState([]);
   const [productosTerminados, setProductosTerminados] = useState([]);
   const [coloresCatalogo, setColoresCatalogo] = useState([]);
+  const [catalogoProductos, setCatalogoProductos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showModal, setShowModal] = useState(false);
@@ -78,15 +80,16 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, inventarioData, productosTermData, coloresData] = await Promise.all([
+      const [procesosData, insumosData, inventarioData, productosTermData, coloresData, catalogoData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
-        Insumo.list(), InventarioEnProceso.list(), ProductoTerminado.list(), ColorPintura.list()
+        Insumo.list(), InventarioEnProceso.list(), ProductoTerminado.list(), ColorPintura.list(), ProductoCatalogo.list()
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumosQuimicos(Array.isArray(insumosData) ? insumosData : []);
       setInventarioEnProceso(Array.isArray(inventarioData) ? inventarioData : []);
       setProductosTerminados(Array.isArray(productosTermData) ? productosTermData : []);
       setColoresCatalogo(Array.isArray(coloresData) ? coloresData.filter(c => c.estado === 'activo') : []);
+      setCatalogoProductos(Array.isArray(catalogoData) ? catalogoData.filter(p => p.estado === 'activo') : []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
@@ -156,6 +159,18 @@ export default function Pintura() {
     setSubloteActivoIdx(Math.max(0, subloteActivoIdx - 1));
   };
   const handleSubloteFieldChange = (field, value) => setSubloteActivo({ [field]: value });
+
+  // Seleccionar producto terminado del catálogo para el sublote
+  const handleSeleccionarProductoCatalogo = (productoId) => {
+    const prod = catalogoProductos.find(p => p.id === productoId);
+    if (!prod) return;
+    setSubloteActivo({
+      producto_terminado_id: prod.id,
+      producto_terminado_codigo: prod.codigo,
+      producto_terminado_nombre: prod.descripcion || prod.nombre_comercial || '',
+      tipo_acabado: prod.tipo_acabado || subloteActivo?.tipo_acabado || '',
+    });
+  };
   const handleHojasSubloChange = (value) => {
     setSublotes(prev => { const u = prev.map((s, i) => i === subloteActivoIdx ? { ...s, cantidad_hojas: parseFloat(value) || 0 } : s); return recalcPct(u, hojasAConsumir); });
   };
@@ -283,7 +298,8 @@ export default function Pintura() {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
         await ProcesoProduccion.create(dataToSave);
-        if (cueroSeleccionado) {
+        // Al crear (borrador), descontar hojas del inventario en proceso
+        if (cueroSeleccionado && !esFinalizacion) {
           const nuevaCantidad = Math.max(0, (cueroSeleccionado.cantidad_hojas || 0) - hojasAConsumir);
           await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
         }
@@ -291,7 +307,13 @@ export default function Pintura() {
 
       if (esFinalizacion) {
         const fechaHoy = new Date().toISOString().split('T')[0];
+        // Descontar hojas del Inventario en Proceso si es edición y aún no se descontó
+        if (isEditing && cueroSeleccionado) {
+          const nuevaCantidad = Math.max(0, (cueroSeleccionado.cantidad_hojas || 0) - hojasAConsumir);
+          await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
+        }
         for (const sub of sublotes) {
+          // Descontar insumos
           for (const ins of (sub.insumos || [])) {
             const insumo = insumosQuimicos.find(i => i.id === ins.item_id);
             if (insumo && (parseFloat(ins.cantidad) || 0) > 0) {
@@ -299,18 +321,33 @@ export default function Pintura() {
               await Insumo.update(insumo.id, { stock_actual: Math.max(0, (insumo.stock_actual || 0) - parseFloat(ins.cantidad)) });
             }
           }
+          // Registrar hojas buenas en Inventario Productos Terminados
           const hojasBuenas = parseFloat(sub.hojas_buenas) || 0;
           if (hojasBuenas > 0) {
             const costoSub = getCostosSublote(sub);
-            const tipoCuero = cueroSeleccionado?.tipo_cuero || 'PELO';
-            const tipoAcabado = sub.tipo_acabado || '';
-            const colorFinal = sub.color_final || '';
-            const existentes = productosTerminados.filter(pt => pt.tipo_cuero === tipoCuero && pt.tipo_acabado === tipoAcabado && pt.color_final === colorFinal);
-            if (existentes.length > 0) {
-              await ProductoTerminado.update(existentes[0].id, { stock_actual: (existentes[0].stock_actual || 0) + hojasBuenas, costo_promedio: costoSub.costoPorHoja });
+            // Si el sublote tiene producto del catálogo, usar ese código
+            if (sub.producto_terminado_id && sub.producto_terminado_codigo) {
+              const existentes = productosTerminados.filter(pt => pt.codigo === sub.producto_terminado_codigo);
+              if (existentes.length > 0) {
+                const pt = existentes[0];
+                const nuevoStock = (pt.stock_actual || 0) + hojasBuenas;
+                // Costo promedio ponderado
+                const nuevoCostoProm = ((pt.stock_actual || 0) * (pt.costo_promedio || 0) + hojasBuenas * costoSub.costoPorHoja) / nuevoStock;
+                await ProductoTerminado.update(pt.id, { stock_actual: nuevoStock, costo_promedio: nuevoCostoProm, fecha_ultima_produccion: fechaHoy });
+              } else {
+                // Crear en inventario de productos terminados con el código del catálogo
+                await ProductoTerminado.create({ codigo: sub.producto_terminado_codigo, descripcion: sub.producto_terminado_nombre || sub.producto_terminado_codigo, tipo_acabado: sub.tipo_acabado, color_final: sub.color_final, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy, costo_total_acumulado: costoSub.costoTotal });
+              }
             } else {
-              const codigoAuto = `PT-${tipoCuero.substring(0, 2)}-${tipoAcabado.substring(0, 3)}-${colorFinal.substring(0, 5)}-${Date.now()}`.toUpperCase();
-              await ProductoTerminado.create({ codigo: codigoAuto, descripcion: `${tipoCuero} - ${tipoAcabado} - ${colorFinal}`.toUpperCase(), tipo_cuero: tipoCuero, tipo_acabado: tipoAcabado, color_final: colorFinal, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, costo_total_acumulado: costoSub.costoTotal });
+              // Fallback: buscar por tipo/color
+              const tipoAcabado = sub.tipo_acabado || ''; const colorFinal = sub.color_final || '';
+              const existentes = productosTerminados.filter(pt => pt.tipo_acabado === tipoAcabado && pt.color_final === colorFinal);
+              if (existentes.length > 0) {
+                await ProductoTerminado.update(existentes[0].id, { stock_actual: (existentes[0].stock_actual || 0) + hojasBuenas, costo_promedio: costoSub.costoPorHoja, fecha_ultima_produccion: fechaHoy });
+              } else {
+                const codigoAuto = `PT-${tipoAcabado.substring(0, 3)}-${colorFinal.substring(0, 5)}-${Date.now()}`.toUpperCase();
+                await ProductoTerminado.create({ codigo: codigoAuto, descripcion: `${tipoAcabado} - ${colorFinal}`.toUpperCase(), tipo_acabado: tipoAcabado, color_final: colorFinal, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy });
+              }
             }
           }
         }
@@ -378,9 +415,15 @@ export default function Pintura() {
               <td className="p-2">{estadoBadge(item.estado_pedido_pintura)}</td>
               <td className="p-2 text-xs text-slate-400">{item.updated_date ? new Date(item.updated_date).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
               <td className="p-2">
-                <div className="flex gap-1 justify-center">
+                <div className="flex gap-1 justify-center flex-wrap">
                   <Button variant="outline" size="sm" title="Ver Detalle" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Search className="w-3.5 h-3.5" /></Button>
                   <Button variant="outline" size="sm" title="Editar" onClick={() => handleOpenModal(item)}><Edit className="w-3.5 h-3.5" /></Button>
+                  {(item.estado_pedido_pintura === 'parcial' || item.estado_pedido_pintura === 'pendiente' || item.estado_pedido_pintura === 'borrador') && (
+                    <Button size="sm" title="Finalizar Pintura" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2"
+                      onClick={() => { handleOpenModal(item); }}>
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Finalizar
+                    </Button>
+                  )}
                   <Button variant="destructive" size="sm" title="Eliminar" onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                 </div>
               </td>
@@ -474,15 +517,15 @@ export default function Pintura() {
                   </Select>
 
                   {cueroSeleccionado && (
-                    <div className="mt-3 grid grid-cols-4 gap-2 text-xs bg-indigo-50 border border-indigo-200 rounded p-3">
-                      <div><span className="font-semibold text-indigo-700">Código:</span> <span className="font-mono font-bold">{cueroSeleccionado.codigo_lote}</span></div>
-                      <div><span className="font-semibold text-indigo-700">Lote Padre:</span> {cueroSeleccionado.codigo_lote_padre || '—'}</div>
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-indigo-50 border border-indigo-200 rounded p-3">
+                      <div><span className="font-semibold text-indigo-700">Cód. Inventario en Proceso:</span> <span className="font-mono font-bold text-indigo-900">{cueroSeleccionado.codigo_lote}</span></div>
+                      <div><span className="font-semibold text-indigo-700">Descripción/Nombre:</span> {cueroSeleccionado.descripcion || cueroSeleccionado.color_base || '—'}</div>
                       <div><span className="font-semibold text-indigo-700">Color Base:</span> <strong>{cueroSeleccionado.color_base || '—'}</strong></div>
-                      <div><span className="font-semibold text-indigo-700">Etapa:</span> <span className="uppercase font-bold text-blue-700">{cueroSeleccionado.etapa_actual}</span></div>
-                      <div><span className="font-semibold text-indigo-700">Hojas Disponibles:</span> <strong className="text-green-700">{cueroSeleccionado.cantidad_hojas}</strong></div>
-                      <div><span className="font-semibold text-indigo-700">Peso Actual:</span> {cueroSeleccionado.peso_actual} kg</div>
-                      <div><span className="font-semibold text-indigo-700">Costo Acumulado:</span> <strong className="text-amber-700">{formatCurrency(cueroSeleccionado.costo_acumulado)}</strong></div>
-                      <div><span className="font-semibold text-indigo-700">Costo/Hoja:</span> {formatCurrency(cueroSeleccionado.costo_promedio)}</div>
+                      <div><span className="font-semibold text-indigo-700">Cód. Lote Padre (trazabilidad):</span> <span className="font-mono">{cueroSeleccionado.codigo_lote_padre || '—'}</span></div>
+                      <div><span className="font-semibold text-indigo-700">Hojas Disponibles:</span> <strong className="text-green-700 text-base">{cueroSeleccionado.cantidad_hojas}</strong></div>
+                      <div><span className="font-semibold text-indigo-700">Área Disponible (m²):</span> {cueroSeleccionado.peso_actual ? `${cueroSeleccionado.peso_actual} kg` : '—'}</div>
+                      <div><span className="font-semibold text-indigo-700">Costo Promedio Unit.:</span> <strong className="text-amber-700">{formatCurrency(cueroSeleccionado.costo_promedio)}</strong></div>
+                      <div><span className="font-semibold text-indigo-700">Etapa Actual:</span> <span className="uppercase font-bold text-blue-700">{cueroSeleccionado.etapa_actual}</span></div>
                     </div>
                   )}
                   {cueroSeleccionado && (
@@ -580,6 +623,19 @@ export default function Pintura() {
                         <div className="bg-white px-5 py-4">
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div><Label className="text-xs font-bold text-orange-800">Código Sublote</Label><Input value={subloteActivo.codigo_sublote || ''} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" /></div>
+                            <div>
+                              <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
+                              <Select value={subloteActivo.producto_terminado_id || ''} onValueChange={handleSeleccionarProductoCatalogo} disabled={esFinalizado}>
+                                <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
+                                <SelectContent className="max-h-48 overflow-y-auto">
+                                  {catalogoProductos.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.descripcion || p.nombre_comercial}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-xs font-bold text-orange-800">Nombre Producto Terminado</Label>
+                              <Input readOnly value={subloteActivo.producto_terminado_nombre || ''} placeholder="Se completa al seleccionar el código..." className="bg-slate-50 text-xs cursor-not-allowed" />
+                            </div>
                             <div>
                               <Label className="text-xs font-bold text-orange-800">Tipo de Acabado *</Label>
                               <Select value={subloteActivo.tipo_acabado || ''} onValueChange={v => handleSubloteFieldChange('tipo_acabado', v)} disabled={esFinalizado}>

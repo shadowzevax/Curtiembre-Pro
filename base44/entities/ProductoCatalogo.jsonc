@@ -49,6 +49,16 @@
         "auxiliar_de_acabado"
       ]
     },
+    "tipo_acabado": {
+      "type": "string",
+      "enum": [
+        "NAPA",
+        "NAPA_MATE",
+        "OPACO",
+        "ENVEJECIDO"
+      ],
+      "description": "Tipo de acabado del producto"
+    },
     "maneja_inventario": {
       "type": "boolean",
       "default": true
