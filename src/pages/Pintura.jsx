@@ -272,31 +272,22 @@ export default function Pintura() {
     return suma === ini;
   }) && Math.abs(sublotes.reduce((s, sub) => s + (parseFloat(sub.hojas_buenas) || 0) + (parseFloat(sub.hojas_defectuosas) || 0) + (parseFloat(sub.hojas_rechazadas) || 0), 0) - hojasAConsumir) < 0.01;
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!cueroSeleccionado && !isEditing) { alert('⚠️ Seleccione un cuero en proceso.'); return; }
+  // Estado para modal de ver detalle de sublote
+  const [showSubloteDetalle, setShowSubloteDetalle] = useState(false);
+  const [subloteDetalleIdx, setSubloteDetalleIdx] = useState(null);
+
+  const handleVerSublote = (idx) => { setSubloteDetalleIdx(idx); setShowSubloteDetalle(true); };
+
+  const handleSaveBorrador = async () => {
+    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un cuero en proceso.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
     if (sublotes.length === 0) { alert('⚠️ Agregue al menos un sublote de pintura.'); return; }
-    if (totalHojasAsignadas > hojasAConsumir) { alert(`❌ Hojas asignadas (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).`); return; }
-
-    const esFinalizacion = currentItem.finalizar_pintura;
-    if (esFinalizacion) {
-      // Validar que hojas pendientes = 0
-      if (hojasRestantesDistribucion !== 0) {
-        alert(`❌ No es posible finalizar: quedan ${hojasRestantesDistribucion} hojas pendientes por distribuir en sublotes.`);
-        return;
-      }
-      const errores = validarParaFinalizar();
-      if (errores.length > 0) {
-        alert('❌ No es posible finalizar el proceso:\n\n' + errores.map(e => '• ' + e).join('\n'));
-        return;
-      }
+    if (totalHojasAsignadas > hojasAConsumir) {
+      alert(`❌ No se puede guardar: las hojas asignadas en sublotes (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).\n\nReduzca la cantidad de hojas en alguno de los sublotes antes de continuar.`);
+      return;
     }
-
     try {
       const res = getResumen();
-      // Borrador = 'borrador', Finalizado = 'terminado'
-      const estadoAuto = esFinalizacion ? 'terminado' : 'borrador';
       const dataToSave = {
         ...currentItem,
         inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
@@ -311,70 +302,111 @@ export default function Pintura() {
         colores_registrados: [...new Set(sublotes.map(s => s.color_final).filter(Boolean))].join(', '),
         tipos_acabado_registrados: [...new Set(sublotes.map(s => s.tipo_acabado).filter(Boolean))].join(', '),
         pct_merma_total: hojasAConsumir > 0 ? ((1 - res.hojasBuenasTotal / hojasAConsumir) * 100).toFixed(1) : 0,
-        estado_pedido_pintura: estadoAuto,
+        estado_pedido_pintura: 'borrador',
+        finalizar_pintura: false,
+      };
+      let savedId = currentItem.id;
+      if (isEditing) {
+        await ProcesoProduccion.update(currentItem.id, dataToSave);
+      } else {
+        const created = await ProcesoProduccion.create(dataToSave);
+        savedId = created.id;
+        setIsEditing(true);
+        setCurrentItem(prev => ({ ...prev, id: created.id }));
+      }
+      loadData();
+      alert('✅ Borrador guardado. Puede continuar agregando sublotes.');
+    } catch (error) {
+      console.error('Error saving borrador:', error);
+      alert('Error al guardar el borrador: ' + error.message);
+    }
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un cuero en proceso.'); return; }
+    if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
+    if (sublotes.length === 0) { alert('⚠️ Agregue al menos un sublote de pintura.'); return; }
+    if (totalHojasAsignadas > hojasAConsumir) {
+      alert(`❌ No se puede finalizar: las hojas asignadas en sublotes (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).\n\nReduzca la cantidad de hojas en alguno de los sublotes antes de continuar.`);
+      return;
+    }
+    if (hojasRestantesDistribucion !== 0) {
+      alert(`❌ No es posible finalizar: quedan ${hojasRestantesDistribucion} hojas pendientes por distribuir en sublotes.`);
+      return;
+    }
+    const errores = validarParaFinalizar();
+    if (errores.length > 0) {
+      alert('❌ No es posible finalizar el proceso:\n\n' + errores.map(e => '• ' + e).join('\n'));
+      return;
+    }
+
+    try {
+      const res = getResumen();
+      const dataToSave = {
+        ...currentItem,
+        inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
+        codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
+        hojas_a_consumir: hojasAConsumir,
+        total_hojas_enviadas_pintura: hojasAConsumir,
+        sublotes_pintura: sublotes,
+        costo_total_proceso_pintura: res.costoTotal,
+        costo_promedio_por_hoja: res.costoPorHoja,
+        hojas_buenas_finales: res.hojasBuenasTotal,
+        num_sublotes_generados: sublotes.length,
+        colores_registrados: [...new Set(sublotes.map(s => s.color_final).filter(Boolean))].join(', '),
+        tipos_acabado_registrados: [...new Set(sublotes.map(s => s.tipo_acabado).filter(Boolean))].join(', '),
+        pct_merma_total: hojasAConsumir > 0 ? ((1 - res.hojasBuenasTotal / hojasAConsumir) * 100).toFixed(1) : 0,
+        estado_pedido_pintura: 'terminado',
+        finalizar_pintura: true,
       };
 
-      // BORRADOR: solo guardar el registro, NO tocar inventario
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
         await ProcesoProduccion.create(dataToSave);
-        // NO descontar inventario al guardar borrador
       }
 
-      if (esFinalizacion) {
-        const fechaHoy = new Date().toISOString().split('T')[0];
-        // SOLO al finalizar: descontar hojas del Inventario en Proceso
-        if (cueroSeleccionado) {
-          // El inventario nunca fue descontado (borrador no toca inventario), descontar ahora al finalizar
-          const hojasActualesInventario = cueroSeleccionado.cantidad_hojas || 0;
-          const nuevaCantidad = Math.max(0, hojasActualesInventario - hojasAConsumir);
-          await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
-        }
-        for (const sub of sublotes) {
-          // Descontar insumos
-          for (const ins of (sub.insumos || [])) {
-            const insumo = insumosQuimicos.find(i => i.id === ins.item_id);
-            if (insumo && (parseFloat(ins.cantidad) || 0) > 0) {
-              await MovimientoInventario.create({ tipo_movimiento: 'salida', insumo_id: insumo.id, cantidad: -(parseFloat(ins.cantidad)), costo_unitario: parseFloat(ins.costo_unitario) || 0, fecha_movimiento: fechaHoy, referencia: currentItem.id_consecutivo, observaciones: `Pintura ${currentItem.id_consecutivo} - Sublote ${sub.codigo_sublote}` });
-              await Insumo.update(insumo.id, { stock_actual: Math.max(0, (insumo.stock_actual || 0) - parseFloat(ins.cantidad)) });
-            }
+      const fechaHoy = new Date().toISOString().split('T')[0];
+      if (cueroSeleccionado) {
+        const hojasActualesInventario = cueroSeleccionado.cantidad_hojas || 0;
+        const nuevaCantidad = Math.max(0, hojasActualesInventario - hojasAConsumir);
+        await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
+      }
+      for (const sub of sublotes) {
+        for (const ins of (sub.insumos || [])) {
+          const insumo = insumosQuimicos.find(i => i.id === ins.item_id);
+          if (insumo && (parseFloat(ins.cantidad) || 0) > 0) {
+            await MovimientoInventario.create({ tipo_movimiento: 'salida', insumo_id: insumo.id, cantidad: -(parseFloat(ins.cantidad)), costo_unitario: parseFloat(ins.costo_unitario) || 0, fecha_movimiento: fechaHoy, referencia: currentItem.id_consecutivo, observaciones: `Pintura ${currentItem.id_consecutivo} - Sublote ${sub.codigo_sublote}` });
+            await Insumo.update(insumo.id, { stock_actual: Math.max(0, (insumo.stock_actual || 0) - parseFloat(ins.cantidad)) });
           }
-          // Registrar hojas buenas en Inventario Productos Terminados
-          const hojasBuenas = parseFloat(sub.hojas_buenas) || 0;
-          if (hojasBuenas > 0) {
-            const costoSub = getCostosSublote(sub);
-            // Si el sublote tiene producto del catálogo, usar ese código
-            if (sub.producto_terminado_id && sub.producto_terminado_codigo) {
-              const existentes = productosTerminados.filter(pt => pt.codigo === sub.producto_terminado_codigo);
-              if (existentes.length > 0) {
-                const pt = existentes[0];
-                const nuevoStock = (pt.stock_actual || 0) + hojasBuenas;
-                // Costo promedio ponderado
-                const nuevoCostoProm = ((pt.stock_actual || 0) * (pt.costo_promedio || 0) + hojasBuenas * costoSub.costoPorHoja) / nuevoStock;
-                await ProductoTerminado.update(pt.id, { stock_actual: nuevoStock, costo_promedio: nuevoCostoProm, fecha_ultima_produccion: fechaHoy });
-              } else {
-                // Crear en inventario de productos terminados con el código del catálogo
-                await ProductoTerminado.create({ codigo: sub.producto_terminado_codigo, descripcion: sub.producto_terminado_nombre || sub.producto_terminado_codigo, tipo_acabado: sub.tipo_acabado, color_final: sub.color_final, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy, costo_total_acumulado: costoSub.costoTotal });
-              }
+        }
+        const hojasBuenas = parseFloat(sub.hojas_buenas) || 0;
+        if (hojasBuenas > 0) {
+          const costoSub = getCostosSublote(sub);
+          if (sub.producto_terminado_id && sub.producto_terminado_codigo) {
+            const existentes = productosTerminados.filter(pt => pt.codigo === sub.producto_terminado_codigo);
+            if (existentes.length > 0) {
+              const pt = existentes[0];
+              const nuevoStock = (pt.stock_actual || 0) + hojasBuenas;
+              const nuevoCostoProm = ((pt.stock_actual || 0) * (pt.costo_promedio || 0) + hojasBuenas * costoSub.costoPorHoja) / nuevoStock;
+              await ProductoTerminado.update(pt.id, { stock_actual: nuevoStock, costo_promedio: nuevoCostoProm, fecha_ultima_produccion: fechaHoy });
             } else {
-              // Fallback: buscar por tipo/color
-              const tipoAcabado = sub.tipo_acabado || ''; const colorFinal = sub.color_final || '';
-              const existentes = productosTerminados.filter(pt => pt.tipo_acabado === tipoAcabado && pt.color_final === colorFinal);
-              if (existentes.length > 0) {
-                await ProductoTerminado.update(existentes[0].id, { stock_actual: (existentes[0].stock_actual || 0) + hojasBuenas, costo_promedio: costoSub.costoPorHoja, fecha_ultima_produccion: fechaHoy });
-              } else {
-                const codigoAuto = `PT-${tipoAcabado.substring(0, 3)}-${colorFinal.substring(0, 5)}-${Date.now()}`.toUpperCase();
-                await ProductoTerminado.create({ codigo: codigoAuto, descripcion: `${tipoAcabado} - ${colorFinal}`.toUpperCase(), tipo_acabado: tipoAcabado, color_final: colorFinal, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy });
-              }
+              await ProductoTerminado.create({ codigo: sub.producto_terminado_codigo, descripcion: sub.producto_terminado_nombre || sub.producto_terminado_codigo, tipo_acabado: sub.tipo_acabado, color_final: sub.color_final, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy, costo_total_acumulado: costoSub.costoTotal });
+            }
+          } else {
+            const tipoAcabado = sub.tipo_acabado || ''; const colorFinal = sub.color_final || '';
+            const existentes = productosTerminados.filter(pt => pt.tipo_acabado === tipoAcabado && pt.color_final === colorFinal);
+            if (existentes.length > 0) {
+              await ProductoTerminado.update(existentes[0].id, { stock_actual: (existentes[0].stock_actual || 0) + hojasBuenas, costo_promedio: costoSub.costoPorHoja, fecha_ultima_produccion: fechaHoy });
+            } else {
+              const codigoAuto = `PT-${tipoAcabado.substring(0, 3)}-${colorFinal.substring(0, 5)}-${Date.now()}`.toUpperCase();
+              await ProductoTerminado.create({ codigo: codigoAuto, descripcion: `${tipoAcabado} - ${colorFinal}`.toUpperCase(), tipo_acabado: tipoAcabado, color_final: colorFinal, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy });
             }
           }
         }
-        alert(`✅ Proceso de pintura finalizado correctamente. Se generaron los movimientos de inventario y se actualizaron los costos de los sublotes.`);
-      } else {
-        alert(`✅ Borrador guardado correctamente.`);
       }
-
+      alert(`✅ Proceso de pintura finalizado correctamente. Se generaron los movimientos de inventario y se actualizaron los costos de los sublotes.`);
       setShowModal(false);
       loadData();
     } catch (error) {
@@ -568,79 +600,98 @@ export default function Pintura() {
                 </div>
               </div>
 
-              {/* ═══ BLOQUE 2: DISTRIBUCIÓN Y SUBLOTES ═══ */}
-              {(cueroSeleccionado || isEditing) && (
-                <div className="border-2 border-orange-400 rounded-xl overflow-hidden">
-                  <div className="bg-orange-600 text-white px-5 py-3 flex items-center justify-between">
+              {/* ══ NUEVO BLOQUE: RESUMEN Y CONTROL DE DISTRIBUCIÓN ══ */}
+              {(cueroSeleccionado || isEditing) && hojasAConsumir > 0 && (
+                <div className="border-2 border-teal-500 rounded-xl overflow-hidden">
+                  <div className="bg-teal-700 text-white px-5 py-3 flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-base">② DISTRIBUCIÓN Y CREACIÓN DE SUBLOTES DE PINTURA</h3>
-                      <p className="text-xs text-orange-200 mt-0.5">Divida las hojas en sublotes independientes por acabado/color</p>
+                      <h3 className="font-bold text-base">② RESUMEN Y CONTROL DE DISTRIBUCIÓN</h3>
+                      <p className="text-xs text-teal-200 mt-0.5">Estado en tiempo real de la distribución de hojas en sublotes</p>
                     </div>
-                    {!esFinalizado && <Button type="button" onClick={handleAgregarSublote} className="bg-white text-orange-700 hover:bg-orange-50 text-xs h-8"><Plus className="w-3 h-3 mr-1" />Agregar Sublote</Button>}
+                    {!esFinalizado && (
+                      <Button type="button" onClick={handleAgregarSublote}
+                        disabled={hojasRestantesDistribucion <= 0 && sublotes.length > 0}
+                        title={hojasRestantesDistribucion <= 0 && sublotes.length > 0 ? 'Todas las hojas ya están distribuidas' : 'Agregar nuevo sublote'}
+                        className="bg-white text-teal-700 hover:bg-teal-50 text-xs h-8 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <Plus className="w-3 h-3 mr-1" />Agregar Sublote
+                      </Button>
+                    )}
                   </div>
 
-                  {/* Indicador visual de distribución — siempre visible */}
-                  <div className="bg-orange-50 border-b border-orange-200 px-5 py-3">
-                    <div className="flex flex-wrap gap-3 text-sm">
-                      <div className="flex items-center gap-2 bg-white border border-orange-200 rounded-lg px-4 py-2">
-                        <span className="text-orange-600 font-semibold">📋 Total hojas seleccionadas:</span>
-                        <span className="font-extrabold text-orange-900 text-base">{hojasAConsumir}</span>
+                  {/* Indicadores clave */}
+                  <div className="bg-teal-50 border-b border-teal-200 px-5 py-3">
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
+                      <div className="bg-white border border-teal-200 rounded-lg p-2 text-center">
+                        <p className="text-teal-600 font-semibold">Hojas Disponibles</p>
+                        <p className="font-extrabold text-teal-900 text-lg">{hojasRealesDisponibles}</p>
                       </div>
-                      <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-4 py-2">
-                        <span className="text-blue-600 font-semibold">✅ Hojas distribuidas:</span>
-                        <span className={`font-extrabold text-base ${totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-blue-800'}`}>{totalHojasAsignadas}</span>
+                      <div className="bg-white border border-indigo-200 rounded-lg p-2 text-center">
+                        <p className="text-indigo-600 font-semibold">Hojas a Consumir</p>
+                        <p className="font-extrabold text-indigo-900 text-lg">{hojasAConsumir}</p>
                       </div>
-                      <div className="flex items-center gap-2 bg-white border border-amber-300 rounded-lg px-4 py-2">
-                        <span className={`font-semibold ${hojasRestantesDistribucion < 0 ? 'text-red-600' : hojasRestantesDistribucion === 0 ? 'text-green-600' : 'text-amber-700'}`}>
-                          {hojasRestantesDistribucion < 0 ? '❌' : hojasRestantesDistribucion === 0 ? '🎯' : '⏳'} Hojas pendientes por distribuir:
-                        </span>
-                        <span className={`font-extrabold text-base ${hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-amber-800'}`}>
-                          {hojasRestantesDistribucion}
-                        </span>
+                      <div className="bg-white border border-blue-200 rounded-lg p-2 text-center">
+                        <p className="text-blue-600 font-semibold">Hojas Distribuidas</p>
+                        <p className={`font-extrabold text-lg ${totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-blue-800'}`}>{totalHojasAsignadas}</p>
                       </div>
-                      {hojasRestantesDistribucion === 0 && sublotes.length > 0 && (
-                        <div className="flex items-center gap-1 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-green-700 font-bold text-sm">
-                          ✔ Distribución completa
-                        </div>
-                      )}
-                      {hojasRestantesDistribucion < 0 && (
-                        <div className="flex items-center gap-1 bg-red-100 border border-red-300 rounded-lg px-4 py-2 text-red-700 font-bold text-sm">
-                          ✖ Excede el total asignado
-                        </div>
-                      )}
+                      <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion < 0 ? 'bg-red-50 border-red-300' : hojasRestantesDistribucion === 0 ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
+                        <p className={`font-semibold ${hojasRestantesDistribucion < 0 ? 'text-red-600' : hojasRestantesDistribucion === 0 ? 'text-green-600' : 'text-amber-700'}`}>Hojas Pendientes</p>
+                        <p className={`font-extrabold text-lg ${hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-amber-800'}`}>{hojasRestantesDistribucion}</p>
+                      </div>
+                      <div className="bg-white border border-purple-200 rounded-lg p-2 text-center">
+                        <p className="text-purple-600 font-semibold">Sublotes Creados</p>
+                        <p className="font-extrabold text-purple-900 text-lg">{sublotes.length}</p>
+                      </div>
+                      <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion === 0 && sublotes.length > 0 ? 'bg-green-100 border-green-400' : hojasRestantesDistribucion < 0 ? 'bg-red-100 border-red-400' : 'bg-amber-100 border-amber-400'}`}>
+                        <p className="font-semibold text-slate-600">Estado</p>
+                        <p className={`font-extrabold text-sm ${hojasRestantesDistribucion === 0 && sublotes.length > 0 ? 'text-green-700' : hojasRestantesDistribucion < 0 ? 'text-red-700' : 'text-amber-800'}`}>
+                          {hojasRestantesDistribucion === 0 && sublotes.length > 0 ? '✅ Distribución Completa' : hojasRestantesDistribucion < 0 ? '❌ Excede Total' : sublotes.length === 0 ? '⏳ Sin Sublotes' : '⏳ Distribución Parcial'}
+                        </p>
+                      </div>
                     </div>
+                    {hojasRestantesDistribucion < 0 && (
+                      <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-xs text-red-800 font-semibold flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                        No se puede guardar ni finalizar: las hojas asignadas ({totalHojasAsignadas}) superan las hojas a consumir ({hojasAConsumir}). Corrija las cantidades en los sublotes.
+                      </div>
+                    )}
                   </div>
 
-                  {/* Tabla resumen de sublotes */}
+                  {/* Tabla consolidada de sublotes */}
                   {sublotes.length > 0 && (
-                    <div className="overflow-x-auto bg-white border-b border-orange-200">
+                    <div className="overflow-x-auto bg-white">
                       <table className="w-full text-xs">
-                        <thead className="bg-orange-100">
+                        <thead className="bg-teal-100 border-b border-teal-300">
                           <tr>
-                            <th className="p-2 text-left">Código Sublote</th>
-                            <th className="p-2 text-left">Tipo Acabado</th>
-                            <th className="p-2 text-left">Color Final</th>
-                            <th className="p-2 text-center">Cant. Hojas</th>
-                            <th className="p-2 text-center">% Participación</th>
-                            <th className="p-2 text-center">Estado</th>
-                            <th className="p-2 text-left">Observaciones</th>
-                            <th className="p-2 text-center">Seleccionar</th>
+                            <th className="p-2 text-left font-semibold">Código Sublote</th>
+                            <th className="p-2 text-left font-semibold">Nombre Producto Terminado</th>
+                            <th className="p-2 text-left font-semibold">Tipo Acabado</th>
+                            <th className="p-2 text-left font-semibold">Color Final</th>
+                            <th className="p-2 text-center font-semibold">Cant. Hojas</th>
+                            <th className="p-2 text-center font-semibold">Estado</th>
+                            <th className="p-2 text-center font-semibold">Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
                           {sublotes.map((sub, idx) => (
-                            <tr key={idx} className={`border-t cursor-pointer ${subloteActivoIdx === idx ? 'bg-orange-50 ring-1 ring-orange-400' : 'hover:bg-amber-50'}`} onClick={() => setSubloteActivoIdx(idx)}>
-                              <td className="p-2 font-mono font-bold text-orange-800">{sub.codigo_sublote}</td>
+                            <tr key={idx} className={`border-t ${subloteActivoIdx === idx ? 'bg-teal-50 ring-1 ring-inset ring-teal-400' : 'hover:bg-teal-50'}`}>
+                              <td className="p-2 font-mono font-bold text-teal-800">{sub.codigo_sublote}</td>
+                              <td className="p-2 font-semibold text-slate-700">{sub.producto_terminado_nombre || <span className="text-slate-400 italic">Sin asignar</span>}</td>
                               <td className="p-2">{sub.tipo_acabado || <span className="text-slate-400">—</span>}</td>
                               <td className="p-2 font-semibold">{sub.color_final || <span className="text-slate-400">—</span>}</td>
                               <td className="p-2 text-center font-bold">{sub.cantidad_hojas || 0}</td>
-                              <td className="p-2 text-center text-blue-700 font-semibold">{(sub.pct_participacion || 0).toFixed(1)}%</td>
                               <td className="p-2 text-center">
-                                <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{sub.estado || 'pendiente'}</span>
+                                <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{sub.estado === 'completado' ? 'Completo' : sub.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}</span>
                               </td>
-                              <td className="p-2 text-xs text-slate-500 max-w-[120px] truncate">{sub.observaciones || '—'}</td>
                               <td className="p-2 text-center">
-                                <button type="button" onClick={e => { e.stopPropagation(); setSubloteActivoIdx(idx); }} className={`w-3 h-3 rounded-full border-2 ${subloteActivoIdx === idx ? 'bg-orange-500 border-orange-500' : 'border-slate-400 hover:border-orange-400'}`} />
+                                <div className="flex gap-1 justify-center">
+                                  <button type="button" onClick={() => handleVerSublote(idx)} className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Ver</button>
+                                  {!esFinalizado && (
+                                    <button type="button" onClick={() => setSubloteActivoIdx(idx)} className={`px-2 py-0.5 rounded text-xs font-semibold ${subloteActivoIdx === idx ? 'bg-teal-500 text-white' : 'bg-teal-100 hover:bg-teal-200 text-teal-700'}`}>Editar</button>
+                                  )}
+                                  {!esFinalizado && (
+                                    <button type="button" onClick={() => handleEliminarSublote(idx)} className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold">Eliminar</button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -648,95 +699,117 @@ export default function Pintura() {
                       </table>
                     </div>
                   )}
-
-                  {sublotes.length === 0 ? (
-                    <div className="bg-white px-5 py-6 text-center text-slate-400 text-sm">Sin sublotes. Haga clic en "Agregar Sublote".</div>
-                  ) : (
-                    <>
-                      {/* Tabs */}
-                      <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b overflow-x-auto">
-                        {sublotes.map((sub, idx) => (
-                          <button key={idx} type="button" onClick={() => setSubloteActivoIdx(idx)}
-                            className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap ${subloteActivoIdx === idx ? 'bg-orange-100 border-orange-500 text-orange-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-orange-50'}`}>
-                            {sub.color_final || sub.tipo_acabado || `Sublote ${idx + 1}`}
-                            {!esFinalizado && <span onClick={e => { e.stopPropagation(); handleEliminarSublote(idx); }} className="ml-1 text-red-400 hover:text-red-600 font-bold">×</span>}
-                          </button>
-                        ))}
-                      </div>
-
-                      {subloteActivo && (
-                        <div className="bg-white px-5 py-4">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div><Label className="text-xs font-bold text-orange-800">Código Sublote</Label><Input value={subloteActivo.codigo_sublote || ''} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" /></div>
-                            <div>
-                              <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
-                              <Select value={subloteActivo.producto_terminado_id || ''} onValueChange={handleSeleccionarProductoCatalogo} disabled={esFinalizado}>
-                                <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
-                                <SelectContent className="max-h-48 overflow-y-auto">
-                                  {catalogoProductos.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.descripcion || p.nombre_comercial}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="col-span-2">
-                              <Label className="text-xs font-bold text-orange-800">Nombre Producto Terminado</Label>
-                              <Input readOnly value={subloteActivo.producto_terminado_nombre || ''} placeholder="Se completa al seleccionar el código..." className="bg-slate-50 text-xs cursor-not-allowed" />
-                            </div>
-                            <div>
-                              <Label className="text-xs font-bold text-orange-800">Tipo de Acabado *</Label>
-                              <Select value={subloteActivo.tipo_acabado || ''} onValueChange={v => handleSubloteFieldChange('tipo_acabado', v)} disabled={esFinalizado}>
-                                <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                <SelectContent>{TIPOS_ACABADO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs font-bold text-orange-800">Color Final *</Label>
-                              <Select value={subloteActivo.color_final || ''} onValueChange={v => handleSubloteFieldChange('color_final', v)} disabled={esFinalizado}>
-                                <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                <SelectContent className="max-h-48 overflow-y-auto">
-                                  {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.nombre_color}>{c.codigo_color} - {c.nombre_color}</SelectItem>)}
-                                  {coloresCatalogo.length === 0 && COLORES_BASE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs font-bold text-orange-800">Estado</Label>
-                              <Select value={subloteActivo.estado || 'pendiente'} onValueChange={v => handleSubloteFieldChange('estado', v)} disabled={esFinalizado}>
-                                <SelectTrigger className="text-xs h-9"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pendiente">Pendiente</SelectItem>
-                                  <SelectItem value="en_proceso">En Proceso</SelectItem>
-                                  <SelectItem value="completado">Completado</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs font-bold text-orange-800">Cantidad Hojas *</Label>
-                              <Input type="number" min="0" value={subloteActivo.cantidad_hojas || ''} disabled={esFinalizado}
-                                onChange={e => handleHojasSubloChange(e.target.value)}
-                                className={`text-xs ${hojasRestantesDistribucion < 0 ? 'border-red-400 bg-red-50' : ''}`} />
-                            </div>
-                            <div>
-                              <Label className="text-xs font-bold text-orange-800">% Participación</Label>
-                              <Input readOnly value={`${(subloteActivo.pct_participacion || 0).toFixed(1)}%`} className="bg-blue-50 text-xs text-center font-bold text-blue-800 cursor-not-allowed" />
-                            </div>
-                            <div className="col-span-2">
-                              <Label className="text-xs font-bold text-orange-800">Observaciones</Label>
-                              <Input value={subloteActivo.observaciones || ''} disabled={esFinalizado} onChange={e => handleSubloteFieldChange('observaciones', e.target.value)} className="text-xs" placeholder="Obs. del sublote..." />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </>
+                  {sublotes.length === 0 && (
+                    <div className="bg-white px-5 py-5 text-center text-slate-400 text-sm">Sin sublotes. Haga clic en "Agregar Sublote" para comenzar la distribución.</div>
                   )}
                 </div>
               )}
 
-              {/* ═══ BLOQUE 3: ÍTEMS / PRODUCTOS ═══ */}
+              {/* ═══ BLOQUE 3: DISTRIBUCIÓN Y CREACIÓN DE SUBLOTES (detalle del sublote activo) ═══ */}
+              {(cueroSeleccionado || isEditing) && hojasAConsumir > 0 && (
+                <div className="border-2 border-orange-400 rounded-xl overflow-hidden">
+                  <div className="bg-orange-600 text-white px-5 py-3 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-base">③ DISTRIBUCIÓN Y CREACIÓN DE SUBLOTES DE PINTURA</h3>
+                      <p className="text-xs text-orange-200 mt-0.5">Detalle del sublote activo — cada sublote es independiente</p>
+                    </div>
+                    {!esFinalizado && (
+                      <Button type="button" onClick={handleAgregarSublote}
+                        disabled={hojasRestantesDistribucion <= 0 && sublotes.length > 0}
+                        className="bg-white text-orange-700 hover:bg-orange-50 text-xs h-8 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <Plus className="w-3 h-3 mr-1" />Agregar Sublote
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Tabs */}
+                  {sublotes.length > 0 && (
+                    <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b overflow-x-auto">
+                      {sublotes.map((sub, idx) => (
+                        <button key={idx} type="button" onClick={() => setSubloteActivoIdx(idx)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap ${subloteActivoIdx === idx ? 'bg-orange-100 border-orange-500 text-orange-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-orange-50'}`}>
+                          {sub.color_final || sub.tipo_acabado || `Sublote ${idx + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {sublotes.length === 0 ? (
+                    <div className="bg-white px-5 py-6 text-center text-slate-400 text-sm">Sin sublotes. Haga clic en "Agregar Sublote" en el bloque de Resumen o aquí arriba.</div>
+                  ) : subloteActivo ? (
+                    <div className="bg-white px-5 py-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div><Label className="text-xs font-bold text-orange-800">Código Sublote</Label><Input value={subloteActivo.codigo_sublote || ''} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" /></div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
+                          <Select value={subloteActivo.producto_terminado_id || ''} onValueChange={handleSeleccionarProductoCatalogo} disabled={esFinalizado}>
+                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
+                            <SelectContent className="max-h-48 overflow-y-auto">
+                              {catalogoProductos.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.descripcion || p.nombre_comercial}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs font-bold text-orange-800">Nombre Producto Terminado</Label>
+                          <Input readOnly value={subloteActivo.producto_terminado_nombre || ''} placeholder="Se completa al seleccionar el código..." className="bg-slate-50 text-xs cursor-not-allowed" />
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">Tipo de Acabado *</Label>
+                          <Select value={subloteActivo.tipo_acabado || ''} onValueChange={v => handleSubloteFieldChange('tipo_acabado', v)} disabled={esFinalizado}>
+                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                            <SelectContent>{TIPOS_ACABADO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">Color Final *</Label>
+                          <Select value={subloteActivo.color_final || ''} onValueChange={v => handleSubloteFieldChange('color_final', v)} disabled={esFinalizado}>
+                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                            <SelectContent className="max-h-48 overflow-y-auto">
+                              {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.nombre_color}>{c.codigo_color} - {c.nombre_color}</SelectItem>)}
+                              {coloresCatalogo.length === 0 && COLORES_BASE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">Estado</Label>
+                          <Select value={subloteActivo.estado || 'pendiente'} onValueChange={v => handleSubloteFieldChange('estado', v)} disabled={esFinalizado}>
+                            <SelectTrigger className="text-xs h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pendiente">Pendiente</SelectItem>
+                              <SelectItem value="en_proceso">En Proceso</SelectItem>
+                              <SelectItem value="completado">Completado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">Cantidad Hojas *</Label>
+                          <Input type="number" min="0" value={subloteActivo.cantidad_hojas || ''} disabled={esFinalizado}
+                            onChange={e => handleHojasSubloChange(e.target.value)}
+                            className={`text-xs ${hojasRestantesDistribucion < 0 ? 'border-red-400 bg-red-50' : ''}`} />
+                          {hojasRestantesDistribucion < 0 && (
+                            <p className="text-xs text-red-600 mt-0.5 font-semibold">⚠ Excede en {Math.abs(hojasRestantesDistribucion)} hojas</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">% Participación</Label>
+                          <Input readOnly value={`${(subloteActivo.pct_participacion || 0).toFixed(1)}%`} className="bg-blue-50 text-xs text-center font-bold text-blue-800 cursor-not-allowed" />
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="text-xs font-bold text-orange-800">Observaciones</Label>
+                          <Input value={subloteActivo.observaciones || ''} disabled={esFinalizado} onChange={e => handleSubloteFieldChange('observaciones', e.target.value)} className="text-xs" placeholder="Obs. del sublote..." />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {/* ═══ BLOQUE 4: ÍTEMS / PRODUCTOS ═══ */}
               {subloteActivo && (
                 <div className="border-2 border-blue-400 rounded-xl overflow-hidden">
                   <div className="bg-blue-700 text-white px-5 py-3 flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-base">③ ÍTEMS / PRODUCTOS — <span className="text-blue-200 font-mono">{subloteActivo.color_final || subloteActivo.tipo_acabado || `Sublote ${subloteActivoIdx + 1}`}</span></h3>
+                      <h3 className="font-bold text-base">④ ÍTEMS / PRODUCTOS — <span className="text-blue-200 font-mono">{subloteActivo.color_final || subloteActivo.tipo_acabado || `Sublote ${subloteActivoIdx + 1}`}</span></h3>
                       <p className="text-xs text-blue-200 mt-0.5">Insumos y químicos exclusivos de este sublote</p>
                     </div>
                     {!esFinalizado && <Button type="button" onClick={handleAddInsumo} size="sm" className="bg-white text-blue-700 hover:bg-blue-50 text-xs h-8"><Plus className="w-3 h-3 mr-1" />Agregar Ítem</Button>}
@@ -841,13 +914,13 @@ export default function Pintura() {
                 </div>
               )}
 
-              {/* ═══ BLOQUE 4: CONTROL DE COSTOS ═══ */}
+              {/* ═══ BLOQUE 5: CONTROL DE COSTOS ═══ */}
               {subloteActivo && cueroSeleccionado && (() => {
                 const c = getCostosSublote(subloteActivo);
                 return (
                   <div className="border-2 border-violet-500 rounded-xl overflow-hidden shadow-md">
                     <div className="bg-violet-700 text-white px-5 py-3">
-                      <p className="font-bold text-base">④ CONTROL DE COSTOS — PINTURA</p>
+                      <p className="font-bold text-base">⑤ CONTROL DE COSTOS — PINTURA</p>
                       <p className="text-xs text-violet-200 mt-0.5">Sublote activo: <strong className="font-mono">{subloteActivo.color_final || `Sublote ${subloteActivoIdx + 1}`}</strong></p>
                     </div>
                     <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 grid grid-cols-3 gap-3">
@@ -893,12 +966,12 @@ export default function Pintura() {
                 );
               })()}
 
-              {/* ═══ BLOQUE 5: CONTROL PRODUCCIÓN FINAL ═══ */}
-              {subloteActivo && (
+              {/* ═══ BLOQUE 6: CONTROL PRODUCCIÓN FINAL — solo cuando distribución completa ═══ */}
+              {subloteActivo && hojasRestantesDistribucion === 0 && sublotes.length > 0 ? (
                 <div className="border-2 border-red-400 rounded-xl overflow-hidden">
                   <div className="bg-red-700 text-white px-5 py-3">
-                    <h3 className="font-bold text-base">⑤ CONTROL DE PRODUCCIÓN FINAL</h3>
-                    <p className="text-xs text-red-200 mt-0.5">Obligatorio antes de finalizar el proceso — Sublote activo: <strong className="font-mono">{subloteActivo.color_final || `Sublote ${subloteActivoIdx + 1}`}</strong></p>
+                    <h3 className="font-bold text-base">⑥ CONTROL DE PRODUCCIÓN FINAL</h3>
+                    <p className="text-xs text-red-200 mt-0.5">Distribución completa ✅ — Registre la producción final por sublote. Sublote activo: <strong className="font-mono">{subloteActivo.color_final || `Sublote ${subloteActivoIdx + 1}`}</strong></p>
                   </div>
 
                   {/* Formulario sublote activo */}
@@ -939,7 +1012,7 @@ export default function Pintura() {
                   </div>
 
                   {/* Tabla validación consolidada de todos los sublotes */}
-                  {sublotes.length > 0 && (
+                  {sublotes.length > 0 && hojasRestantesDistribucion === 0 && (
                     <div className="border-t border-red-200 bg-red-50 px-5 py-3">
                       <h4 className="font-bold text-sm text-red-800 mb-2">Tabla de Validación Consolidada — Todos los Sublotes</h4>
                       <div className="overflow-x-auto">
@@ -1004,15 +1077,25 @@ export default function Pintura() {
                     </div>
                   )}
                 </div>
-              )}
+              ) : sublotes.length > 0 && hojasRestantesDistribucion > 0 ? (
+                <div className="border-2 border-amber-400 rounded-xl overflow-hidden">
+                  <div className="bg-amber-500 text-white px-5 py-4 flex items-center gap-3">
+                    <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+                    <div>
+                      <h3 className="font-bold text-base">⑥ CONTROL DE PRODUCCIÓN FINAL — Bloqueado</h3>
+                      <p className="text-sm text-amber-100 mt-0.5">Este bloque se habilitará cuando todas las hojas hayan sido distribuidas en sublotes. Actualmente quedan <strong>{hojasRestantesDistribucion} hojas</strong> pendientes por distribuir.</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
-              {/* ═══ BLOQUE 6: RESUMEN CONSOLIDADO ═══ */}
+              {/* ═══ BLOQUE 7: RESUMEN CONSOLIDADO ═══ */}
               {sublotes.length > 0 && (() => {
                 const res = getResumen();
                 return (
                   <div className="border-2 border-emerald-500 rounded-xl overflow-hidden">
                     <div className="bg-emerald-700 text-white px-5 py-3">
-                      <h3 className="font-bold text-base">⑥ RESUMEN GENERAL CONSOLIDADO</h3>
+                      <h3 className="font-bold text-base">⑦ RESUMEN GENERAL CONSOLIDADO</h3>
                     </div>
                     <div className="bg-emerald-50 p-4 grid grid-cols-2 md:grid-cols-5 gap-3">
                       {[
@@ -1042,23 +1125,65 @@ export default function Pintura() {
                 <Textarea value={currentItem.observaciones || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, observaciones: e.target.value })} rows={2} />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
+              <div className="flex justify-between items-center pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cerrar</Button>
                 {!esFinalizado && (
-                  <>
-                    <Button type="submit" variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50" onClick={() => setCurrentItem(prev => ({ ...prev, finalizar_pintura: false }))}>
+                  <div className="flex gap-3">
+                    <Button type="button" variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50"
+                      onClick={handleSaveBorrador}
+                      disabled={hojasRestantesDistribucion < 0}>
                       💾 Guardar Borrador
                     </Button>
-                    <Button type="submit" disabled={!todosSublotesValidados} title={!todosSublotesValidados ? 'Valide todos los sublotes antes de finalizar' : ''}
-                      className={`${todosSublotesValidados ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}
-                      onClick={() => setCurrentItem(prev => ({ ...prev, finalizar_pintura: true }))}>
+                    <Button type="submit"
+                      disabled={!todosSublotesValidados || hojasRestantesDistribucion !== 0}
+                      title={!todosSublotesValidados ? 'Valide todos los sublotes antes de finalizar' : hojasRestantesDistribucion !== 0 ? `Quedan ${hojasRestantesDistribucion} hojas pendientes` : ''}
+                      className={`${todosSublotesValidados && hojasRestantesDistribucion === 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>
                       <CheckCircle2 className="w-4 h-4 mr-2" />Finalizar Proceso
                     </Button>
-                  </>
+                  </div>
                 )}
               </div>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ══ MODAL VER DETALLE DE SUBLOTE ══ */}
+      <Dialog open={showSubloteDetalle} onOpenChange={setShowSubloteDetalle}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>🔍 Detalle del Sublote</DialogTitle></DialogHeader>
+          {subloteDetalleIdx !== null && sublotes[subloteDetalleIdx] && (() => {
+            const s = sublotes[subloteDetalleIdx];
+            const costoIns = (s.insumos || []).reduce((acc, i) => acc + (parseFloat(i.valor_total) || 0), 0);
+            const costoMO = (s.mano_obra || []).reduce((acc, m) => acc + (parseFloat(m.total) || 0), 0);
+            return (
+              <div className="space-y-4 text-sm">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {[['Código Sublote', s.codigo_sublote], ['Nombre Producto', s.producto_terminado_nombre || '—'], ['Tipo Acabado', s.tipo_acabado || '—'], ['Color Final', s.color_final || '—'], ['Cant. Hojas', s.cantidad_hojas || 0], ['Estado', s.estado || 'pendiente'], ['Hojas Buenas', s.hojas_buenas || 0], ['Hojas Defect.', s.hojas_defectuosas || 0], ['Hojas Rechaz.', s.hojas_rechazadas || 0], ['% Participación', `${(s.pct_participacion || 0).toFixed(1)}%`], ['Costo Insumos', formatCurrency(costoIns)], ['Costo M.O.', formatCurrency(costoMO)]].map(([label, val]) => (
+                    <div key={label} className="bg-slate-50 rounded p-2"><p className="text-slate-500 font-semibold text-xs">{label}</p><p className="font-bold text-slate-800">{val}</p></div>
+                  ))}
+                </div>
+                {(s.insumos || []).length > 0 && (
+                  <div><p className="font-bold text-blue-700 mb-1">Insumos ({s.insumos.length})</p>
+                    <table className="w-full text-xs border-collapse">
+                      <thead className="bg-blue-50"><tr><th className="p-1.5 text-left">Código</th><th className="p-1.5 text-left">Producto</th><th className="p-1.5 text-right">Cant.</th><th className="p-1.5 text-right">Valor Total</th></tr></thead>
+                      <tbody>{s.insumos.map((ins, i) => <tr key={i} className="border-t"><td className="p-1.5">{ins.codigo}</td><td className="p-1.5">{ins.producto}</td><td className="p-1.5 text-right">{ins.cantidad}</td><td className="p-1.5 text-right font-semibold text-emerald-700">{formatCurrency(ins.valor_total)}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                )}
+                {(s.mano_obra || []).length > 0 && (
+                  <div><p className="font-bold text-green-700 mb-1">Mano de Obra ({s.mano_obra.length})</p>
+                    <table className="w-full text-xs border-collapse">
+                      <thead className="bg-green-50"><tr><th className="p-1.5 text-left">Detalle</th><th className="p-1.5 text-right">Cant. Hojas</th><th className="p-1.5 text-right">Valor/Hoja</th><th className="p-1.5 text-right">Total</th></tr></thead>
+                      <tbody>{s.mano_obra.map((mo, i) => <tr key={i} className="border-t"><td className="p-1.5">{mo.detalle}</td><td className="p-1.5 text-right">{mo.cantidad_hojas}</td><td className="p-1.5 text-right">{formatCurrency(mo.valor_por_hoja)}</td><td className="p-1.5 text-right font-semibold text-green-700">{formatCurrency(mo.total)}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                )}
+                {s.obs_calidad && <div className="bg-slate-50 rounded p-2 text-xs"><span className="font-semibold">Obs. Calidad:</span> {s.obs_calidad}</div>}
+              </div>
+            );
+          })()}
+          <div className="flex justify-end pt-3"><Button onClick={() => setShowSubloteDetalle(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
