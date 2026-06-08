@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Edit, Trash2, Search, X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, CheckCircle2, AlertTriangle, FolderOpen, FileText } from 'lucide-react';
 
 const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(v || 0);
 const formatDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('es-CO') : 'N/A';
@@ -276,6 +276,30 @@ export default function Pintura() {
   const [showSubloteDetalle, setShowSubloteDetalle] = useState(false);
   const [subloteDetalleIdx, setSubloteDetalleIdx] = useState(null);
 
+  // Estado para modal "Continuar Pedido"
+  const [showContinuarModal, setShowContinuarModal] = useState(false);
+  const [pedidoPendienteSeleccionado, setPedidoPendienteSeleccionado] = useState('');
+
+  // Pedidos en estado BORRADOR o EN PROCESO (pendientes)
+  const pedidosPendientes = procesos.filter(p =>
+    p.estado_pedido_pintura === 'borrador' ||
+    p.estado_pedido_pintura === 'pendiente' ||
+    p.estado_pedido_pintura === 'en_proceso' ||
+    p.estado_pedido_pintura === 'parcial'
+  );
+
+  const handleAbrirContinuarModal = () => {
+    setPedidoPendienteSeleccionado('');
+    setShowContinuarModal(true);
+  };
+
+  const handleContinuarPedido = () => {
+    const pedido = procesos.find(p => p.id === pedidoPendienteSeleccionado);
+    if (!pedido) return;
+    setShowContinuarModal(false);
+    handleOpenModal(pedido);
+  };
+
   const handleVerSublote = (idx) => { setSubloteDetalleIdx(idx); setShowSubloteDetalle(true); };
 
   const handleSaveBorrador = async () => {
@@ -489,7 +513,24 @@ export default function Pintura() {
     <div className="p-6">
       <PageHeader title="Pintura" description="Control de pintura con trazabilidad desde inventario de cueros en proceso hasta productos terminados."
         onPrint={() => window.print()}
-        actionButton={<Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-2" />Nueva Pintura</Button>}
+        actionButton={
+          <div className="flex gap-2">
+            <Button onClick={handleAbrirContinuarModal}
+              disabled={pedidosPendientes.length === 0}
+              variant="outline"
+              className="border-amber-500 text-amber-700 hover:bg-amber-50 disabled:opacity-40"
+              title={pedidosPendientes.length === 0 ? 'No hay pedidos pendientes' : `${pedidosPendientes.length} pedido(s) pendiente(s)`}>
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Continuar Pedido
+              {pedidosPendientes.length > 0 && (
+                <span className="ml-1.5 bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold">{pedidosPendientes.length}</span>
+              )}
+            </Button>
+            <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
+              <Plus className="w-4 h-4 mr-2" />Nueva Pintura
+            </Button>
+          </div>
+        }
       />
       <Card id="tabla-imprimible">
         <CardHeader><CardTitle>Listado de Procesos de Pintura</CardTitle></CardHeader>
@@ -500,10 +541,18 @@ export default function Pintura() {
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {isEditing ? 'Editar' : 'Nueva'} Pintura
-              {esFinalizado && <span className="text-red-500 text-sm ml-2">(FINALIZADO - Solo lectura)</span>}
-              {esBorradorEdicion && <span className="text-amber-600 text-sm ml-2 font-semibold">📝 BORRADOR — Continuando distribución de sublotes</span>}
+            <DialogTitle className="flex items-center gap-2">
+              {isEditing
+                ? <><FolderOpen className="w-5 h-5 text-amber-600" /><span className="text-amber-700">FLUJO 2: CONTINUAR PEDIDO</span></>
+                : <><FileText className="w-5 h-5 text-emerald-600" /><span className="text-emerald-700">FLUJO 1: NUEVO PEDIDO DE PINTURA</span></>
+              }
+              {currentItem?.id_consecutivo && (
+                <span className="ml-2 font-mono text-base font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                  {currentItem.id_consecutivo}
+                </span>
+              )}
+              {esFinalizado && <span className="text-red-500 text-sm ml-2 font-normal">(FINALIZADO — Solo lectura)</span>}
+              {esBorradorEdicion && <span className="text-amber-600 text-sm ml-2 font-semibold">📝 BORRADOR</span>}
             </DialogTitle>
           </DialogHeader>
           {currentItem && (
@@ -1184,6 +1233,106 @@ export default function Pintura() {
             );
           })()}
           <div className="flex justify-end pt-3"><Button onClick={() => setShowSubloteDetalle(false)}>Cerrar</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══ MODAL CONTINUAR PEDIDO ══ */}
+      <Dialog open={showContinuarModal} onOpenChange={setShowContinuarModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-amber-600" />
+              Continuar Pedido — Pedidos Pendientes
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+              <p className="font-semibold mb-1">📋 FLUJO 2: CONTINUAR PEDIDO</p>
+              <p>Seleccione un pedido en estado <strong>BORRADOR</strong> o <strong>EN PROCESO</strong> para continuar registrando sublotes y completar la distribución de hojas.</p>
+            </div>
+
+            {pedidosPendientes.length === 0 ? (
+              <div className="text-center py-6 text-slate-400">
+                <FileText className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p className="font-semibold">No hay pedidos pendientes</p>
+                <p className="text-xs mt-1">Todos los pedidos están finalizados o no existen registros.</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <Label className="text-sm font-bold text-slate-700">Seleccionar Pedido Pendiente *</Label>
+                  <Select value={pedidoPendienteSeleccionado} onValueChange={setPedidoPendienteSeleccionado}>
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue placeholder="— Seleccionar pedido —" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
+                      {pedidosPendientes.map(p => {
+                        const hojasDist = (p.sublotes_pintura || []).reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
+                        const hojasRestantes = (p.hojas_a_consumir || 0) - hojasDist;
+                        return (
+                          <SelectItem key={p.id} value={p.id}>
+                            <div className="flex flex-col">
+                              <span className="font-mono font-bold">{p.id_consecutivo || p.numero_proceso}</span>
+                              <span className="text-xs text-slate-500">
+                                {p.codigo_lote ? `Lote: ${p.codigo_lote} | ` : ''}{p.hojas_a_consumir || 0} hojas | {(p.sublotes_pintura?.length || 0)} sublotes | Pendientes: {hojasRestantes > 0 ? hojasRestantes : 0} hojas
+                              </span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {pedidoPendienteSeleccionado && (() => {
+                  const p = procesos.find(x => x.id === pedidoPendienteSeleccionado);
+                  if (!p) return null;
+                  const hojasDist = (p.sublotes_pintura || []).reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
+                  const hojasRestantes = (p.hojas_a_consumir || 0) - hojasDist;
+                  return (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-1.5">
+                      <p className="font-bold text-slate-700 text-sm mb-2">Resumen del Pedido Seleccionado</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          ['N° Pedido', p.id_consecutivo || p.numero_proceso],
+                          ['Fecha', formatDate(p.fecha_entrega_pintor || p.fecha_inicio)],
+                          ['Pintor', p.pintor_responsable || '—'],
+                          ['Lote Origen', p.codigo_lote || '—'],
+                          ['Hojas a Consumir', p.hojas_a_consumir || 0],
+                          ['Sublotes Creados', p.sublotes_pintura?.length || 0],
+                          ['Hojas Distribuidas', hojasDist],
+                          ['Hojas Pendientes', hojasRestantes > 0 ? hojasRestantes : 0],
+                          ['Colores Reg.', p.colores_registrados || '—'],
+                          ['Estado', (p.estado_pedido_pintura || '').toUpperCase()],
+                        ].map(([label, val]) => (
+                          <div key={label} className="bg-white rounded p-1.5 border border-slate-100">
+                            <p className="text-slate-400 text-xs">{label}</p>
+                            <p className="font-bold text-slate-800">{val}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {hojasRestantes > 0 && (
+                        <div className="mt-2 p-2 bg-amber-100 border border-amber-300 rounded text-amber-800 font-semibold text-xs flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                          Quedan <strong>{hojasRestantes} hojas</strong> por distribuir. El botón "Agregar Sublote" estará habilitado al abrir el pedido.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </>
+            )}
+          </div>
+          <div className="flex justify-between pt-2 border-t">
+            <Button variant="outline" onClick={() => setShowContinuarModal(false)}>Cancelar</Button>
+            <Button
+              onClick={handleContinuarPedido}
+              disabled={!pedidoPendienteSeleccionado}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-40">
+              <FolderOpen className="w-4 h-4 mr-2" />
+              Abrir y Continuar Pedido
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
