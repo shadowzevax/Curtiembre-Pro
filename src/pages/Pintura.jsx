@@ -137,6 +137,7 @@ export default function Pintura() {
       setCueroSeleccionado(null); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
     } else {
       setCurrentItem({ ...item, finalizar_pintura: false });
+      // Buscar en todo el inventario (sin filtro de etapa/hojas) para recuperar el cuero aunque ya esté agotado
       const inv = item.inv_proceso_id ? inventarioEnProceso.find(i => i.id === item.inv_proceso_id) : null;
       setCueroSeleccionado(inv || null);
       setHojasAConsumir(item.hojas_a_consumir || 0);
@@ -662,8 +663,7 @@ export default function Pintura() {
                               onClick={() => {
                                 setMostrarSelectorContinuar(false);
                                 setContinuarBusqueda('');
-                                setShowModal(false);
-                                setTimeout(() => handleOpenModal(p), 50);
+                                handleOpenModal(p);
                               }}
                               className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors group"
                             >
