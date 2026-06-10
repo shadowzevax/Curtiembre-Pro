@@ -144,6 +144,7 @@ export default function Pintura() {
       setSubloteActivoIdx(0);
     }
     setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
+    setMostrarSelectorContinuar(false); setContinuarBusqueda('');
     setShowModal(true);
   };
 
@@ -280,6 +281,10 @@ export default function Pintura() {
   const [showContinuarModal, setShowContinuarModal] = useState(false);
   const [pedidoPendienteSeleccionado, setPedidoPendienteSeleccionado] = useState('');
 
+  // Estado para selector inline dentro del modal
+  const [mostrarSelectorContinuar, setMostrarSelectorContinuar] = useState(false);
+  const [continuarBusqueda, setContinuarBusqueda] = useState('');
+
   // Pedidos en estado BORRADOR o EN PROCESO (pendientes)
   const pedidosPendientes = procesos.filter(p =>
     p.estado_pedido_pintura === 'borrador' ||
@@ -287,6 +292,23 @@ export default function Pintura() {
     p.estado_pedido_pintura === 'en_proceso' ||
     p.estado_pedido_pintura === 'parcial'
   );
+
+  // Solo borradores para el selector inline del modal
+  const pedidosBorrador = procesos.filter(p =>
+    p.estado_pedido_pintura === 'borrador' ||
+    p.estado_pedido_pintura === 'pendiente'
+  );
+
+  const pedidosBorradorFiltrados = pedidosBorrador.filter(p => {
+    if (!continuarBusqueda) return true;
+    const q = continuarBusqueda.toLowerCase();
+    return (
+      (p.id_consecutivo || '').toLowerCase().includes(q) ||
+      (p.numero_proceso || '').toLowerCase().includes(q) ||
+      (p.codigo_lote || '').toLowerCase().includes(q) ||
+      (p.pintor_responsable || '').toLowerCase().includes(q)
+    );
+  });
 
   const handleAbrirContinuarModal = () => {
     setPedidoPendienteSeleccionado('');
@@ -558,20 +580,143 @@ export default function Pintura() {
           {currentItem && (
             <form onSubmit={handleSave} className="space-y-5">
 
-              {/* ═══ ENCABEZADO ═══ */}
-              <div className="grid grid-cols-4 gap-4">
-                <div><Label>ID/Consecutivo</Label><Input value={currentItem.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold" /></div>
-                <div>
-                  <Label>Fecha Entrega al Pintor *</Label>
-                  <Input type="date" value={currentItem.fecha_entrega_pintor || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, fecha_entrega_pintor: e.target.value })} required />
+              {/* ═══ ENCABEZADO — SELECTOR DE FLUJO ═══ */}
+              <div className="border-2 border-slate-300 rounded-xl overflow-hidden">
+                {/* Selector de modo */}
+                <div className="bg-slate-700 text-white px-5 py-3">
+                  <h3 className="font-bold text-base mb-2">ENCABEZADO DEL PEDIDO DE PINTURA</h3>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isEditing) {
+                          if (!window.confirm('¿Cambiar a Nuevo Pedido? Se perderán los datos actuales del pedido cargado.')) return;
+                          handleOpenModal(null);
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${!isEditing ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'}`}
+                    >
+                      <FileText className="w-4 h-4" />
+                      1. Nuevo Pedido
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isEditing) {
+                          if (pedidosBorrador.length === 0) {
+                            alert('No hay pedidos en estado Borrador disponibles para continuar.');
+                            return;
+                          }
+                          // Limpiar y activar modo continuar
+                          setContinuarBusqueda('');
+                          setMostrarSelectorContinuar(true);
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${isEditing ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'}`}
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                      2. Continuar Pedido Existente
+                      {pedidosBorrador.length > 0 && !isEditing && (
+                        <span className="bg-amber-400 text-white text-xs rounded-full px-1.5 py-0.5 font-bold">{pedidosBorrador.length}</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <Label>Fecha Inicio de Pintura *</Label>
-                  <Input type="date" value={currentItem.fecha_inicio_pintura || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, fecha_inicio_pintura: e.target.value })} required />
-                </div>
-                <div>
-                  <Label>Pintor / Responsable</Label>
-                  <Input value={currentItem.pintor_responsable || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, pintor_responsable: e.target.value })} />
+
+                {/* Panel continuar pedido: selector búsqueda */}
+                {mostrarSelectorContinuar && !isEditing && (
+                  <div className="bg-amber-50 border-b-2 border-amber-300 px-5 py-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <FolderOpen className="w-5 h-5 text-amber-600" />
+                      <p className="font-bold text-amber-800 text-sm">Buscar y seleccionar pedido en estado BORRADOR</p>
+                      <button type="button" onClick={() => setMostrarSelectorContinuar(false)} className="ml-auto p-1 rounded hover:bg-amber-200 text-amber-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <Label className="text-xs font-bold text-amber-700">Buscar por Consecutivo / Lote / Pintor</Label>
+                        <Input
+                          value={continuarBusqueda}
+                          onChange={e => setContinuarBusqueda(e.target.value)}
+                          placeholder="Escriba el consecutivo, lote o nombre del pintor..."
+                          className="mt-1 text-sm border-amber-400 focus:border-amber-600"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    {/* Lista de resultados */}
+                    <div className="mt-3 max-h-56 overflow-y-auto border border-amber-200 rounded-lg bg-white divide-y divide-amber-100">
+                      {pedidosBorradorFiltrados.length === 0 ? (
+                        <div className="p-4 text-center text-slate-400 text-sm">
+                          {continuarBusqueda ? 'Sin resultados para la búsqueda.' : 'No hay pedidos en estado Borrador.'}
+                        </div>
+                      ) : (
+                        pedidosBorradorFiltrados.map(p => {
+                          const hojasDist = (p.sublotes_pintura || []).reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
+                          const hojasRest = (p.hojas_a_consumir || 0) - hojasDist;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                setMostrarSelectorContinuar(false);
+                                setContinuarBusqueda('');
+                                setShowModal(false);
+                                setTimeout(() => handleOpenModal(p), 50);
+                              }}
+                              className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors group"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <span className="font-mono font-bold text-amber-800 text-sm">{p.id_consecutivo || p.numero_proceso}</span>
+                                  <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-semibold">BORRADOR</span>
+                                </div>
+                                <span className="text-xs text-slate-400 group-hover:text-amber-600 font-semibold">→ Abrir y continuar</span>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500 flex flex-wrap gap-3">
+                                {p.codigo_lote && <span>Lote: <strong>{p.codigo_lote}</strong></span>}
+                                {p.pintor_responsable && <span>Pintor: <strong>{p.pintor_responsable}</strong></span>}
+                                <span>Hojas: <strong>{p.hojas_a_consumir || 0}</strong></span>
+                                <span>Sublotes: <strong>{p.sublotes_pintura?.length || 0}</strong></span>
+                                {hojasRest > 0 && <span className="text-amber-600 font-semibold">⏳ {hojasRest} hojas pendientes</span>}
+                                <span>Últ. guardado: {p.updated_date ? new Date(p.updated_date).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Campos del encabezado */}
+                <div className="bg-white px-5 py-4">
+                  {isEditing && (
+                    <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-xs text-amber-800">
+                      <FolderOpen className="w-4 h-4 flex-shrink-0 text-amber-600" />
+                      <span>Continuando pedido existente en estado <strong>BORRADOR</strong>. Toda la información fue recuperada automáticamente.</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div>
+                      <Label className="text-xs font-bold text-slate-600">ID / Consecutivo</Label>
+                      <Input value={currentItem.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold text-indigo-700 mt-1" />
+                      <p className="text-xs mt-0.5 text-slate-400">{isEditing ? 'Pedido recuperado' : 'Generado automáticamente'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold text-slate-600">Fecha Entrega al Pintor *</Label>
+                      <Input type="date" value={currentItem.fecha_entrega_pintor || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, fecha_entrega_pintor: e.target.value })} required className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold text-slate-600">Fecha Inicio de Pintura *</Label>
+                      <Input type="date" value={currentItem.fecha_inicio_pintura || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, fecha_inicio_pintura: e.target.value })} required className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold text-slate-600">Pintor / Responsable</Label>
+                      <Input value={currentItem.pintor_responsable || ''} disabled={esFinalizado} onChange={e => setCurrentItem({ ...currentItem, pintor_responsable: e.target.value })} className="mt-1" />
+                    </div>
+                  </div>
                 </div>
               </div>
 
