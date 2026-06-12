@@ -286,6 +286,10 @@ export default function Pintura() {
   const [mostrarSelectorContinuar, setMostrarSelectorContinuar] = useState(false);
   const [continuarBusqueda, setContinuarBusqueda] = useState('');
 
+  // Estado para buscador de producto terminado en sublote
+  const [busquedaProducto, setBusquedaProducto] = useState('');
+  const [mostrarListaProducto, setMostrarListaProducto] = useState(false);
+
   // Pedidos en estado BORRADOR o EN PROCESO (pendientes)
   const pedidosPendientes = procesos.filter(p =>
     p.estado_pedido_pintura === 'borrador' ||
@@ -794,114 +798,58 @@ export default function Pintura() {
                 </div>
               </div>
 
-              {/* ══ NUEVO BLOQUE: RESUMEN Y CONTROL DE DISTRIBUCIÓN ══ */}
-              {(cueroSeleccionado || isEditing) && hojasAConsumir > 0 && (
-                <div className="border-2 border-teal-500 rounded-xl overflow-hidden">
-                  <div className="bg-teal-700 text-white px-5 py-3 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-base">② RESUMEN Y CONTROL DE DISTRIBUCIÓN</h3>
-                      <p className="text-xs text-teal-200 mt-0.5">Estado en tiempo real de la distribución de hojas en sublotes</p>
-                    </div>
-                    {!esFinalizado && (
-                      <Button type="button" onClick={handleAgregarSublote}
-                        disabled={hojasRestantesDistribucion <= 0 && sublotes.length > 0}
-                        title={hojasRestantesDistribucion <= 0 && sublotes.length > 0 ? 'Todas las hojas ya están distribuidas' : 'Agregar nuevo sublote'}
-                        className="bg-white text-teal-700 hover:bg-teal-50 text-xs h-8 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <Plus className="w-3 h-3 mr-1" />Agregar Sublote
-                      </Button>
-                    )}
+              {/* ══ BLOQUE 2: RESUMEN Y CONTROL DE DISTRIBUCIÓN — siempre visible ══ */}
+              <div className="border-2 border-teal-500 rounded-xl overflow-hidden">
+                <div className="bg-teal-700 text-white px-5 py-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-base">② RESUMEN Y CONTROL DE DISTRIBUCIÓN</h3>
+                    <p className="text-xs text-teal-200 mt-0.5">Estado en tiempo real de la distribución de hojas en sublotes</p>
                   </div>
-
-                  {/* Indicadores clave */}
-                  <div className="bg-teal-50 border-b border-teal-200 px-5 py-3">
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
-                      <div className="bg-white border border-teal-200 rounded-lg p-2 text-center">
-                        <p className="text-teal-600 font-semibold">Hojas Disponibles</p>
-                        <p className="font-extrabold text-teal-900 text-lg">{hojasRealesDisponibles}</p>
-                      </div>
-                      <div className="bg-white border border-indigo-200 rounded-lg p-2 text-center">
-                        <p className="text-indigo-600 font-semibold">Hojas a Consumir</p>
-                        <p className="font-extrabold text-indigo-900 text-lg">{hojasAConsumir}</p>
-                      </div>
-                      <div className="bg-white border border-blue-200 rounded-lg p-2 text-center">
-                        <p className="text-blue-600 font-semibold">Hojas Distribuidas</p>
-                        <p className={`font-extrabold text-lg ${totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-blue-800'}`}>{totalHojasAsignadas}</p>
-                      </div>
-                      <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion < 0 ? 'bg-red-50 border-red-300' : hojasRestantesDistribucion === 0 ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
-                        <p className={`font-semibold ${hojasRestantesDistribucion < 0 ? 'text-red-600' : hojasRestantesDistribucion === 0 ? 'text-green-600' : 'text-amber-700'}`}>Hojas Pendientes</p>
-                        <p className={`font-extrabold text-lg ${hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-amber-800'}`}>{hojasRestantesDistribucion}</p>
-                      </div>
-                      <div className="bg-white border border-purple-200 rounded-lg p-2 text-center">
-                        <p className="text-purple-600 font-semibold">Sublotes Creados</p>
-                        <p className="font-extrabold text-purple-900 text-lg">{sublotes.length}</p>
-                      </div>
-                      <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion === 0 && sublotes.length > 0 ? 'bg-green-100 border-green-400' : hojasRestantesDistribucion < 0 ? 'bg-red-100 border-red-400' : 'bg-amber-100 border-amber-400'}`}>
-                        <p className="font-semibold text-slate-600">Estado</p>
-                        <p className={`font-extrabold text-sm ${hojasRestantesDistribucion === 0 && sublotes.length > 0 ? 'text-green-700' : hojasRestantesDistribucion < 0 ? 'text-red-700' : 'text-amber-800'}`}>
-                          {hojasRestantesDistribucion === 0 && sublotes.length > 0 ? '✅ Distribución Completa' : hojasRestantesDistribucion < 0 ? '❌ Excede Total' : sublotes.length === 0 ? '⏳ Sin Sublotes' : '⏳ Distribución Parcial'}
-                        </p>
-                      </div>
-                    </div>
-                    {hojasRestantesDistribucion < 0 && (
-                      <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-xs text-red-800 font-semibold flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                        No se puede guardar ni finalizar: las hojas asignadas ({totalHojasAsignadas}) superan las hojas a consumir ({hojasAConsumir}). Corrija las cantidades en los sublotes.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Tabla consolidada de sublotes */}
-                  {sublotes.length > 0 && (
-                    <div className="overflow-x-auto bg-white">
-                      <table className="w-full text-xs">
-                        <thead className="bg-teal-100 border-b border-teal-300">
-                          <tr>
-                            <th className="p-2 text-left font-semibold">Código Sublote</th>
-                            <th className="p-2 text-left font-semibold">Nombre Producto Terminado</th>
-                            <th className="p-2 text-left font-semibold">Tipo Acabado</th>
-                            <th className="p-2 text-left font-semibold">Color Final</th>
-                            <th className="p-2 text-center font-semibold">Cant. Hojas</th>
-                            <th className="p-2 text-center font-semibold">Estado</th>
-                            <th className="p-2 text-center font-semibold">Acciones</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sublotes.map((sub, idx) => (
-                            <tr key={idx} className={`border-t ${subloteActivoIdx === idx ? 'bg-teal-50 ring-1 ring-inset ring-teal-400' : 'hover:bg-teal-50'}`}>
-                              <td className="p-2 font-mono font-bold text-teal-800">{sub.codigo_sublote}</td>
-                              <td className="p-2 font-semibold text-slate-700">{sub.producto_terminado_nombre || <span className="text-slate-400 italic">Sin asignar</span>}</td>
-                              <td className="p-2">{sub.tipo_acabado || <span className="text-slate-400">—</span>}</td>
-                              <td className="p-2 font-semibold">{sub.color_final || <span className="text-slate-400">—</span>}</td>
-                              <td className="p-2 text-center font-bold">{sub.cantidad_hojas || 0}</td>
-                              <td className="p-2 text-center">
-                                <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{sub.estado === 'completado' ? 'Completo' : sub.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}</span>
-                              </td>
-                              <td className="p-2 text-center">
-                                <div className="flex gap-1 justify-center">
-                                  <button type="button" onClick={() => handleVerSublote(idx)} className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Ver</button>
-                                  {!esFinalizado && (
-                                    <button type="button" onClick={() => setSubloteActivoIdx(idx)} className={`px-2 py-0.5 rounded text-xs font-semibold ${subloteActivoIdx === idx ? 'bg-teal-500 text-white' : 'bg-teal-100 hover:bg-teal-200 text-teal-700'}`}>Editar</button>
-                                  )}
-                                  {!esFinalizado && (
-                                    <button type="button" onClick={() => handleEliminarSublote(idx)} className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold">Eliminar</button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {sublotes.length === 0 && (
-                    <div className="bg-white px-5 py-5 text-center text-slate-400 text-sm">Sin sublotes. Haga clic en "Agregar Sublote" para comenzar la distribución.</div>
+                  {!esFinalizado && (
+                    <Button type="button" onClick={handleAgregarSublote}
+                      disabled={hojasRestantesDistribucion <= 0 && sublotes.length > 0}
+                      title={hojasRestantesDistribucion <= 0 && sublotes.length > 0 ? 'Todas las hojas ya están distribuidas' : 'Agregar nuevo sublote'}
+                      className="bg-white text-teal-700 hover:bg-teal-50 text-xs h-8 disabled:opacity-40 disabled:cursor-not-allowed">
+                      <Plus className="w-3 h-3 mr-1" />Agregar Sublote
+                    </Button>
                   )}
                 </div>
-              )}
+                <div className="bg-teal-50 border-b border-teal-200 px-5 py-3">
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
+                    <div className="bg-white border border-teal-200 rounded-lg p-2 text-center"><p className="text-teal-600 font-semibold">Hojas Disponibles</p><p className="font-extrabold text-teal-900 text-lg">{hojasRealesDisponibles}</p></div>
+                    <div className="bg-white border border-indigo-200 rounded-lg p-2 text-center"><p className="text-indigo-600 font-semibold">Hojas a Consumir</p><p className="font-extrabold text-indigo-900 text-lg">{hojasAConsumir}</p></div>
+                    <div className="bg-white border border-blue-200 rounded-lg p-2 text-center"><p className="text-blue-600 font-semibold">Hojas Distribuidas</p><p className={`font-extrabold text-lg ${totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-blue-800'}`}>{totalHojasAsignadas}</p></div>
+                    <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion < 0 ? 'bg-red-50 border-red-300' : hojasRestantesDistribucion === 0 ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}><p className={`font-semibold ${hojasRestantesDistribucion < 0 ? 'text-red-600' : hojasRestantesDistribucion === 0 ? 'text-green-600' : 'text-amber-700'}`}>Hojas Pendientes</p><p className={`font-extrabold text-lg ${hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-amber-800'}`}>{hojasRestantesDistribucion}</p></div>
+                    <div className="bg-white border border-purple-200 rounded-lg p-2 text-center"><p className="text-purple-600 font-semibold">Sublotes Creados</p><p className="font-extrabold text-purple-900 text-lg">{sublotes.length}</p></div>
+                    <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion === 0 && sublotes.length > 0 ? 'bg-green-100 border-green-400' : hojasRestantesDistribucion < 0 ? 'bg-red-100 border-red-400' : 'bg-amber-100 border-amber-400'}`}><p className="font-semibold text-slate-600">Estado</p><p className={`font-extrabold text-sm ${hojasRestantesDistribucion === 0 && sublotes.length > 0 ? 'text-green-700' : hojasRestantesDistribucion < 0 ? 'text-red-700' : 'text-amber-800'}`}>{hojasRestantesDistribucion === 0 && sublotes.length > 0 ? '✅ Distribución Completa' : hojasRestantesDistribucion < 0 ? '❌ Excede Total' : sublotes.length === 0 ? '⏳ Sin Sublotes' : '⏳ Distribución Parcial'}</p></div>
+                  </div>
+                  {hojasRestantesDistribucion < 0 && (<div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-xs text-red-800 font-semibold flex items-center gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0" />No se puede guardar ni finalizar: las hojas asignadas ({totalHojasAsignadas}) superan las hojas a consumir ({hojasAConsumir}). Corrija las cantidades en los sublotes.</div>)}
+                </div>
+                {sublotes.length > 0 && (
+                  <div className="overflow-x-auto bg-white">
+                    <table className="w-full text-xs">
+                      <thead className="bg-teal-100 border-b border-teal-300"><tr><th className="p-2 text-left font-semibold">Código Sublote</th><th className="p-2 text-left font-semibold">Nombre Producto Terminado</th><th className="p-2 text-left font-semibold">Tipo Acabado</th><th className="p-2 text-left font-semibold">Color Final</th><th className="p-2 text-center font-semibold">Cant. Hojas</th><th className="p-2 text-center font-semibold">Estado</th><th className="p-2 text-center font-semibold">Acciones</th></tr></thead>
+                      <tbody>
+                        {sublotes.map((sub, idx) => (
+                          <tr key={idx} className={`border-t ${subloteActivoIdx === idx ? 'bg-teal-50 ring-1 ring-inset ring-teal-400' : 'hover:bg-teal-50'}`}>
+                            <td className="p-2 font-mono font-bold text-teal-800">{sub.codigo_sublote}</td>
+                            <td className="p-2 font-semibold text-slate-700">{sub.producto_terminado_nombre || <span className="text-slate-400 italic">Sin asignar</span>}</td>
+                            <td className="p-2">{sub.tipo_acabado || <span className="text-slate-400">—</span>}</td>
+                            <td className="p-2 font-semibold">{sub.color_final || <span className="text-slate-400">—</span>}</td>
+                            <td className="p-2 text-center font-bold">{sub.cantidad_hojas || 0}</td>
+                            <td className="p-2 text-center"><span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{sub.estado === 'completado' ? 'Completo' : sub.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}</span></td>
+                            <td className="p-2 text-center"><div className="flex gap-1 justify-center"><button type="button" onClick={() => handleVerSublote(idx)} className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Ver</button>{!esFinalizado && (<button type="button" onClick={() => setSubloteActivoIdx(idx)} className={`px-2 py-0.5 rounded text-xs font-semibold ${subloteActivoIdx === idx ? 'bg-teal-500 text-white' : 'bg-teal-100 hover:bg-teal-200 text-teal-700'}`}>Editar</button>)}{!esFinalizado && (<button type="button" onClick={() => handleEliminarSublote(idx)} className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold">Eliminar</button>)}</div></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {sublotes.length === 0 && (<div className="bg-white px-5 py-5 text-center text-slate-400 text-sm">Sin sublotes. Haga clic en "Agregar Sublote" para comenzar la distribución.</div>)}
+              </div>
 
-              {/* ═══ BLOQUE 3: DISTRIBUCIÓN Y CREACIÓN DE SUBLOTES (detalle del sublote activo) ═══ */}
-              {(cueroSeleccionado || isEditing) && hojasAConsumir > 0 && (
-                <div className="border-2 border-orange-400 rounded-xl overflow-hidden">
+              {/* ═══ BLOQUE 3: DISTRIBUCIÓN Y CREACIÓN DE SUBLOTES ═══ */}
+              <div className="border-2 border-orange-400 rounded-xl overflow-hidden">
                   <div className="bg-orange-600 text-white px-5 py-3 flex items-center justify-between">
                     <div>
                       <h3 className="font-bold text-base">③ DISTRIBUCIÓN Y CREACIÓN DE SUBLOTES DE PINTURA</h3>
@@ -936,12 +884,38 @@ export default function Pintura() {
                         <div><Label className="text-xs font-bold text-orange-800">Código Sublote</Label><Input value={subloteActivo.codigo_sublote || ''} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" /></div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
-                          <Select value={subloteActivo.producto_terminado_id || ''} onValueChange={handleSeleccionarProductoCatalogo} disabled={esFinalizado}>
-                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar producto..." /></SelectTrigger>
-                            <SelectContent className="max-h-48 overflow-y-auto">
-                              {catalogoProductos.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.descripcion || p.nombre_comercial}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
+                          <div className="relative mt-1">
+                            <Input
+                              value={busquedaProducto || (subloteActivo.producto_terminado_id ? (catalogoProductos.find(p => p.id === subloteActivo.producto_terminado_id)?.codigo + ' — ' + (catalogoProductos.find(p => p.id === subloteActivo.producto_terminado_id)?.descripcion || '')) : '')}
+                              onChange={e => { setBusquedaProducto(e.target.value); setMostrarListaProducto(true); if (!e.target.value) { setSubloteActivo({ producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '' }); } }}
+                              onFocus={() => { setBusquedaProducto(''); setMostrarListaProducto(true); }}
+                              placeholder="Buscar o seleccionar producto..."
+                              className="text-xs h-9 pr-7"
+                              disabled={esFinalizado}
+                            />
+                            {subloteActivo.producto_terminado_id && !busquedaProducto && (
+                              <button type="button" onClick={() => { setBusquedaProducto(''); setMostrarListaProducto(false); setSubloteActivo({ producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '' }); }} className="absolute right-2 top-2 text-slate-400 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+                            )}
+                            {mostrarListaProducto && !esFinalizado && (
+                              <div className="absolute z-50 w-full bg-white border border-orange-300 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
+                                {catalogoProductos
+                                  .filter(p => !busquedaProducto || `${p.codigo} ${p.descripcion || ''} ${p.nombre_comercial || ''}`.toLowerCase().includes(busquedaProducto.toLowerCase()))
+                                  .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                                  .map(p => (
+                                    <button key={p.id} type="button"
+                                      className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-orange-100 last:border-0"
+                                      onMouseDown={() => { handleSeleccionarProductoCatalogo(p.id); setBusquedaProducto(''); setMostrarListaProducto(false); }}>
+                                      <span className="font-mono font-bold text-orange-800">{p.codigo}</span>
+                                      <span className="ml-2 text-slate-600">{p.descripcion || p.nombre_comercial}</span>
+                                    </button>
+                                  ))}
+                                {catalogoProductos.filter(p => !busquedaProducto || `${p.codigo} ${p.descripcion || ''} ${p.nombre_comercial || ''}`.toLowerCase().includes(busquedaProducto.toLowerCase())).length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-slate-400">Sin resultados.</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {mostrarListaProducto && <div className="fixed inset-0 z-40" onClick={() => setMostrarListaProducto(false)} />}
                         </div>
                         <div className="col-span-2">
                           <Label className="text-xs font-bold text-orange-800">Nombre Producto Terminado</Label>
@@ -995,11 +969,10 @@ export default function Pintura() {
                       </div>
                     </div>
                   ) : null}
-                </div>
-              )}
+              </div>
 
               {/* ═══ BLOQUE 4: ÍTEMS / PRODUCTOS ═══ */}
-              {subloteActivo && (
+              {subloteActivo ? (
                 <div className="border-2 border-blue-400 rounded-xl overflow-hidden">
                   <div className="bg-blue-700 text-white px-5 py-3 flex items-center justify-between">
                     <div>
@@ -1106,10 +1079,10 @@ export default function Pintura() {
                     </table>
                   </div>
                 </div>
-              )}
+              ) : <div className="border-2 border-blue-200 rounded-xl p-4 text-center text-slate-400 text-sm">Agregue un sublote para gestionar ítems y mano de obra.</div>}
 
               {/* ═══ BLOQUE 5: CONTROL DE COSTOS ═══ */}
-              {subloteActivo && cueroSeleccionado && (() => {
+              {subloteActivo && cueroSeleccionado ? (() => {
                 const c = getCostosSublote(subloteActivo);
                 return (
                   <div className="border-2 border-violet-500 rounded-xl overflow-hidden shadow-md">
@@ -1158,10 +1131,10 @@ export default function Pintura() {
                     </div>
                   </div>
                 );
-              })()}
+              })() : <div className="border-2 border-violet-200 rounded-xl p-4 text-center text-slate-400 text-sm">Seleccione un cuero en proceso y agregue un sublote para ver el control de costos.</div>}
 
-              {/* ═══ BLOQUE 6: CONTROL PRODUCCIÓN FINAL — solo cuando distribución completa ═══ */}
-              {subloteActivo && hojasRestantesDistribucion === 0 && sublotes.length > 0 ? (
+              {/* ═══ BLOQUE 6: CONTROL PRODUCCIÓN FINAL — siempre visible cuando hay sublotes ═══ */}
+              {subloteActivo ? (
                 <div className="border-2 border-red-400 rounded-xl overflow-hidden">
                   <div className="bg-red-700 text-white px-5 py-3">
                     <h3 className="font-bold text-base">⑥ CONTROL DE PRODUCCIÓN FINAL</h3>
@@ -1218,7 +1191,7 @@ export default function Pintura() {
                   </div>
 
                   {/* Tabla validación consolidada de todos los sublotes */}
-                  {sublotes.length > 0 && hojasRestantesDistribucion === 0 && (
+                  {sublotes.length > 0 && (
                     <div className="border-t border-red-200 bg-red-50 px-5 py-3">
                       <h4 className="font-bold text-sm text-red-800 mb-2">Tabla de Validación Consolidada — Todos los Sublotes</h4>
                       <div className="overflow-x-auto">
@@ -1283,20 +1256,10 @@ export default function Pintura() {
                     </div>
                   )}
                 </div>
-              ) : sublotes.length > 0 && hojasRestantesDistribucion > 0 ? (
-                <div className="border-2 border-amber-400 rounded-xl overflow-hidden">
-                  <div className="bg-amber-500 text-white px-5 py-4 flex items-center gap-3">
-                    <AlertTriangle className="w-6 h-6 flex-shrink-0" />
-                    <div>
-                      <h3 className="font-bold text-base">⑥ CONTROL DE PRODUCCIÓN FINAL — Bloqueado</h3>
-                      <p className="text-sm text-amber-100 mt-0.5">Este bloque se habilitará cuando todas las hojas hayan sido distribuidas en sublotes. Actualmente quedan <strong>{hojasRestantesDistribucion} hojas</strong> pendientes por distribuir.</p>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+              ) : <div className="border-2 border-red-200 rounded-xl p-4 text-center text-slate-400 text-sm">Agregue un sublote para registrar el control de producción final.</div>}
 
-              {/* ═══ BLOQUE 7: RESUMEN CONSOLIDADO ═══ */}
-              {sublotes.length > 0 && (() => {
+              {/* ═══ BLOQUE 7: RESUMEN CONSOLIDADO — siempre visible ═══ */}
+              {sublotes.length > 0 ? (() => {
                 const res = getResumen();
                 return (
                   <div className="border-2 border-emerald-500 rounded-xl overflow-hidden">
@@ -1324,7 +1287,7 @@ export default function Pintura() {
                     </div>
                   </div>
                 );
-              })()}
+              })() : <div className="border-2 border-emerald-200 rounded-xl p-4 text-center text-slate-400 text-sm">⑦ RESUMEN GENERAL CONSOLIDADO — Disponible cuando haya sublotes creados.</div>}
 
               <div>
                 <Label>Observaciones Generales</Label>
