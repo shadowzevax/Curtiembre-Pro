@@ -700,7 +700,7 @@ export default function Pintura() {
                   )}
                   <div className="grid grid-cols-4 gap-4">
                     <div>
-                      <Label className="text-xs font-bold text-slate-600">ID / Consecutivo</Label>
+                      <Label className="text-xs font-bold text-slate-600">ID / No. de Pedido</Label>
                       <Input value={currentItem.id_consecutivo || ''} readOnly className="bg-gray-100 font-mono font-bold text-indigo-700 mt-1" />
                       <p className="text-xs mt-0.5 text-slate-400">{isEditing ? 'Pedido recuperado' : 'Generado automáticamente'}</p>
                     </div>
@@ -916,13 +916,13 @@ export default function Pintura() {
                     )}
                   </div>
 
-                  {/* Tabs */}
+                  {/* Tabs — identificados por código único del sublote */}
                   {sublotes.length > 0 && (
                     <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b overflow-x-auto">
                       {sublotes.map((sub, idx) => (
                         <button key={idx} type="button" onClick={() => setSubloteActivoIdx(idx)}
                           className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap ${subloteActivoIdx === idx ? 'bg-orange-100 border-orange-500 text-orange-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-orange-50'}`}>
-                          {sub.color_final || sub.tipo_acabado || `Sublote ${idx + 1}`}
+                          {sub.codigo_sublote || `Sublote ${idx + 1}`}
                         </button>
                       ))}
                     </div>
@@ -1165,8 +1165,20 @@ export default function Pintura() {
                 <div className="border-2 border-red-400 rounded-xl overflow-hidden">
                   <div className="bg-red-700 text-white px-5 py-3">
                     <h3 className="font-bold text-base">⑥ CONTROL DE PRODUCCIÓN FINAL</h3>
-                    <p className="text-xs text-red-200 mt-0.5">Distribución completa ✅ — Registre la producción final por sublote. Sublote activo: <strong className="font-mono">{subloteActivo.color_final || `Sublote ${subloteActivoIdx + 1}`}</strong></p>
+                    <p className="text-xs text-red-200 mt-0.5">Distribución completa ✅ — Registre la producción final por sublote. Sublote activo: <strong className="font-mono">{subloteActivo.codigo_sublote || `Sublote ${subloteActivoIdx + 1}`}</strong></p>
                   </div>
+
+                  {/* Selector de sublotes — igual que en bloque ③ */}
+                  {sublotes.length > 0 && (
+                    <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b overflow-x-auto">
+                      {sublotes.map((sub, idx) => (
+                        <button key={idx} type="button" onClick={() => setSubloteActivoIdx(idx)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap ${subloteActivoIdx === idx ? 'bg-red-100 border-red-500 text-red-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-red-50'}`}>
+                          {sub.codigo_sublote || `Sublote ${idx + 1}`}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Formulario sublote activo */}
                   <div className="bg-white px-5 py-4">
