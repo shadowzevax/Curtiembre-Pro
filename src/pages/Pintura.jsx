@@ -102,10 +102,10 @@ export default function Pintura() {
   const hojasComprometidasEdicion = esBorradorEdicion ? hojasAConsumir : 0;
 
   const cueroDisponible = inventarioEnProceso.filter(i => {
-    const etapaOk = i.etapa_actual === 'recurtido' || i.etapa_actual === 'curtido' || i.etapa_actual === 'limpieza';
+    const etapaOk = i.etapa_actual === 'recurtido' || i.etapa_actual === 'curtido' || i.etapa_actual === 'limpieza' || i.etapa_actual === 'pintura';
     if (!etapaOk) return false;
-    // Incluir el cuero seleccionado en edición aunque tenga 0 hojas (están comprometidas)
-    if (isEditing && currentItem?.inv_proceso_id === i.id) return true;
+    // Incluir el cuero seleccionado actual aunque tenga 0 hojas (ya comprometidas en este borrador)
+    if (cueroSeleccionado?.id === i.id) return true;
     return (i.cantidad_hojas || 0) > 0;
   });
   const cueroFiltrado = cueroDisponible.filter(i => {
@@ -176,11 +176,19 @@ export default function Pintura() {
   const handleEliminarSublote = (idx) => {
     setSublotes(prev => prev.filter((_, i) => i !== idx));
     setSubloteActivoIdx(Math.max(0, subloteActivoIdx - 1));
+    setBusquedaProducto(''); setBusquedaNombre('');
+    setMostrarListaProducto(false); setMostrarListaNombre(false);
   };
   const handleSubloteFieldChange = (field, value) => setSubloteActivo({ [field]: value });
+  // Al cambiar de sublote activo limpiar buscadores
+  const handleCambiarSubloteActivo = (idx) => {
+    setSubloteActivoIdx(idx);
+    setBusquedaProducto(''); setBusquedaNombre('');
+    setMostrarListaProducto(false); setMostrarListaNombre(false);
+  };
 
   // Seleccionar producto terminado del inventario de productos terminados para el sublote
-  const handleSeleccionarProductoCatalogo = (productoId) => {
+  const handleSeleccionarProductoTerminado = (productoId) => {
     const prod = productosTerminados.find(p => p.id === productoId);
     if (!prod) return;
     setSubloteActivo({
@@ -189,7 +197,13 @@ export default function Pintura() {
       producto_terminado_nombre: prod.descripcion || '',
       tipo_acabado: prod.acabado || subloteActivo?.tipo_acabado || '',
     });
+    setBusquedaProducto('');
+    setBusquedaNombre('');
+    setMostrarListaProducto(false);
+    setMostrarListaNombre(false);
   };
+  // Alias para compatibilidad con onMouseDown existente
+  const handleSeleccionarProductoCatalogo = handleSeleccionarProductoTerminado;
   const handleHojasSubloChange = (value) => {
     setSublotes(prev => { const u = prev.map((s, i) => i === subloteActivoIdx ? { ...s, cantidad_hojas: parseFloat(value) || 0 } : s); return recalcPct(u, hojasAConsumir); });
   };
@@ -293,9 +307,11 @@ export default function Pintura() {
   const [mostrarSelectorContinuar, setMostrarSelectorContinuar] = useState(false);
   const [continuarBusqueda, setContinuarBusqueda] = useState('');
 
-  // Estado para buscador de producto terminado en sublote
+  // Estado para buscadores de producto terminado en sublote (por código y por nombre)
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [mostrarListaProducto, setMostrarListaProducto] = useState(false);
+  const [busquedaNombre, setBusquedaNombre] = useState('');
+  const [mostrarListaNombre, setMostrarListaNombre] = useState(false);
 
   // Pedidos en estado BORRADOR o EN PROCESO (pendientes)
   const pedidosPendientes = procesos.filter(p =>
@@ -704,9 +720,12 @@ export default function Pintura() {
                 {/* Campos del encabezado */}
                 <div className="bg-white px-5 py-4">
                   {isEditing && (
-                    <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-xs text-amber-800">
-                      <FolderOpen className="w-4 h-4 flex-shrink-0 text-amber-600" />
-                      <span>Continuando pedido existente en estado <strong>BORRADOR</strong>. Toda la información fue recuperada automáticamente.</span>
+                    <div className={`mb-3 p-2 rounded-lg flex items-center gap-2 text-xs ${sublotes.length > 0 || hojasAConsumir > 0 ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                      <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                      {sublotes.length > 0 || hojasAConsumir > 0
+                        ? <span>Pedido recuperado. <strong>{sublotes.length} sublote(s)</strong> · <strong>{hojasAConsumir} hojas</strong> a consumir · Producto: <strong>{cueroSeleccionado?.codigo_lote || currentItem?.codigo_lote || '—'}</strong></span>
+                        : <span>Pedido abierto en modo edición. Complete los datos del formulario y guarde el borrador.</span>
+                      }
                     </div>
                   )}
                   <div className="grid grid-cols-4 gap-4">
@@ -851,7 +870,7 @@ export default function Pintura() {
                             <td className="p-2 font-semibold">{sub.color_final || <span className="text-slate-400">—</span>}</td>
                             <td className="p-2 text-center font-bold">{sub.cantidad_hojas || 0}</td>
                             <td className="p-2 text-center"><span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{sub.estado === 'completado' ? 'Completo' : sub.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}</span></td>
-                            <td className="p-2 text-center"><div className="flex gap-1 justify-center"><button type="button" onClick={() => handleVerSublote(idx)} className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Ver</button>{!esFinalizado && (<button type="button" onClick={() => setSubloteActivoIdx(idx)} className={`px-2 py-0.5 rounded text-xs font-semibold ${subloteActivoIdx === idx ? 'bg-teal-500 text-white' : 'bg-teal-100 hover:bg-teal-200 text-teal-700'}`}>Editar</button>)}{!esFinalizado && (<button type="button" onClick={() => handleEliminarSublote(idx)} className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold">Eliminar</button>)}</div></td>
+                            <td className="p-2 text-center"><div className="flex gap-1 justify-center"><button type="button" onClick={() => handleVerSublote(idx)} className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Ver</button>{!esFinalizado && (<button type="button" onClick={() => handleCambiarSubloteActivo(idx)} className={`px-2 py-0.5 rounded text-xs font-semibold ${subloteActivoIdx === idx ? 'bg-teal-500 text-white' : 'bg-teal-100 hover:bg-teal-200 text-teal-700'}`}>Editar</button>)}{!esFinalizado && (<button type="button" onClick={() => handleEliminarSublote(idx)} className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold">Eliminar</button>)}</div></td>
                           </tr>
                         ))}
                       </tbody>
@@ -881,7 +900,7 @@ export default function Pintura() {
                   {sublotes.length > 0 && (
                     <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b overflow-x-auto">
                       {sublotes.map((sub, idx) => (
-                        <button key={idx} type="button" onClick={() => setSubloteActivoIdx(idx)}
+                        <button key={idx} type="button" onClick={() => handleCambiarSubloteActivo(idx)}
                           className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap ${subloteActivoIdx === idx ? 'bg-orange-100 border-orange-500 text-orange-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-orange-50'}`}>
                           {sub.codigo_sublote || `Sublote ${idx + 1}`}
                         </button>
@@ -931,8 +950,39 @@ export default function Pintura() {
                           {mostrarListaProducto && <div className="fixed inset-0 z-40" onClick={() => setMostrarListaProducto(false)} />}
                         </div>
                         <div className="col-span-2">
-                          <Label className="text-xs font-bold text-orange-800">Nombre Producto Terminado</Label>
-                          <Input readOnly value={subloteActivo.producto_terminado_nombre || ''} placeholder="Se completa al seleccionar el código..." className="bg-slate-50 text-xs cursor-not-allowed" />
+                          <Label className="text-xs font-bold text-orange-800">Nombre / Descripción Producto Terminado</Label>
+                          <div className="relative mt-1">
+                            <Input
+                              value={busquedaNombre || (subloteActivo.producto_terminado_id ? (productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id)?.descripcion || '') : '')}
+                              onChange={e => { setBusquedaNombre(e.target.value); setMostrarListaNombre(true); if (!e.target.value) { setSubloteActivo({ producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '' }); } }}
+                              onFocus={() => { setBusquedaNombre(''); setMostrarListaNombre(true); }}
+                              placeholder="Buscar por nombre/descripción..."
+                              className="text-xs h-9 pr-7"
+                              disabled={esFinalizado}
+                            />
+                            {subloteActivo.producto_terminado_id && !busquedaNombre && (
+                              <button type="button" onClick={() => { setBusquedaNombre(''); setMostrarListaNombre(false); setSubloteActivo({ producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '' }); }} className="absolute right-2 top-2 text-slate-400 hover:text-red-500"><X className="w-3.5 h-3.5" /></button>
+                            )}
+                            {mostrarListaNombre && !esFinalizado && (
+                              <div className="absolute z-50 w-full bg-white border border-orange-300 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
+                                {productosTerminados
+                                  .filter(p => !busquedaNombre || (p.descripcion || '').toLowerCase().includes(busquedaNombre.toLowerCase()))
+                                  .sort((a, b) => (a.descripcion || '').localeCompare(b.descripcion || ''))
+                                  .map(p => (
+                                    <button key={p.id} type="button"
+                                      className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-orange-100 last:border-0"
+                                      onMouseDown={() => { handleSeleccionarProductoTerminado(p.id); }}>
+                                      <span className="text-slate-700 font-semibold">{p.descripcion}</span>
+                                      <span className="ml-2 font-mono text-orange-700 text-xs">({p.codigo})</span>
+                                    </button>
+                                  ))}
+                                {productosTerminados.filter(p => !busquedaNombre || (p.descripcion || '').toLowerCase().includes(busquedaNombre.toLowerCase())).length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-slate-400">Sin resultados.</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {mostrarListaNombre && <div className="fixed inset-0 z-40" onClick={() => setMostrarListaNombre(false)} />}
                         </div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Tipo de Acabado *</Label>
@@ -1158,7 +1208,7 @@ export default function Pintura() {
                   {sublotes.length > 0 && (
                     <div className="flex items-center gap-1 px-4 pt-3 bg-white border-b overflow-x-auto">
                       {sublotes.map((sub, idx) => (
-                        <button key={idx} type="button" onClick={() => setSubloteActivoIdx(idx)}
+                        <button key={idx} type="button" onClick={() => handleCambiarSubloteActivo(idx)}
                           className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap ${subloteActivoIdx === idx ? 'bg-red-100 border-red-500 text-red-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-red-50'}`}>
                           {sub.codigo_sublote || `Sublote ${idx + 1}`}
                         </button>
