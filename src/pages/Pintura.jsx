@@ -23,9 +23,9 @@ const TIPOS_ACABADO = [
 ];
 const COLORES_BASE = ['NEGRO', 'CAFÉ', 'AZUL', 'MIEL', 'BLANCO', 'QUEBRACHO', 'ROJO', 'VERDE'];
 
-const newSublote = (idx, codigoBase) => ({
+const newSublote = (idx, idPedido) => ({
   id_temp: `sub-${Date.now()}-${idx}`,
-  codigo_sublote: codigoBase ? `${codigoBase}-PIN-${String(idx + 1).padStart(2, '0')}` : `SUB-${String(idx + 1).padStart(2, '0')}`,
+  codigo_sublote: idPedido ? `${idPedido}-S${String(idx + 1).padStart(2, '0')}` : `SUB-${String(idx + 1).padStart(2, '0')}`,
   producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '',
   tipo_acabado: '', color_final: '', cantidad_hojas: 0, pct_participacion: 0,
   observaciones: '', estado: 'pendiente', insumos: [], mano_obra: [],
@@ -137,11 +137,14 @@ export default function Pintura() {
       setCueroSeleccionado(null); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
     } else {
       setCurrentItem({ ...item, finalizar_pintura: false });
-      // Buscar en todo el inventario (sin filtro de etapa/hojas) para recuperar el cuero aunque ya esté agotado
-      const inv = item.inv_proceso_id ? inventarioEnProceso.find(i => i.id === item.inv_proceso_id) : null;
+      // Buscar en todo el inventario (sin filtro de etapa/hojas) para recuperar el producto aunque ya esté agotado
+      const inv = item.inv_proceso_id
+        ? inventarioEnProceso.find(i => i.id === item.inv_proceso_id) || null
+        : null;
       setCueroSeleccionado(inv || null);
       setHojasAConsumir(item.hojas_a_consumir || 0);
-      setSublotes(item.sublotes_pintura || []);
+      // Recuperar sublotes tal como fueron guardados
+      setSublotes(Array.isArray(item.sublotes_pintura) ? item.sublotes_pintura : []);
       setSubloteActivoIdx(0);
     }
     setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
@@ -167,7 +170,7 @@ export default function Pintura() {
 
   const handleAgregarSublote = () => {
     const idx = sublotes.length;
-    setSublotes(prev => [...prev, newSublote(idx, cueroSeleccionado?.codigo_lote || '')]);
+    setSublotes(prev => [...prev, newSublote(idx, currentItem?.id_consecutivo || '')]);
     setSubloteActivoIdx(idx);
   };
   const handleEliminarSublote = (idx) => {
@@ -176,15 +179,15 @@ export default function Pintura() {
   };
   const handleSubloteFieldChange = (field, value) => setSubloteActivo({ [field]: value });
 
-  // Seleccionar producto terminado del catálogo para el sublote
+  // Seleccionar producto terminado del inventario de productos terminados para el sublote
   const handleSeleccionarProductoCatalogo = (productoId) => {
-    const prod = catalogoProductos.find(p => p.id === productoId);
+    const prod = productosTerminados.find(p => p.id === productoId);
     if (!prod) return;
     setSubloteActivo({
       producto_terminado_id: prod.id,
       producto_terminado_codigo: prod.codigo,
-      producto_terminado_nombre: prod.descripcion || prod.nombre_comercial || '',
-      tipo_acabado: prod.tipo_acabado || subloteActivo?.tipo_acabado || '',
+      producto_terminado_nombre: prod.descripcion || '',
+      tipo_acabado: prod.acabado || subloteActivo?.tipo_acabado || '',
     });
   };
   const handleHojasSubloChange = (value) => {
@@ -278,6 +281,10 @@ export default function Pintura() {
   const [showSubloteDetalle, setShowSubloteDetalle] = useState(false);
   const [subloteDetalleIdx, setSubloteDetalleIdx] = useState(null);
 
+  // Estado para modal de sublotes en listado principal
+  const [showSubletesModal, setShowSubletesModal] = useState(false);
+  const [subletesModalItem, setSubletesModalItem] = useState(null);
+
   // Estado para modal "Continuar Pedido"
   const [showContinuarModal, setShowContinuarModal] = useState(false);
   const [pedidoPendienteSeleccionado, setPedidoPendienteSeleccionado] = useState('');
@@ -330,9 +337,8 @@ export default function Pintura() {
   const handleVerSublote = (idx) => { setSubloteDetalleIdx(idx); setShowSubloteDetalle(true); };
 
   const handleSaveBorrador = async () => {
-    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un cuero en proceso.'); return; }
+    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un producto en proceso.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
-    if (sublotes.length === 0) { alert('⚠️ Agregue al menos un sublote de pintura.'); return; }
     if (totalHojasAsignadas > hojasAConsumir) {
       alert(`❌ No se puede guardar: las hojas asignadas en sublotes (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).\n\nReduzca la cantidad de hojas en alguno de los sublotes antes de continuar.`);
       return;
@@ -375,7 +381,7 @@ export default function Pintura() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un cuero en proceso.'); return; }
+    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un producto en proceso.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
     if (sublotes.length === 0) { alert('⚠️ Agregue al menos un sublote de pintura.'); return; }
     if (totalHojasAsignadas > hojasAConsumir) {
@@ -479,15 +485,12 @@ export default function Pintura() {
       <table className="w-full text-xs border-collapse">
         <thead className="bg-slate-100 border-b-2 border-slate-300">
           <tr>
-            <th className="p-2 text-left font-semibold">N° Proceso</th>
+            <th className="p-2 text-left font-semibold">N° de Pedido</th>
+            <th className="p-2 text-center font-semibold">N° Sublotes</th>
             <th className="p-2 text-left font-semibold">Fecha Reg.</th>
-            <th className="p-2 text-left font-semibold">Lote Origen</th>
-            <th className="p-2 text-left font-semibold">Pintor</th>
+            <th className="p-2 text-left font-semibold">Producto en Proceso</th>
             <th className="p-2 text-center font-semibold">Hojas Cons.</th>
             <th className="p-2 text-center font-semibold">Hojas Buenas</th>
-            <th className="p-2 text-center font-semibold">Sublotes</th>
-            <th className="p-2 text-left font-semibold">Colores</th>
-            <th className="p-2 text-left font-semibold">Acabados</th>
             <th className="p-2 text-right font-semibold">Costo/Hoja</th>
             <th className="p-2 text-center font-semibold">% Merma</th>
             <th className="p-2 text-left font-semibold">Estado</th>
@@ -496,20 +499,23 @@ export default function Pintura() {
           </tr>
         </thead>
         <tbody>
-          {procesos.length === 0 && <tr><td colSpan={14} className="p-6 text-center text-slate-400">Sin procesos registrados.</td></tr>}
-          {procesos.map(item => (
+          {procesos.length === 0 && <tr><td colSpan={11} className="p-6 text-center text-slate-400">Sin procesos registrados.</td></tr>}
+          {procesos.map(item => {
+            const numSublotes = item.num_sublotes_generados || (item.sublotes_pintura?.length) || 0;
+            return (
             <tr key={item.id} className="border-b hover:bg-slate-50">
               <td className="p-2 font-mono font-bold text-indigo-700">{item.id_consecutivo || item.numero_proceso || 'N/A'}</td>
+              <td className="p-2 text-center">
+                <button
+                  className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-bold hover:bg-indigo-200 cursor-pointer underline-offset-1"
+                  onClick={() => { setSubletesModalItem(item); setShowSubletesModal(true); }}
+                  title="Ver sublotes"
+                >{numSublotes}</button>
+              </td>
               <td className="p-2">{formatDate(item.fecha_entrega_pintor || item.fecha_inicio)}</td>
               <td className="p-2 font-mono text-xs">{item.codigo_lote || '—'}</td>
-              <td className="p-2">{item.pintor_responsable || '—'}</td>
               <td className="p-2 text-center font-bold">{item.hojas_a_consumir || 0}</td>
               <td className="p-2 text-center font-bold text-green-700">{item.hojas_buenas_finales || 0}</td>
-              <td className="p-2 text-center">
-                <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-bold">{item.num_sublotes_generados || (item.sublotes_pintura?.length) || 0}</span>
-              </td>
-              <td className="p-2 max-w-[100px] truncate" title={item.colores_registrados}>{item.colores_registrados || '—'}</td>
-              <td className="p-2 max-w-[90px] truncate" title={item.tipos_acabado_registrados}>{item.tipos_acabado_registrados || '—'}</td>
               <td className="p-2 text-right font-semibold text-emerald-700">{formatCurrency(item.costo_promedio_por_hoja)}</td>
               <td className="p-2 text-center">
                 {item.pct_merma_total != null ? <span className={`font-bold ${parseFloat(item.pct_merma_total) > 10 ? 'text-red-600' : 'text-slate-700'}`}>{item.pct_merma_total}%</span> : '—'}
@@ -530,7 +536,8 @@ export default function Pintura() {
                 </div>
               </td>
             </tr>
-          ))}
+          );})}
+          
         </tbody>
       </table>
     </div>
@@ -727,8 +734,8 @@ export default function Pintura() {
               {/* ═══ BLOQUE 1: SELECCIÓN CUEROS EN PROCESO ═══ */}
               <div className="border-2 border-indigo-400 rounded-xl overflow-hidden">
                 <div className="bg-indigo-700 text-white px-5 py-3">
-                  <h3 className="font-bold text-base">① SELECCIÓN DE CUEROS EN PROCESO</h3>
-                  <p className="text-xs text-indigo-200 mt-0.5">Busque y seleccione hojas disponibles desde el inventario de cueros en proceso</p>
+                  <h3 className="font-bold text-base">① SELECCIÓN DE PRODUCTOS EN PROCESO</h3>
+                  <p className="text-xs text-indigo-200 mt-0.5">Busque y seleccione hojas disponibles desde el inventario de productos en proceso</p>
                 </div>
                 <div className="bg-indigo-50 border-b border-indigo-200 px-5 py-3 grid grid-cols-3 gap-3">
                   <div>
@@ -756,11 +763,17 @@ export default function Pintura() {
                   </div>
                 </div>
                 <div className="bg-white px-5 py-3">
-                  <Label className="text-xs font-bold text-indigo-700">Seleccionar Cuero en Proceso *</Label>
+                  <Label className="text-xs font-bold text-indigo-700">Productos en Proceso *</Label>
                   <Select value={cueroSeleccionado?.id || ''} onValueChange={handleSeleccionarCuero} disabled={esFinalizado}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Seleccionar cuero..." /></SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Seleccionar producto en proceso..." /></SelectTrigger>
                     <SelectContent className="max-h-60 overflow-y-auto">
-                      {cueroFiltrado.length === 0 && <SelectItem value="__e__" disabled>Sin cueros disponibles</SelectItem>}
+                      {/* Si hay un cuero seleccionado (ej. recuperado de borrador) y no está en la lista filtrada, mostrarlo igual */}
+                      {cueroSeleccionado && !cueroFiltrado.find(i => i.id === cueroSeleccionado.id) && (
+                        <SelectItem key={cueroSeleccionado.id} value={cueroSeleccionado.id}>
+                          ★ {cueroSeleccionado.codigo_lote} — {cueroSeleccionado.descripcion || cueroSeleccionado.color_base} (Recuperado del borrador)
+                        </SelectItem>
+                      )}
+                      {cueroFiltrado.length === 0 && !cueroSeleccionado && <SelectItem value="__e__" disabled>Sin productos en proceso disponibles</SelectItem>}
                       {cueroFiltrado.map(inv => (
                         <SelectItem key={inv.id} value={inv.id}>
                           {inv.codigo_lote} — {inv.descripcion || inv.color_base} ({inv.cantidad_hojas} hojas | {inv.peso_actual} kg) [{(inv.etapa_actual || '').toUpperCase()}]
@@ -886,7 +899,7 @@ export default function Pintura() {
                           <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
                           <div className="relative mt-1">
                             <Input
-                              value={busquedaProducto || (subloteActivo.producto_terminado_id ? (catalogoProductos.find(p => p.id === subloteActivo.producto_terminado_id)?.codigo + ' — ' + (catalogoProductos.find(p => p.id === subloteActivo.producto_terminado_id)?.descripcion || '')) : '')}
+                              value={busquedaProducto || (subloteActivo.producto_terminado_id ? (productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id)?.codigo + ' — ' + (productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id)?.descripcion || '')) : '')}
                               onChange={e => { setBusquedaProducto(e.target.value); setMostrarListaProducto(true); if (!e.target.value) { setSubloteActivo({ producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '' }); } }}
                               onFocus={() => { setBusquedaProducto(''); setMostrarListaProducto(true); }}
                               placeholder="Buscar o seleccionar producto..."
@@ -898,18 +911,18 @@ export default function Pintura() {
                             )}
                             {mostrarListaProducto && !esFinalizado && (
                               <div className="absolute z-50 w-full bg-white border border-orange-300 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-0.5">
-                                {catalogoProductos
-                                  .filter(p => !busquedaProducto || `${p.codigo} ${p.descripcion || ''} ${p.nombre_comercial || ''}`.toLowerCase().includes(busquedaProducto.toLowerCase()))
+                                {productosTerminados
+                                  .filter(p => !busquedaProducto || `${p.codigo} ${p.descripcion || ''}`.toLowerCase().includes(busquedaProducto.toLowerCase()))
                                   .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
                                   .map(p => (
                                     <button key={p.id} type="button"
                                       className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-orange-100 last:border-0"
                                       onMouseDown={() => { handleSeleccionarProductoCatalogo(p.id); setBusquedaProducto(''); setMostrarListaProducto(false); }}>
                                       <span className="font-mono font-bold text-orange-800">{p.codigo}</span>
-                                      <span className="ml-2 text-slate-600">{p.descripcion || p.nombre_comercial}</span>
+                                      <span className="ml-2 text-slate-600">{p.descripcion}</span>
                                     </button>
                                   ))}
-                                {catalogoProductos.filter(p => !busquedaProducto || `${p.codigo} ${p.descripcion || ''} ${p.nombre_comercial || ''}`.toLowerCase().includes(busquedaProducto.toLowerCase())).length === 0 && (
+                                {productosTerminados.filter(p => !busquedaProducto || `${p.codigo} ${p.descripcion || ''}`.toLowerCase().includes(busquedaProducto.toLowerCase())).length === 0 && (
                                   <div className="px-3 py-2 text-xs text-slate-400">Sin resultados.</div>
                                 )}
                               </div>
@@ -1453,6 +1466,53 @@ export default function Pintura() {
               Abrir y Continuar Pedido
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══ MODAL SUBLOTES LISTADO PRINCIPAL ══ */}
+      <Dialog open={showSubletesModal} onOpenChange={setShowSubletesModal}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>N° Sublotes — {subletesModalItem?.id_consecutivo || subletesModalItem?.numero_proceso || 'N/A'}</DialogTitle>
+          </DialogHeader>
+          {subletesModalItem && (() => {
+            const subs = subletesModalItem.sublotes_pintura || [];
+            return subs.length === 0 ? (
+              <div className="py-8 text-center text-slate-400">Sin sublotes registrados para este pedido.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-indigo-700 text-white">
+                    <tr>
+                      <th className="p-2 text-left">Código Sublote</th>
+                      <th className="p-2 text-center">Hojas Asignadas</th>
+                      <th className="p-2 text-left">Color Final</th>
+                      <th className="p-2 text-left">Tipo Acabado</th>
+                      <th className="p-2 text-center">Estado</th>
+                      <th className="p-2 text-left">Fecha Creación</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subs.map((s, i) => (
+                      <tr key={i} className="border-t hover:bg-indigo-50">
+                        <td className="p-2 font-mono font-bold text-indigo-800">{s.codigo_sublote || '—'}</td>
+                        <td className="p-2 text-center font-bold">{s.cantidad_hojas || 0}</td>
+                        <td className="p-2 font-semibold">{s.color_final || '—'}</td>
+                        <td className="p-2">{s.tipo_acabado || '—'}</td>
+                        <td className="p-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${s.estado === 'completado' ? 'bg-green-100 text-green-700' : s.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {s.estado === 'completado' ? 'Completo' : s.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}
+                          </span>
+                        </td>
+                        <td className="p-2 text-slate-500">{subletesModalItem.fecha_entrega_pintor ? formatDate(subletesModalItem.fecha_entrega_pintor) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+          <div className="flex justify-end pt-3"><Button onClick={() => setShowSubletesModal(false)}>Cerrar</Button></div>
         </DialogContent>
       </Dialog>
 
