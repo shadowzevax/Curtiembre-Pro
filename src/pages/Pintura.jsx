@@ -343,11 +343,18 @@ export default function Pintura() {
     setShowContinuarModal(true);
   };
 
-  const handleContinuarPedido = () => {
-    const pedido = procesos.find(p => p.id === pedidoPendienteSeleccionado);
-    if (!pedido) return;
+  const handleContinuarPedido = async () => {
+    if (!pedidoPendienteSeleccionado) return;
     setShowContinuarModal(false);
-    handleOpenModal(pedido);
+    // Fetch directo por ID para garantizar que sublotes_pintura no esté truncado
+    try {
+      const pedidoCompleto = await ProcesoProduccion.get(pedidoPendienteSeleccionado);
+      handleOpenModal(pedidoCompleto || procesos.find(p => p.id === pedidoPendienteSeleccionado));
+    } catch (e) {
+      console.error('Error fetching pedido:', e);
+      const pedido = procesos.find(p => p.id === pedidoPendienteSeleccionado);
+      if (pedido) handleOpenModal(pedido);
+    }
   };
 
   const handleVerSublote = (idx) => { setSubloteDetalleIdx(idx); setShowSubloteDetalle(true); };
@@ -687,10 +694,15 @@ export default function Pintura() {
                             <button
                               key={p.id}
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
                                 setMostrarSelectorContinuar(false);
                                 setContinuarBusqueda('');
-                                handleOpenModal(p);
+                                try {
+                                  const pedidoCompleto = await ProcesoProduccion.get(p.id);
+                                  handleOpenModal(pedidoCompleto || p);
+                                } catch (e) {
+                                  handleOpenModal(p);
+                                }
                               }}
                               className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors group"
                             >
@@ -918,7 +930,7 @@ export default function Pintura() {
                           <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
                           <div className="relative mt-1">
                             <Input
-                              value={busquedaProducto || (subloteActivo.producto_terminado_id ? (productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id)?.codigo + ' — ' + (productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id)?.descripcion || '')) : '')}
+                              value={busquedaProducto || (subloteActivo.producto_terminado_id ? (productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id)?.codigo || '') : '')}
                               onChange={e => { setBusquedaProducto(e.target.value); setMostrarListaProducto(true); if (!e.target.value) { setSubloteActivo({ producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '' }); } }}
                               onFocus={() => { setBusquedaProducto(''); setMostrarListaProducto(true); }}
                               placeholder="Buscar o seleccionar producto..."
