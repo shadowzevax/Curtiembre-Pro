@@ -59,6 +59,11 @@
       "format": "date",
       "description": "Fecha de entrega al pintor"
     },
+    "fecha_inicio_pintura": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de inicio de pintura"
+    },
     "estado": {
       "type": "string",
       "enum": [
@@ -74,8 +79,10 @@
     "estado_pedido_pintura": {
       "type": "string",
       "enum": [
+        "borrador",
         "pendiente",
         "parcial",
+        "en_proceso",
         "terminado"
       ],
       "description": "Estado del pedido en pintura"
@@ -118,6 +125,15 @@
       "type": "string",
       "description": "N\u00famero del pedido relacionado"
     },
+    "inv_proceso_id": {
+      "type": "string",
+      "description": "ID del registro en InventarioEnProceso seleccionado para pintura"
+    },
+    "hojas_a_consumir": {
+      "type": "number",
+      "default": 0,
+      "description": "Hojas a consumir en este proceso de pintura"
+    },
     "cantidad_entrada": {
       "type": "number",
       "default": 0,
@@ -137,6 +153,167 @@
       "type": "number",
       "default": 0,
       "description": "Hojas pendientes por pintar"
+    },
+    "hojas_buenas_finales": {
+      "type": "number",
+      "default": 0,
+      "description": "Total hojas buenas finales del proceso"
+    },
+    "num_sublotes_generados": {
+      "type": "number",
+      "default": 0,
+      "description": "N\u00famero de sublotes generados"
+    },
+    "costo_total_proceso_pintura": {
+      "type": "number",
+      "default": 0,
+      "description": "Costo total del proceso de pintura"
+    },
+    "costo_promedio_por_hoja": {
+      "type": "number",
+      "default": 0,
+      "description": "Costo promedio por hoja"
+    },
+    "colores_registrados": {
+      "type": "string",
+      "description": "Colores registrados en el proceso (separados por coma)"
+    },
+    "tipos_acabado_registrados": {
+      "type": "string",
+      "description": "Tipos de acabado registrados"
+    },
+    "pct_merma_total": {
+      "type": "number",
+      "default": 0,
+      "description": "Porcentaje de merma total"
+    },
+    "finalizar_pintura": {
+      "type": "boolean",
+      "default": false,
+      "description": "Indica si el proceso fue finalizado"
+    },
+    "sublotes_pintura": {
+      "type": "array",
+      "description": "Sublotes del proceso de pintura con toda la informaci\u00f3n operativa",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id_temp": {
+            "type": "string"
+          },
+          "codigo_sublote": {
+            "type": "string"
+          },
+          "producto_terminado_id": {
+            "type": "string"
+          },
+          "producto_terminado_codigo": {
+            "type": "string"
+          },
+          "producto_terminado_nombre": {
+            "type": "string"
+          },
+          "tipo_acabado": {
+            "type": "string"
+          },
+          "color_final": {
+            "type": "string"
+          },
+          "cantidad_hojas": {
+            "type": "number",
+            "default": 0
+          },
+          "pct_participacion": {
+            "type": "number",
+            "default": 0
+          },
+          "observaciones": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string",
+            "default": "pendiente"
+          },
+          "hojas_iniciales": {
+            "type": "number",
+            "default": 0
+          },
+          "hojas_buenas": {
+            "type": "number",
+            "default": 0
+          },
+          "hojas_defectuosas": {
+            "type": "number",
+            "default": 0
+          },
+          "hojas_rechazadas": {
+            "type": "number",
+            "default": 0
+          },
+          "obs_calidad": {
+            "type": "string"
+          },
+          "insumos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "string"
+                },
+                "codigo": {
+                  "type": "string"
+                },
+                "producto": {
+                  "type": "string"
+                },
+                "cantidad": {
+                  "type": "number",
+                  "default": 0
+                },
+                "costo_unitario": {
+                  "type": "number",
+                  "default": 0
+                },
+                "iva": {
+                  "type": "number",
+                  "default": 0.19
+                },
+                "valor_total": {
+                  "type": "number",
+                  "default": 0
+                }
+              }
+            }
+          },
+          "mano_obra": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "detalle": {
+                  "type": "string"
+                },
+                "cantidad_hojas": {
+                  "type": "number",
+                  "default": 0
+                },
+                "valor_por_hoja": {
+                  "type": "number",
+                  "default": 0
+                },
+                "total": {
+                  "type": "number",
+                  "default": 0
+                },
+                "observacion": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "entregas_parciales": {
       "type": "array",

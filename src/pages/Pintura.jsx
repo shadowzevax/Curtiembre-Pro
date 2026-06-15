@@ -402,33 +402,47 @@ export default function Pintura() {
     }
     try {
       const res = getResumen();
+      // Capturar snapshot de sublotes en este momento exacto para persistir
+      const sublotesSnapshot = JSON.parse(JSON.stringify(sublotes));
       const dataToSave = {
-        ...currentItem,
+        tipo_proceso: 'pintura',
+        numero_proceso: currentItem.numero_proceso || currentItem.id_consecutivo || '',
+        id_consecutivo: currentItem.id_consecutivo || '',
+        fecha_inicio: currentItem.fecha_inicio || new Date().toISOString().split('T')[0],
+        fecha_entrega_pintor: currentItem.fecha_entrega_pintor || '',
+        fecha_inicio_pintura: currentItem.fecha_inicio_pintura || '',
+        pintor_responsable: currentItem.pintor_responsable || '',
+        observaciones: currentItem.observaciones || '',
         inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
         codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
         hojas_a_consumir: hojasAConsumir,
         total_hojas_enviadas_pintura: hojasAConsumir,
-        sublotes_pintura: sublotes,
+        sublotes_pintura: sublotesSnapshot,
         costo_total_proceso_pintura: res.costoTotal,
         costo_promedio_por_hoja: res.costoPorHoja,
         hojas_buenas_finales: res.hojasBuenasTotal,
-        num_sublotes_generados: sublotes.length,
-        colores_registrados: [...new Set(sublotes.map(s => s.color_final).filter(Boolean))].join(', '),
-        tipos_acabado_registrados: [...new Set(sublotes.map(s => s.tipo_acabado).filter(Boolean))].join(', '),
-        pct_merma_total: hojasAConsumir > 0 ? ((1 - res.hojasBuenasTotal / hojasAConsumir) * 100).toFixed(1) : 0,
+        num_sublotes_generados: sublotesSnapshot.length,
+        colores_registrados: [...new Set(sublotesSnapshot.map(s => s.color_final).filter(Boolean))].join(', '),
+        tipos_acabado_registrados: [...new Set(sublotesSnapshot.map(s => s.tipo_acabado).filter(Boolean))].join(', '),
+        pct_merma_total: hojasAConsumir > 0 ? parseFloat(((1 - res.hojasBuenasTotal / hojasAConsumir) * 100).toFixed(1)) : 0,
         estado_pedido_pintura: 'borrador',
         finalizar_pintura: false,
       };
+
+      let savedId = currentItem.id;
       if (isEditing && currentItem.id) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
-        const created = await ProcesoProduccion.create({ ...dataToSave, tipo_proceso: 'pintura' });
-        // Actualizar estado sincrónicamente para evitar duplicados en guardados consecutivos
-        setCurrentItem(prev => ({ ...prev, id: created.id, tipo_proceso: 'pintura' }));
+        const created = await ProcesoProduccion.create(dataToSave);
+        savedId = created.id;
+        // Actualizar currentItem con el ID real antes de cualquier otra operación
+        setCurrentItem(prev => ({ ...prev, ...dataToSave, id: savedId }));
         setIsEditing(true);
       }
-      await loadData();
-      alert('✅ Borrador guardado. Puede continuar agregando sublotes.');
+
+      // Recargar lista en background sin cerrar modal ni perder estado local
+      loadData();
+      alert('✅ Borrador guardado correctamente. ' + sublotesSnapshot.length + ' sublote(s) guardados.');
     } catch (error) {
       console.error('Error saving borrador:', error);
       alert('Error al guardar el borrador: ' + error.message);
