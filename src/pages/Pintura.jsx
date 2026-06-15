@@ -81,13 +81,14 @@ export default function Pintura() {
     try {
       const [procesosData, insumosData, inventarioData, productosTermData, coloresData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
-        Insumo.list(), InventarioEnProceso.list(), ProductoTerminado.list(), ColorPintura.list()
+        Insumo.list(), InventarioEnProceso.list(),
+        ProductoTerminado.filter({ categoria: 'producto_terminado' }),
+        ColorPintura.list()
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumosQuimicos(Array.isArray(insumosData) ? insumosData : []);
       setInventarioEnProceso(Array.isArray(inventarioData) ? inventarioData : []);
-      // Solo productos terminados con stock > 0 (tabla "Stock de Productos Terminados")
-      setProductosTerminados(Array.isArray(productosTermData) ? productosTermData.filter(p => (p.stock_actual || 0) > 0) : []);
+      setProductosTerminados(Array.isArray(productosTermData) ? productosTermData : []);
       setColoresCatalogo(Array.isArray(coloresData) ? coloresData.filter(c => c.estado === 'activo') : []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
