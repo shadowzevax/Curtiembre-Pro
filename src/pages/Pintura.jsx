@@ -121,34 +121,30 @@ export default function Pintura() {
     : 0;
 
   const handleOpenModal = (item = null) => {
-    setIsEditing(!!item);
-    if (!item) {
-      const year = new Date().getFullYear();
-      const consecutivos = procesos.map(p => { const m = p.id_consecutivo?.match(/PINT-(\d+)-\d{4}/); return m ? parseInt(m[1]) : 0; });
-      const next = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
-      const idConsecutivo = `PINT-${String(next).padStart(4, '0')}-${year}`;
-      setCurrentItem({
-        tipo_proceso: 'pintura', numero_proceso: idConsecutivo, id_consecutivo: idConsecutivo,
-        fecha_inicio: new Date().toISOString().split('T')[0],
-        fecha_entrega_pintor: new Date().toISOString().split('T')[0],
-        fecha_inicio_pintura: new Date().toISOString().split('T')[0],
-        pintor_responsable: '', estado_pedido_pintura: 'pendiente', observaciones: '', finalizar_pintura: false,
-      });
-      setCueroSeleccionado(null); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
-    } else {
-      setCurrentItem({ ...item, finalizar_pintura: false });
-      // Buscar en todo el inventario (sin filtro de etapa/hojas) para recuperar el producto aunque ya esté agotado
-      const inv = item.inv_proceso_id
-        ? inventarioEnProceso.find(i => i.id === item.inv_proceso_id) || null
-        : null;
-      setCueroSeleccionado(inv || null);
-      setHojasAConsumir(item.hojas_a_consumir || 0);
-      // Recuperar sublotes tal como fueron guardados
-      setSublotes(Array.isArray(item.sublotes_pintura) ? item.sublotes_pintura : []);
-      setSubloteActivoIdx(0);
+    if (item) {
+      // Para edición siempre usar cargarPedidoCompleto (se llama después del fetch por ID)
+      // Esta rama solo se llama directamente para nuevo pedido
+      cargarPedidoCompleto(item);
+      return;
     }
+    // Nuevo pedido
+    setIsEditing(false);
+    const year = new Date().getFullYear();
+    const consecutivos = procesos.map(p => { const m = p.id_consecutivo?.match(/PINT-(\d+)-\d{4}/); return m ? parseInt(m[1]) : 0; });
+    const next = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
+    const idConsecutivo = `PINT-${String(next).padStart(4, '0')}-${year}`;
+    setCurrentItem({
+      tipo_proceso: 'pintura', numero_proceso: idConsecutivo, id_consecutivo: idConsecutivo,
+      fecha_inicio: new Date().toISOString().split('T')[0],
+      fecha_entrega_pintor: new Date().toISOString().split('T')[0],
+      fecha_inicio_pintura: new Date().toISOString().split('T')[0],
+      pintor_responsable: '', estado_pedido_pintura: 'pendiente', observaciones: '', finalizar_pintura: false,
+    });
+    setCueroSeleccionado(null); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
     setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
     setMostrarSelectorContinuar(false); setContinuarBusqueda('');
+    setBusquedaProducto(''); setBusquedaNombre('');
+    setMostrarListaProducto(false); setMostrarListaNombre(false);
     setShowModal(true);
   };
 
@@ -302,6 +298,7 @@ export default function Pintura() {
   // Estado para modal "Continuar Pedido"
   const [showContinuarModal, setShowContinuarModal] = useState(false);
   const [pedidoPendienteSeleccionado, setPedidoPendienteSeleccionado] = useState('');
+  const [pedidoPreviewCompleto, setPedidoPreviewCompleto] = useState(null);
 
   // Estado para selector inline dentro del modal
   const [mostrarSelectorContinuar, setMostrarSelectorContinuar] = useState(false);
@@ -340,20 +337,48 @@ export default function Pintura() {
 
   const handleAbrirContinuarModal = () => {
     setPedidoPendienteSeleccionado('');
+    setPedidoPreviewCompleto(null);
     setShowContinuarModal(true);
   };
+
+  // Función auxiliar: carga todos los estados locales desde un objeto pedido completo
+  const cargarPedidoCompleto = useCallback((data) => {
+    if (!data) return;
+    setCurrentItem({ ...data, finalizar_pintura: false });
+    setIsEditing(true);
+    const inv = data.inv_proceso_id
+      ? inventarioEnProceso.find(i => i.id === data.inv_proceso_id) || null
+      : null;
+    setCueroSeleccionado(inv || null);
+    setHojasAConsumir(data.hojas_a_consumir || 0);
+    const subs = Array.isArray(data.sublotes_pintura) ? data.sublotes_pintura : [];
+    if (!Array.isArray(data.sublotes_pintura)) {
+      console.warn('[Pintura] sublotes_pintura llegó vacío o no es array:', data.sublotes_pintura);
+    }
+    setSublotes(subs);
+    setSubloteActivoIdx(0);
+    setBusquedaProducto(''); setBusquedaNombre('');
+    setMostrarListaProducto(false); setMostrarListaNombre(false);
+    setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
+    setMostrarSelectorContinuar(false); setContinuarBusqueda('');
+    setShowModal(true);
+  }, [inventarioEnProceso]);
 
   const handleContinuarPedido = async () => {
     if (!pedidoPendienteSeleccionado) return;
     setShowContinuarModal(false);
-    // Fetch directo por ID para garantizar que sublotes_pintura no esté truncado
+    // Si ya tenemos el fetch completo del preview, lo reutilizamos directamente
+    if (pedidoPreviewCompleto && pedidoPreviewCompleto.id === pedidoPendienteSeleccionado) {
+      cargarPedidoCompleto(pedidoPreviewCompleto);
+      return;
+    }
     try {
       const pedidoCompleto = await ProcesoProduccion.get(pedidoPendienteSeleccionado);
-      handleOpenModal(pedidoCompleto || procesos.find(p => p.id === pedidoPendienteSeleccionado));
+      cargarPedidoCompleto(pedidoCompleto);
     } catch (e) {
       console.error('Error fetching pedido:', e);
       const pedido = procesos.find(p => p.id === pedidoPendienteSeleccionado);
-      if (pedido) handleOpenModal(pedido);
+      if (pedido) cargarPedidoCompleto(pedido);
     }
   };
 
@@ -694,13 +719,11 @@ export default function Pintura() {
                               key={p.id}
                               type="button"
                               onClick={async () => {
-                                setMostrarSelectorContinuar(false);
-                                setContinuarBusqueda('');
                                 try {
                                   const pedidoCompleto = await ProcesoProduccion.get(p.id);
-                                  handleOpenModal(pedidoCompleto || p);
+                                  cargarPedidoCompleto(pedidoCompleto);
                                 } catch (e) {
-                                  handleOpenModal(p);
+                                  cargarPedidoCompleto(p);
                                 }
                               }}
                               className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors group"
@@ -1455,7 +1478,7 @@ export default function Pintura() {
               <>
                 <div>
                   <Label className="text-sm font-bold text-slate-700">Seleccionar Pedido Pendiente *</Label>
-                  <Select value={pedidoPendienteSeleccionado} onValueChange={setPedidoPendienteSeleccionado}>
+                  <Select value={pedidoPendienteSeleccionado} onValueChange={async (id) => { setPedidoPendienteSeleccionado(id); setPedidoPreviewCompleto(null); try { const full = await ProcesoProduccion.get(id); setPedidoPreviewCompleto(full); } catch { setPedidoPreviewCompleto(procesos.find(p => p.id === id) || null); } }}>
                     <SelectTrigger className="mt-1.5">
                       <SelectValue placeholder="— Seleccionar pedido —" />
                     </SelectTrigger>
@@ -1479,8 +1502,8 @@ export default function Pintura() {
                 </div>
 
                 {pedidoPendienteSeleccionado && (() => {
-                  const p = procesos.find(x => x.id === pedidoPendienteSeleccionado);
-                  if (!p) return null;
+                  const p = pedidoPreviewCompleto || procesos.find(x => x.id === pedidoPendienteSeleccionado);
+                  if (!p) return <div className="text-center text-xs text-slate-400 py-2">Cargando detalles...</div>;
                   const hojasDist = (p.sublotes_pintura || []).reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
                   const hojasRestantes = (p.hojas_a_consumir || 0) - hojasDist;
                   return (
