@@ -342,19 +342,28 @@ export default function Pintura() {
   };
 
   // Función auxiliar: carga todos los estados locales desde un objeto pedido completo
-  const cargarPedidoCompleto = useCallback((data) => {
+  const cargarPedidoCompleto = useCallback(async (data) => {
     if (!data) return;
+
+    // Asegurar que el inventario esté fresco antes de buscar el cuero
+    let invActual = inventarioEnProceso;
+    if (data.inv_proceso_id && !inventarioEnProceso.find(i => i.id === data.inv_proceso_id)) {
+      try {
+        const freshInv = await InventarioEnProceso.list();
+        invActual = Array.isArray(freshInv) ? freshInv : inventarioEnProceso;
+        setInventarioEnProceso(invActual);
+      } catch (e) { /* usa el inventario actual */ }
+    }
+
+    const inv = data.inv_proceso_id
+      ? invActual.find(i => i.id === data.inv_proceso_id) || null
+      : null;
+
     setCurrentItem({ ...data, finalizar_pintura: false });
     setIsEditing(true);
-    const inv = data.inv_proceso_id
-      ? inventarioEnProceso.find(i => i.id === data.inv_proceso_id) || null
-      : null;
-    setCueroSeleccionado(inv || null);
+    setCueroSeleccionado(inv);
     setHojasAConsumir(data.hojas_a_consumir || 0);
     const subs = Array.isArray(data.sublotes_pintura) ? data.sublotes_pintura : [];
-    if (!Array.isArray(data.sublotes_pintura)) {
-      console.warn('[Pintura] sublotes_pintura llegó vacío o no es array:', data.sublotes_pintura);
-    }
     setSublotes(subs);
     setSubloteActivoIdx(0);
     setBusquedaProducto(''); setBusquedaNombre('');
@@ -649,7 +658,10 @@ export default function Pintura() {
                       type="button"
                       onClick={() => {
                         if (isEditing) {
-                          if (!window.confirm('¿Cambiar a Nuevo Pedido? Se perderán los datos actuales del pedido cargado.')) return;
+                          // Solo confirmar si el borrador aún no fue guardado (sin ID)
+                          if (!currentItem?.id) {
+                            if (!window.confirm('¿Cambiar a Nuevo Pedido? Se perderán los datos no guardados.')) return;
+                          }
                           handleOpenModal(null);
                         }
                       }}
