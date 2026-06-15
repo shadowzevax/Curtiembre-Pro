@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, ProductoCatalogo } from '@/entities/all';
+import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,6 @@ export default function Pintura() {
   const [insumosQuimicos, setInsumosQuimicos] = useState([]);
   const [productosTerminados, setProductosTerminados] = useState([]);
   const [coloresCatalogo, setColoresCatalogo] = useState([]);
-  const [catalogoProductos, setCatalogoProductos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showModal, setShowModal] = useState(false);
@@ -80,16 +79,16 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, inventarioData, productosTermData, coloresData, catalogoData] = await Promise.all([
+      const [procesosData, insumosData, inventarioData, productosTermData, coloresData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
-        Insumo.list(), InventarioEnProceso.list(), ProductoTerminado.list(), ColorPintura.list(), ProductoCatalogo.list()
+        Insumo.list(), InventarioEnProceso.list(), ProductoTerminado.list(), ColorPintura.list()
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumosQuimicos(Array.isArray(insumosData) ? insumosData : []);
       setInventarioEnProceso(Array.isArray(inventarioData) ? inventarioData : []);
-      setProductosTerminados(Array.isArray(productosTermData) ? productosTermData : []);
+      // Solo productos terminados con stock > 0 (tabla "Stock de Productos Terminados")
+      setProductosTerminados(Array.isArray(productosTermData) ? productosTermData.filter(p => (p.stock_actual || 0) > 0) : []);
       setColoresCatalogo(Array.isArray(coloresData) ? coloresData.filter(c => c.estado === 'activo') : []);
-      setCatalogoProductos(Array.isArray(catalogoData) ? catalogoData.filter(p => p.estado === 'activo') : []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
