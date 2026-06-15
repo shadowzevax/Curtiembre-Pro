@@ -385,16 +385,15 @@ export default function Pintura() {
         estado_pedido_pintura: 'borrador',
         finalizar_pintura: false,
       };
-      let savedId = currentItem.id;
-      if (isEditing) {
+      if (isEditing && currentItem.id) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
-        const created = await ProcesoProduccion.create(dataToSave);
-        savedId = created.id;
+        const created = await ProcesoProduccion.create({ ...dataToSave, tipo_proceso: 'pintura' });
+        // Actualizar estado sincrónicamente para evitar duplicados en guardados consecutivos
+        setCurrentItem(prev => ({ ...prev, id: created.id, tipo_proceso: 'pintura' }));
         setIsEditing(true);
-        setCurrentItem(prev => ({ ...prev, id: created.id }));
       }
-      loadData();
+      await loadData();
       alert('✅ Borrador guardado. Puede continuar agregando sublotes.');
     } catch (error) {
       console.error('Error saving borrador:', error);
@@ -548,10 +547,10 @@ export default function Pintura() {
               <td className="p-2">
                 <div className="flex gap-1 justify-center flex-wrap">
                   <Button variant="outline" size="sm" title="Ver Detalle" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Search className="w-3.5 h-3.5" /></Button>
-                  <Button variant="outline" size="sm" title="Editar" onClick={() => handleOpenModal(item)}><Edit className="w-3.5 h-3.5" /></Button>
+                  <Button variant="outline" size="sm" title="Editar" onClick={async () => { try { const full = await ProcesoProduccion.get(item.id); handleOpenModal(full || item); } catch { handleOpenModal(item); } }}><Edit className="w-3.5 h-3.5" /></Button>
                   {(item.estado_pedido_pintura === 'parcial' || item.estado_pedido_pintura === 'pendiente' || item.estado_pedido_pintura === 'borrador') && (
                     <Button size="sm" title="Finalizar Pintura" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2"
-                      onClick={() => { handleOpenModal(item); }}>
+                      onClick={async () => { try { const full = await ProcesoProduccion.get(item.id); handleOpenModal(full || item); } catch { handleOpenModal(item); } }}>
                       <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Finalizar
                     </Button>
                   )}
