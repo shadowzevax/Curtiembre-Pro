@@ -10,6 +10,21 @@
       "type": "string",
       "description": "Descripci\u00f3n del producto"
     },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "pieles",
+        "quimicos",
+        "colorantes",
+        "grasas",
+        "hojas_materia_prima",
+        "hojas_procesadas"
+      ]
+    },
+    "unidad_medida": {
+      "type": "string",
+      "description": "Unidad de medida del producto"
+    },
     "codigo_lote": {
       "type": "string",
       "description": "C\u00f3digo de lote o sublote"
@@ -78,7 +93,12 @@
     "cantidad_hojas": {
       "type": "number",
       "default": 0,
-      "description": "Cantidad de hojas en este estado"
+      "description": "Stock Actual \u2014 cantidad de hojas en este estado"
+    },
+    "stock_minimo": {
+      "type": "number",
+      "default": 0,
+      "description": "Stock m\u00ednimo requerido"
     },
     "cantidad_pieles": {
       "type": "number",
