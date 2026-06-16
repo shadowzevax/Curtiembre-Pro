@@ -402,7 +402,6 @@ export default function Pintura() {
     }
     try {
       const res = getResumen();
-      // Capturar snapshot de sublotes en este momento exacto para persistir
       const sublotesSnapshot = JSON.parse(JSON.stringify(sublotes));
       const dataToSave = {
         tipo_proceso: 'pintura',
@@ -430,17 +429,75 @@ export default function Pintura() {
       };
 
       let savedId = currentItem.id;
+      let prevHojasConsumir = 0;
+      let prevSublotes = [];
+
       if (isEditing && currentItem.id) {
+        // Recuperar datos anteriores para calcular diferencias
+        try {
+          const prevData = await ProcesoProduccion.get(currentItem.id);
+          prevHojasConsumir = prevData?.hojas_a_consumir || 0;
+          prevSublotes = Array.isArray(prevData?.sublotes_pintura) ? prevData.sublotes_pintura : [];
+        } catch {}
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
         const created = await ProcesoProduccion.create(dataToSave);
         savedId = created.id;
-        // Actualizar currentItem con el ID real antes de cualquier otra operación
         setCurrentItem(prev => ({ ...prev, ...dataToSave, id: savedId }));
         setIsEditing(true);
       }
 
-      // Recargar lista en background sin cerrar modal ni perder estado local
+      // ── AFECTACIÓN INVENTARIO EN PROCESO ──
+      // Calcular diferencia de hojas a consumir (nuevo - anterior)
+      const diffHojas = hojasAConsumir - prevHojasConsumir;
+      const invId = cueroSeleccionado?.id || currentItem.inv_proceso_id;
+      if (invId && diffHojas !== 0) {
+        try {
+          const invActual = inventarioEnProceso.find(i => i.id === invId);
+          if (invActual) {
+            const nuevoStock = Math.max(0, (invActual.cantidad_hojas || 0) - diffHojas);
+            await InventarioEnProceso.update(invId, { cantidad_hojas: nuevoStock });
+            // Actualizar estado local para reflejar el cambio inmediatamente
+            setInventarioEnProceso(prev => prev.map(i => i.id === invId ? { ...i, cantidad_hojas: nuevoStock } : i));
+            if (cueroSeleccionado?.id === invId) {
+              setCueroSeleccionado(prev => ({ ...prev, cantidad_hojas: nuevoStock }));
+            }
+          }
+        } catch (e) { console.error('Error actualizando inventario en proceso:', e); }
+      }
+
+      // ── AFECTACIÓN INVENTARIO DE PRODUCTOS TERMINADOS (sublotes) ──
+      // Para cada sublote: calcular diferencia vs sublote previo por código de producto
+      for (const sub of sublotesSnapshot) {
+        if (!sub.producto_terminado_id || !sub.producto_terminado_codigo) continue;
+        const cantNueva = parseFloat(sub.cantidad_hojas) || 0;
+        // Buscar sublote previo equivalente por id_temp o codigo_sublote
+        const subPrev = prevSublotes.find(ps => ps.id_temp === sub.id_temp || ps.codigo_sublote === sub.codigo_sublote);
+        const cantPrevia = parseFloat(subPrev?.cantidad_hojas) || 0;
+        const diff = cantNueva - cantPrevia;
+        if (diff === 0) continue;
+        const pt = productosTerminados.find(p => p.id === sub.producto_terminado_id);
+        if (pt) {
+          const nuevoStockPT = Math.max(0, (pt.stock_actual || 0) + diff);
+          await ProductoTerminado.update(pt.id, { stock_actual: nuevoStockPT });
+          setProductosTerminados(prev => prev.map(p => p.id === pt.id ? { ...p, stock_actual: nuevoStockPT } : p));
+        }
+      }
+      // Revertir sublotes eliminados (estaban antes pero ya no están)
+      for (const subPrev of prevSublotes) {
+        if (!subPrev.producto_terminado_id) continue;
+        const aun = sublotesSnapshot.find(s => s.id_temp === subPrev.id_temp || s.codigo_sublote === subPrev.codigo_sublote);
+        if (!aun) {
+          const cantPrevia = parseFloat(subPrev.cantidad_hojas) || 0;
+          const pt = productosTerminados.find(p => p.id === subPrev.producto_terminado_id);
+          if (pt && cantPrevia > 0) {
+            const nuevoStockPT = Math.max(0, (pt.stock_actual || 0) - cantPrevia);
+            await ProductoTerminado.update(pt.id, { stock_actual: nuevoStockPT });
+            setProductosTerminados(prev => prev.map(p => p.id === pt.id ? { ...p, stock_actual: nuevoStockPT } : p));
+          }
+        }
+      }
+
       loadData();
       alert('✅ Borrador guardado correctamente. ' + sublotesSnapshot.length + ' sublote(s) guardados.');
     } catch (error) {
@@ -495,10 +552,15 @@ export default function Pintura() {
       }
 
       const fechaHoy = new Date().toISOString().split('T')[0];
+      // Al finalizar: el inventario en proceso ya fue descontado al guardar borrador.
+      // Solo actualizamos el estado del registro (FINALIZADO si no quedan hojas).
       if (cueroSeleccionado) {
-        const hojasActualesInventario = cueroSeleccionado.cantidad_hojas || 0;
-        const nuevaCantidad = Math.max(0, hojasActualesInventario - hojasAConsumir);
-        await InventarioEnProceso.update(cueroSeleccionado.id, { cantidad_hojas: nuevaCantidad, estado_actual: nuevaCantidad <= 0 ? 'FINALIZADO' : 'EN_PROCESO' });
+        const hojasActuales = cueroSeleccionado.cantidad_hojas || 0;
+        await InventarioEnProceso.update(cueroSeleccionado.id, {
+          estado_actual: hojasActuales <= 0 ? 'FINALIZADO' : 'EN_PROCESO',
+          etapa_actual: 'pintura',
+          estado_proceso: 'en_proceso_pintura',
+        });
       }
       for (const sub of sublotes) {
         for (const ins of (sub.insumos || [])) {
@@ -544,7 +606,31 @@ export default function Pintura() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Eliminar este proceso de pintura?')) return;
-    try { await ProcesoProduccion.delete(id); loadData(); } catch (e) { console.error(e); }
+    try {
+      // Revertir afectaciones de inventario si el proceso está en borrador
+      const proceso = procesos.find(p => p.id === id);
+      if (proceso && proceso.estado_pedido_pintura !== 'terminado') {
+        // Revertir hojas en InventarioEnProceso
+        if (proceso.inv_proceso_id && (proceso.hojas_a_consumir || 0) > 0) {
+          const inv = inventarioEnProceso.find(i => i.id === proceso.inv_proceso_id);
+          if (inv) {
+            await InventarioEnProceso.update(inv.id, { cantidad_hojas: (inv.cantidad_hojas || 0) + (proceso.hojas_a_consumir || 0) });
+          }
+        }
+        // Revertir stock en ProductoTerminado por sublotes
+        const subs = Array.isArray(proceso.sublotes_pintura) ? proceso.sublotes_pintura : [];
+        for (const sub of subs) {
+          if (!sub.producto_terminado_id) continue;
+          const cant = parseFloat(sub.cantidad_hojas) || 0;
+          const pt = productosTerminados.find(p => p.id === sub.producto_terminado_id);
+          if (pt && cant > 0) {
+            await ProductoTerminado.update(pt.id, { stock_actual: Math.max(0, (pt.stock_actual || 0) - cant) });
+          }
+        }
+      }
+      await ProcesoProduccion.delete(id);
+      loadData();
+    } catch (e) { console.error(e); }
   };
 
   const esFinalizado = currentItem?.estado_pedido_pintura === 'terminado';
@@ -816,31 +902,6 @@ export default function Pintura() {
                   <h3 className="font-bold text-base">① SELECCIÓN DE PRODUCTOS EN PROCESO</h3>
                   <p className="text-xs text-indigo-200 mt-0.5">Busque y seleccione hojas disponibles desde el inventario de productos en proceso</p>
                 </div>
-                <div className="bg-indigo-50 border-b border-indigo-200 px-5 py-3 grid grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs text-indigo-700 font-semibold">Buscar (código, lote, color)</Label>
-                    <Input value={searchCuero} onChange={e => setSearchCuero(e.target.value)} placeholder="Buscar..." className="h-8 text-xs mt-1" disabled={esFinalizado} />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-indigo-700 font-semibold">Filtrar por Color Base</Label>
-                    <Select value={filtroCueroColor} onValueChange={setFiltroCueroColor}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Todos..." /></SelectTrigger>
-                      <SelectContent><SelectItem value={null}>— Todos —</SelectItem>{COLORES_BASE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-indigo-700 font-semibold">Filtrar por Etapa</Label>
-                    <Select value={filtroCueroEtapa} onValueChange={setFiltroCueroEtapa}>
-                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="Todos..." /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={null}>— Todas —</SelectItem>
-                        <SelectItem value="recurtido">Recurtido</SelectItem>
-                        <SelectItem value="curtido">Curtido</SelectItem>
-                        <SelectItem value="limpieza">Limpieza</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
                 <div className="bg-white px-5 py-3">
                   <Label className="text-xs font-bold text-indigo-700">Productos en Proceso *</Label>
                   <Select value={cueroSeleccionado?.id || ''} onValueChange={handleSeleccionarCuero} disabled={esFinalizado}>
@@ -889,6 +950,128 @@ export default function Pintura() {
                   )}
                 </div>
               </div>
+
+              {/* ══ BLOQUE 2B: SEGUIMIENTO GENERAL DEL PEDIDO — solo en modo continuar ══ */}
+              {isEditing && currentItem?.id && (() => {
+                // Usar sublotes del estado local (en edición activa) para que refleje cambios no guardados
+                const subsHist = sublotes.length > 0 ? sublotes : (Array.isArray(currentItem?.sublotes_pintura) ? currentItem.sublotes_pintura : []);
+                const totalSolicitado = currentItem?.hojas_a_consumir || hojasAConsumir || 0;
+                const totalRegistrado = subsHist.reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
+                const totalPendiente = Math.max(0, totalSolicitado - totalRegistrado);
+                const pctAvance = totalSolicitado > 0 ? Math.min(100, (totalRegistrado / totalSolicitado * 100)).toFixed(1) : 0;
+                const numSublotes = subsHist.length;
+                const estadoGeneral = currentItem?.estado_pedido_pintura === 'terminado' ? 'Finalizado' : totalRegistrado > 0 ? 'En Proceso' : 'Borrador';
+                const estadoColor = estadoGeneral === 'Finalizado' ? 'text-green-700' : estadoGeneral === 'En Proceso' ? 'text-blue-700' : 'text-amber-700';
+                return (
+                  <div className="border-2 border-cyan-500 rounded-xl overflow-hidden">
+                    <div className="bg-cyan-700 text-white px-5 py-3">
+                      <h3 className="font-bold text-base">② SEGUIMIENTO GENERAL DEL PEDIDO</h3>
+                      <p className="text-xs text-cyan-200 mt-0.5">Avance acumulado del pedido — actualizado en tiempo real</p>
+                    </div>
+                    {/* Indicadores */}
+                    <div className="bg-cyan-50 px-5 py-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        <div className="bg-white border border-cyan-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-cyan-600 font-semibold">ID No. de Pedido</p>
+                          <p className="font-extrabold text-cyan-900 font-mono text-sm">{currentItem?.id_consecutivo || '—'}</p>
+                        </div>
+                        <div className="bg-white border border-cyan-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-cyan-600 font-semibold">Fecha Creación</p>
+                          <p className="font-bold text-cyan-900 text-sm">{currentItem?.fecha_inicio ? new Date(currentItem.fecha_inicio + 'T00:00:00').toLocaleDateString('es-CO') : '—'}</p>
+                        </div>
+                        <div className="bg-white border border-indigo-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-indigo-600 font-semibold">Total Hojas Solicitadas</p>
+                          <p className="font-extrabold text-indigo-900 text-2xl">{totalSolicitado}</p>
+                        </div>
+                        <div className="bg-white border border-blue-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-blue-600 font-semibold">Total Hojas Registradas</p>
+                          <p className="font-extrabold text-blue-900 text-2xl">{totalRegistrado}</p>
+                        </div>
+                        <div className={`border rounded-lg p-3 text-center ${totalPendiente === 0 ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
+                          <p className={`text-xs font-semibold ${totalPendiente === 0 ? 'text-green-600' : 'text-amber-700'}`}>Hojas Pendientes</p>
+                          <p className={`font-extrabold text-2xl ${totalPendiente === 0 ? 'text-green-700' : 'text-amber-800'}`}>{totalPendiente}</p>
+                        </div>
+                        <div className="bg-white border border-purple-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-purple-600 font-semibold">% Avance</p>
+                          <p className="font-extrabold text-purple-900 text-2xl">{pctAvance}%</p>
+                          <div className="mt-1 bg-gray-200 rounded-full h-2"><div className="bg-purple-500 h-2 rounded-full transition-all" style={{ width: `${pctAvance}%` }} /></div>
+                        </div>
+                        <div className="bg-white border border-teal-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-teal-600 font-semibold">Sublotes Creados</p>
+                          <p className="font-extrabold text-teal-900 text-2xl">{numSublotes}</p>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-lg p-3 text-center">
+                          <p className="text-xs text-slate-600 font-semibold">Estado General</p>
+                          <p className={`font-extrabold text-lg ${estadoColor}`}>{estadoGeneral}</p>
+                        </div>
+                      </div>
+                      {/* Tabla histórica de sublotes */}
+                      {subsHist.length > 0 && (
+                        <div>
+                          <h4 className="font-bold text-cyan-800 text-sm mb-2">Tabla Histórica de Sublotes del Pedido</h4>
+                          <div className="overflow-x-auto rounded-lg border border-cyan-200">
+                            <table className="w-full text-xs border-collapse">
+                              <thead className="bg-cyan-700 text-white">
+                                <tr>
+                                  <th className="p-2 text-left">Código Sublote</th>
+                                  <th className="p-2 text-left">Producto Terminado</th>
+                                  <th className="p-2 text-center">Cant. Hojas</th>
+                                  <th className="p-2 text-center">Hojas Buenas</th>
+                                  <th className="p-2 text-center">Defectuosas</th>
+                                  <th className="p-2 text-center">Rechazadas</th>
+                                  <th className="p-2 text-center">Estado</th>
+                                  <th className="p-2 text-center">Acciones</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {subsHist.map((sub, idx) => (
+                                  <tr key={idx} className="border-t hover:bg-cyan-50">
+                                    <td className="p-2 font-mono font-bold text-cyan-800">{sub.codigo_sublote || '—'}</td>
+                                    <td className="p-2 text-slate-700">{sub.producto_terminado_nombre || <span className="text-slate-400 italic">Sin asignar</span>}</td>
+                                    <td className="p-2 text-center font-bold">{sub.cantidad_hojas || 0}</td>
+                                    <td className="p-2 text-center text-green-700 font-bold">{sub.hojas_buenas || 0}</td>
+                                    <td className="p-2 text-center text-orange-600">{sub.hojas_defectuosas || 0}</td>
+                                    <td className="p-2 text-center text-red-600">{sub.hojas_rechazadas || 0}</td>
+                                    <td className="p-2 text-center">
+                                      <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                        {sub.estado === 'completado' ? 'Completo' : sub.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}
+                                      </span>
+                                    </td>
+                                    <td className="p-2 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => { setSubloteDetalleIdx(idx); setShowSubloteDetalle(true); }}
+                                        className="px-2 py-1 rounded bg-cyan-100 hover:bg-cyan-200 text-cyan-800 text-xs font-semibold flex items-center gap-1 mx-auto"
+                                      >
+                                        🔍 Ver Detalle
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-cyan-700 text-white font-bold border-t-2">
+                                  <td colSpan={2} className="p-2 text-right text-xs">TOTALES:</td>
+                                  <td className="p-2 text-center">{subsHist.reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0)}</td>
+                                  <td className="p-2 text-center">{subsHist.reduce((s, sub) => s + (parseFloat(sub.hojas_buenas) || 0), 0)}</td>
+                                  <td className="p-2 text-center">{subsHist.reduce((s, sub) => s + (parseFloat(sub.hojas_defectuosas) || 0), 0)}</td>
+                                  <td className="p-2 text-center">{subsHist.reduce((s, sub) => s + (parseFloat(sub.hojas_rechazadas) || 0), 0)}</td>
+                                  <td colSpan={2}></td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                      {subsHist.length === 0 && (
+                        <div className="text-center text-slate-400 text-sm py-4 bg-white rounded border border-cyan-100">
+                          Sin sublotes registrados aún en este pedido. Use la sección de distribución para agregar sublotes.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ══ BLOQUE 2: RESUMEN Y CONTROL DE DISTRIBUCIÓN — siempre visible ══ */}
               <div className="border-2 border-teal-500 rounded-xl overflow-hidden">
