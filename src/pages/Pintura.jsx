@@ -604,33 +604,75 @@ export default function Pintura() {
     }
   };
 
-  const handleDelete = async (id) => {
+    const handleDelete = async (id) => {
     if (!window.confirm('¿Eliminar este proceso de pintura?')) return;
+
     try {
-      // Revertir afectaciones de inventario si el proceso está en borrador
       const proceso = procesos.find(p => p.id === id);
-      if (proceso && proceso.estado_pedido_pintura !== 'terminado') {
-        // Revertir hojas en InventarioEnProceso
-        if (proceso.inv_proceso_id && (proceso.hojas_a_consumir || 0) > 0) {
-          const inv = inventarioEnProceso.find(i => i.id === proceso.inv_proceso_id);
-          if (inv) {
-            await InventarioEnProceso.update(inv.id, { cantidad_hojas: (inv.cantidad_hojas || 0) + (proceso.hojas_a_consumir || 0) });
-          }
-        }
-        // Revertir stock en ProductoTerminado por sublotes
-        const subs = Array.isArray(proceso.sublotes_pintura) ? proceso.sublotes_pintura : [];
-        for (const sub of subs) {
-          if (!sub.producto_terminado_id) continue;
-          const cant = parseFloat(sub.cantidad_hojas) || 0;
-          const pt = productosTerminados.find(p => p.id === sub.producto_terminado_id);
-          if (pt && cant > 0) {
-            await ProductoTerminado.update(pt.id, { stock_actual: Math.max(0, (pt.stock_actual || 0) - cant) });
-          }
+      if (!proceso) {
+        alert('Error: No se encontró el proceso a eliminar.');
+        return;
+      }
+
+      // No permitir eliminar procesos finalizados para mantener integridad de costos
+      if (proceso.estado_pedido_pintura === 'terminado') {
+        alert('❌ No es posible eliminar un proceso finalizado. Considere anularlo o realizar un ajuste de inventario manual.');
+        return;
+      }
+      
+      const fechaHoy = new Date().toISOString().split('T')[0];
+      const movimientosReversion = [];
+      const productosAActualizar = new Map();
+
+      // 1. Revertir hojas en InventarioEnProceso
+      if (proceso.inv_proceso_id && (proceso.hojas_a_consumir || 0) > 0) {
+        const inv = inventarioEnProceso.find(i => i.id === proceso.inv_proceso_id);
+        if (inv) {
+          await InventarioEnProceso.update(inv.id, { cantidad_hojas: (inv.cantidad_hojas || 0) + (proceso.hojas_a_consumir || 0) });
         }
       }
+
+      // 2. Revertir stock en ProductoTerminado por sublotes mediante movimientos
+      const subs = Array.isArray(proceso.sublotes_pintura) ? proceso.sublotes_pintura : [];
+      for (const sub of subs) {
+        const cantRevertir = parseFloat(sub.cantidad_hojas) || 0;
+        if (sub.producto_terminado_id && cantRevertir > 0) {
+          movimientosReversion.push({
+            tipo_movimiento: 'salida',
+            insumo_id: sub.producto_terminado_id,
+            cantidad: -cantRevertir,
+            costo_unitario: 0,
+            fecha_movimiento: fechaHoy,
+            referencia: proceso.id_consecutivo,
+            observaciones: `Reversión por eliminación de Pedido Pintura: ${proceso.id_consecutivo}, Sublote: ${sub.codigo_sublote}`,
+          });
+
+          const currentStock = productosAActualizar.get(sub.producto_terminado_id)?.stock_actual ?? productosTerminados.find(p => p.id === sub.producto_terminado_id)?.stock_actual ?? 0;
+           productosAActualizar.set(sub.producto_terminado_id, {
+             id: sub.producto_terminado_id,
+             stock_actual: currentStock - cantRevertir
+           });
+        }
+      }
+      
+      if (movimientosReversion.length > 0) {
+        await MovimientoInventario.bulkCreate(movimientosReversion);
+      }
+      
+      for (const [id, data] of productosAActualizar) {
+        await ProductoTerminado.update(id, { stock_actual: data.stock_actual });
+      }
+
+      // 3. Eliminar el proceso
       await ProcesoProduccion.delete(id);
-      loadData();
-    } catch (e) { console.error(e); }
+      
+      await loadData();
+      alert('✅ Proceso de pintura eliminado y movimientos de inventario revertidos.');
+
+    } catch (e) {
+      console.error('Error deleting:', e);
+      alert('Error al eliminar el proceso: ' + e.message);
+    }
   };
 
   const esFinalizado = currentItem?.estado_pedido_pintura === 'terminado';
