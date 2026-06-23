@@ -393,6 +393,79 @@ export default function Pintura() {
 
   const handleVerSublote = (idx) => { setSubloteDetalleIdx(idx); setShowSubloteDetalle(true); };
 
+  // ── FUNCIÓN CENTRAL DE AFECTACIÓN DE INVENTARIO DE PRODUCTOS TERMINADOS ──
+  // Usa inv_contabilizado en cada sublote para garantizar idempotencia absoluta.
+  // Sólo afecta la DIFERENCIA entre lo ya contabilizado y la cantidad actual.
+  const afectarInventarioPT = async (sublotesNuevos, sublotesPrevios, idPedido, estadoDoc) => {
+    const fechaHoy = new Date().toISOString().split('T')[0];
+
+    // Acumular cambios por producto para hacer una sola actualización por producto
+    const deltasPorProducto = new Map(); // key: producto_terminado_id, value: delta
+
+    // 1. Para cada sublote actual: calcular cuánto hay que ajustar vs lo ya contabilizado
+    for (const sub of sublotesNuevos) {
+      if (!sub.producto_terminado_id || !sub.codigo_sublote) continue;
+      const cantActual = parseFloat(sub.cantidad_hojas) || 0;
+      const cantContabilizada = parseFloat(sub.inv_contabilizado) || 0;
+      const diff = cantActual - cantContabilizada;
+      if (Math.abs(diff) < 0.001) continue; // Sin cambio
+
+      const anterior = deltasPorProducto.get(sub.producto_terminado_id) || 0;
+      deltasPorProducto.set(sub.producto_terminado_id, anterior + diff);
+
+      if (diff !== 0) {
+        await MovimientoInventario.create({
+          tipo_movimiento: 'entrada',
+          insumo_id: sub.producto_terminado_id,
+          cantidad: diff,
+          costo_unitario: 0,
+          fecha_movimiento: fechaHoy,
+          referencia: idPedido,
+          observaciones: `Producción Pintura (${estadoDoc}) | Pedido: ${idPedido} | Sublote: ${sub.codigo_sublote} | Producto: ${sub.producto_terminado_codigo}`,
+        });
+      }
+    }
+
+    // 2. Para cada sublote previo que ya no existe: revertir lo que fue contabilizado
+    for (const subPrev of sublotesPrevios) {
+      const aun = sublotesNuevos.find(s => s.codigo_sublote === subPrev.codigo_sublote);
+      if (!aun && subPrev.producto_terminado_id) {
+        const cantContabilizada = parseFloat(subPrev.inv_contabilizado) || 0;
+        if (cantContabilizada > 0) {
+          const anterior = deltasPorProducto.get(subPrev.producto_terminado_id) || 0;
+          deltasPorProducto.set(subPrev.producto_terminado_id, anterior - cantContabilizada);
+
+          await MovimientoInventario.create({
+            tipo_movimiento: 'salida',
+            insumo_id: subPrev.producto_terminado_id,
+            cantidad: -cantContabilizada,
+            costo_unitario: 0,
+            fecha_movimiento: fechaHoy,
+            referencia: idPedido,
+            observaciones: `Reversión por eliminación de sublote | Pedido: ${idPedido} | Sublote: ${subPrev.codigo_sublote}`,
+          });
+        }
+      }
+    }
+
+    // 3. Aplicar deltas al stock de ProductoTerminado
+    for (const [ptId, delta] of deltasPorProducto) {
+      if (Math.abs(delta) < 0.001) continue;
+      const pt = productosTerminados.find(p => p.id === ptId);
+      if (pt) {
+        const nuevoStock = Math.max(0, (pt.stock_actual || 0) + delta);
+        await ProductoTerminado.update(ptId, { stock_actual: nuevoStock });
+        setProductosTerminados(prev => prev.map(p => p.id === ptId ? { ...p, stock_actual: nuevoStock } : p));
+      }
+    }
+
+    // 4. Marcar en cada sublote la cantidad ahora contabilizada
+    return sublotesNuevos.map(sub => ({
+      ...sub,
+      inv_contabilizado: sub.producto_terminado_id ? (parseFloat(sub.cantidad_hojas) || 0) : 0,
+    }));
+  };
+
   const handleSaveBorrador = async () => {
     if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un producto en proceso.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
@@ -403,10 +476,28 @@ export default function Pintura() {
     try {
       const res = getResumen();
       const sublotesSnapshot = JSON.parse(JSON.stringify(sublotes));
+      const idConsecutivo = currentItem.id_consecutivo || '';
+
+      // Obtener sublotes previos (con sus inv_contabilizado) para calcular deltas
+      let prevSublotes = [];
+      let prevHojasConsumir = 0;
+      if (isEditing && currentItem.id) {
+        try {
+          const prevData = await ProcesoProduccion.get(currentItem.id);
+          prevSublotes = Array.isArray(prevData?.sublotes_pintura) ? prevData.sublotes_pintura : [];
+          prevHojasConsumir = prevData?.hojas_a_consumir || 0;
+        } catch {}
+      }
+
+      // Afectar inventario PT y obtener sublotes con inv_contabilizado actualizado
+      const sublotesConContabilizado = await afectarInventarioPT(
+        sublotesSnapshot, prevSublotes, idConsecutivo, 'Borrador'
+      );
+
       const dataToSave = {
         tipo_proceso: 'pintura',
-        numero_proceso: currentItem.numero_proceso || currentItem.id_consecutivo || '',
-        id_consecutivo: currentItem.id_consecutivo || '',
+        numero_proceso: currentItem.numero_proceso || idConsecutivo,
+        id_consecutivo: idConsecutivo,
         fecha_inicio: currentItem.fecha_inicio || new Date().toISOString().split('T')[0],
         fecha_entrega_pintor: currentItem.fecha_entrega_pintor || '',
         fecha_inicio_pintura: currentItem.fecha_inicio_pintura || '',
@@ -416,29 +507,20 @@ export default function Pintura() {
         codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
         hojas_a_consumir: hojasAConsumir,
         total_hojas_enviadas_pintura: hojasAConsumir,
-        sublotes_pintura: sublotesSnapshot,
+        sublotes_pintura: sublotesConContabilizado, // guardamos con inv_contabilizado
         costo_total_proceso_pintura: res.costoTotal,
         costo_promedio_por_hoja: res.costoPorHoja,
         hojas_buenas_finales: res.hojasBuenasTotal,
-        num_sublotes_generados: sublotesSnapshot.length,
-        colores_registrados: [...new Set(sublotesSnapshot.map(s => s.color_final).filter(Boolean))].join(', '),
-        tipos_acabado_registrados: [...new Set(sublotesSnapshot.map(s => s.tipo_acabado).filter(Boolean))].join(', '),
+        num_sublotes_generados: sublotesConContabilizado.length,
+        colores_registrados: [...new Set(sublotesConContabilizado.map(s => s.color_final).filter(Boolean))].join(', '),
+        tipos_acabado_registrados: [...new Set(sublotesConContabilizado.map(s => s.tipo_acabado).filter(Boolean))].join(', '),
         pct_merma_total: hojasAConsumir > 0 ? parseFloat(((1 - res.hojasBuenasTotal / hojasAConsumir) * 100).toFixed(1)) : 0,
         estado_pedido_pintura: 'borrador',
         finalizar_pintura: false,
       };
 
       let savedId = currentItem.id;
-      let prevHojasConsumir = 0;
-      let prevSublotes = [];
-
       if (isEditing && currentItem.id) {
-        // Recuperar datos anteriores para calcular diferencias
-        try {
-          const prevData = await ProcesoProduccion.get(currentItem.id);
-          prevHojasConsumir = prevData?.hojas_a_consumir || 0;
-          prevSublotes = Array.isArray(prevData?.sublotes_pintura) ? prevData.sublotes_pintura : [];
-        } catch {}
         await ProcesoProduccion.update(currentItem.id, dataToSave);
       } else {
         const created = await ProcesoProduccion.create(dataToSave);
@@ -447,8 +529,10 @@ export default function Pintura() {
         setIsEditing(true);
       }
 
+      // Actualizar sublotes locales con inv_contabilizado
+      setSublotes(sublotesConContabilizado);
+
       // ── AFECTACIÓN INVENTARIO EN PROCESO ──
-      // Calcular diferencia de hojas a consumir (nuevo - anterior)
       const diffHojas = hojasAConsumir - prevHojasConsumir;
       const invId = cueroSeleccionado?.id || currentItem.inv_proceso_id;
       if (invId && diffHojas !== 0) {
@@ -457,7 +541,6 @@ export default function Pintura() {
           if (invActual) {
             const nuevoStock = Math.max(0, (invActual.cantidad_hojas || 0) - diffHojas);
             await InventarioEnProceso.update(invId, { cantidad_hojas: nuevoStock });
-            // Actualizar estado local para reflejar el cambio inmediatamente
             setInventarioEnProceso(prev => prev.map(i => i.id === invId ? { ...i, cantidad_hojas: nuevoStock } : i));
             if (cueroSeleccionado?.id === invId) {
               setCueroSeleccionado(prev => ({ ...prev, cantidad_hojas: nuevoStock }));
@@ -466,40 +549,8 @@ export default function Pintura() {
         } catch (e) { console.error('Error actualizando inventario en proceso:', e); }
       }
 
-      // ── AFECTACIÓN INVENTARIO DE PRODUCTOS TERMINADOS (sublotes) ──
-      // Para cada sublote: calcular diferencia vs sublote previo por código de producto
-      for (const sub of sublotesSnapshot) {
-        if (!sub.producto_terminado_id || !sub.producto_terminado_codigo) continue;
-        const cantNueva = parseFloat(sub.cantidad_hojas) || 0;
-        // Buscar sublote previo equivalente por id_temp o codigo_sublote
-        const subPrev = prevSublotes.find(ps => ps.id_temp === sub.id_temp || ps.codigo_sublote === sub.codigo_sublote);
-        const cantPrevia = parseFloat(subPrev?.cantidad_hojas) || 0;
-        const diff = cantNueva - cantPrevia;
-        if (diff === 0) continue;
-        const pt = productosTerminados.find(p => p.id === sub.producto_terminado_id);
-        if (pt) {
-          const nuevoStockPT = Math.max(0, (pt.stock_actual || 0) + diff);
-          await ProductoTerminado.update(pt.id, { stock_actual: nuevoStockPT });
-          setProductosTerminados(prev => prev.map(p => p.id === pt.id ? { ...p, stock_actual: nuevoStockPT } : p));
-        }
-      }
-      // Revertir sublotes eliminados (estaban antes pero ya no están)
-      for (const subPrev of prevSublotes) {
-        if (!subPrev.producto_terminado_id) continue;
-        const aun = sublotesSnapshot.find(s => s.id_temp === subPrev.id_temp || s.codigo_sublote === subPrev.codigo_sublote);
-        if (!aun) {
-          const cantPrevia = parseFloat(subPrev.cantidad_hojas) || 0;
-          const pt = productosTerminados.find(p => p.id === subPrev.producto_terminado_id);
-          if (pt && cantPrevia > 0) {
-            const nuevoStockPT = Math.max(0, (pt.stock_actual || 0) - cantPrevia);
-            await ProductoTerminado.update(pt.id, { stock_actual: nuevoStockPT });
-            setProductosTerminados(prev => prev.map(p => p.id === pt.id ? { ...p, stock_actual: nuevoStockPT } : p));
-          }
-        }
-      }
-
       loadData();
-      alert('✅ Borrador guardado correctamente. ' + sublotesSnapshot.length + ' sublote(s) guardados.');
+      alert('✅ Borrador guardado. Inventario de Productos Terminados actualizado.');
     } catch (error) {
       console.error('Error saving borrador:', error);
       alert('Error al guardar el borrador: ' + error.message);
@@ -545,15 +596,28 @@ export default function Pintura() {
         finalizar_pintura: true,
       };
 
-      if (isEditing) {
-        await ProcesoProduccion.update(currentItem.id, dataToSave);
-      } else {
+      if (!isEditing) {
         await ProcesoProduccion.create(dataToSave);
       }
 
       const fechaHoy = new Date().toISOString().split('T')[0];
-      // Al finalizar: el inventario en proceso ya fue descontado al guardar borrador.
-      // Solo actualizamos el estado del registro (FINALIZADO si no quedan hojas).
+
+      // Obtener sublotes previos guardados para calcular delta de PT
+      let prevSublotesFin = [];
+      try {
+        const prevDataFin = await ProcesoProduccion.get(currentItem.id);
+        prevSublotesFin = Array.isArray(prevDataFin?.sublotes_pintura) ? prevDataFin.sublotes_pintura : [];
+      } catch {}
+
+      // Afectar inventario PT con anti-duplicado (igual que borrador)
+      const sublotesConContabilizadoFin = await afectarInventarioPT(
+        sublotes, prevSublotesFin, currentItem.id_consecutivo, 'Finalizado'
+      );
+
+      // Guardar sublotes con inv_contabilizado actualizado + estado terminado
+      await ProcesoProduccion.update(currentItem.id, { ...dataToSave, sublotes_pintura: sublotesConContabilizadoFin });
+
+      // Actualizar estado de InventarioEnProceso
       if (cueroSeleccionado) {
         const hojasActuales = cueroSeleccionado.cantidad_hojas || 0;
         await InventarioEnProceso.update(cueroSeleccionado.id, {
@@ -562,40 +626,19 @@ export default function Pintura() {
           estado_proceso: 'en_proceso_pintura',
         });
       }
+
+      // Consumo de insumos químicos al finalizar
       for (const sub of sublotes) {
         for (const ins of (sub.insumos || [])) {
           const insumo = insumosQuimicos.find(i => i.id === ins.item_id);
           if (insumo && (parseFloat(ins.cantidad) || 0) > 0) {
-            await MovimientoInventario.create({ tipo_movimiento: 'salida', insumo_id: insumo.id, cantidad: -(parseFloat(ins.cantidad)), costo_unitario: parseFloat(ins.costo_unitario) || 0, fecha_movimiento: fechaHoy, referencia: currentItem.id_consecutivo, observaciones: `Pintura ${currentItem.id_consecutivo} - Sublote ${sub.codigo_sublote}` });
+            await MovimientoInventario.create({ tipo_movimiento: 'salida', insumo_id: insumo.id, cantidad: -(parseFloat(ins.cantidad)), costo_unitario: parseFloat(ins.costo_unitario) || 0, fecha_movimiento: fechaHoy, referencia: currentItem.id_consecutivo, observaciones: `Consumo insumos Pintura ${currentItem.id_consecutivo} - Sublote ${sub.codigo_sublote}` });
             await Insumo.update(insumo.id, { stock_actual: Math.max(0, (insumo.stock_actual || 0) - parseFloat(ins.cantidad)) });
           }
         }
-        const hojasBuenas = parseFloat(sub.hojas_buenas) || 0;
-        if (hojasBuenas > 0) {
-          const costoSub = getCostosSublote(sub);
-          if (sub.producto_terminado_id && sub.producto_terminado_codigo) {
-            const existentes = productosTerminados.filter(pt => pt.codigo === sub.producto_terminado_codigo);
-            if (existentes.length > 0) {
-              const pt = existentes[0];
-              const nuevoStock = (pt.stock_actual || 0) + hojasBuenas;
-              const nuevoCostoProm = ((pt.stock_actual || 0) * (pt.costo_promedio || 0) + hojasBuenas * costoSub.costoPorHoja) / nuevoStock;
-              await ProductoTerminado.update(pt.id, { stock_actual: nuevoStock, costo_promedio: nuevoCostoProm, fecha_ultima_produccion: fechaHoy });
-            } else {
-              await ProductoTerminado.create({ codigo: sub.producto_terminado_codigo, descripcion: sub.producto_terminado_nombre || sub.producto_terminado_codigo, tipo_acabado: sub.tipo_acabado, color_final: sub.color_final, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy, costo_total_acumulado: costoSub.costoTotal });
-            }
-          } else {
-            const tipoAcabado = sub.tipo_acabado || ''; const colorFinal = sub.color_final || '';
-            const existentes = productosTerminados.filter(pt => pt.tipo_acabado === tipoAcabado && pt.color_final === colorFinal);
-            if (existentes.length > 0) {
-              await ProductoTerminado.update(existentes[0].id, { stock_actual: (existentes[0].stock_actual || 0) + hojasBuenas, costo_promedio: costoSub.costoPorHoja, fecha_ultima_produccion: fechaHoy });
-            } else {
-              const codigoAuto = `PT-${tipoAcabado.substring(0, 3)}-${colorFinal.substring(0, 5)}-${Date.now()}`.toUpperCase();
-              await ProductoTerminado.create({ codigo: codigoAuto, descripcion: `${tipoAcabado} - ${colorFinal}`.toUpperCase(), tipo_acabado: tipoAcabado, color_final: colorFinal, categoria: 'hojas_procesadas', unidad_medida: 'HOJA', stock_actual: hojasBuenas, costo_promedio: costoSub.costoPorHoja, stock_minimo: 0, proceso_origen_id: currentItem.id_consecutivo, lote_origen: cueroSeleccionado?.codigo_lote || '', sublote_pintura: sub.codigo_sublote || '', fecha_ingreso: fechaHoy, fecha_ultima_produccion: fechaHoy });
-            }
-          }
-        }
       }
-      alert(`✅ Proceso de pintura finalizado correctamente. Se generaron los movimientos de inventario y se actualizaron los costos de los sublotes.`);
+
+      alert(`✅ Proceso de pintura finalizado correctamente. Inventario de Productos Terminados actualizado.`);
       setShowModal(false);
       loadData();
     } catch (error) {
@@ -632,10 +675,11 @@ export default function Pintura() {
         }
       }
 
-      // 2. Revertir stock en ProductoTerminado por sublotes mediante movimientos
+      // 2. Revertir exactamente lo contabilizado en cada sublote (usando inv_contabilizado)
       const subs = Array.isArray(proceso.sublotes_pintura) ? proceso.sublotes_pintura : [];
       for (const sub of subs) {
-        const cantRevertir = parseFloat(sub.cantidad_hojas) || 0;
+        // Revertir sólo lo que realmente fue contabilizado en inventario
+        const cantRevertir = parseFloat(sub.inv_contabilizado) || parseFloat(sub.cantidad_hojas) || 0;
         if (sub.producto_terminado_id && cantRevertir > 0) {
           movimientosReversion.push({
             tipo_movimiento: 'salida',
@@ -644,14 +688,14 @@ export default function Pintura() {
             costo_unitario: 0,
             fecha_movimiento: fechaHoy,
             referencia: proceso.id_consecutivo,
-            observaciones: `Reversión por eliminación de Pedido Pintura: ${proceso.id_consecutivo}, Sublote: ${sub.codigo_sublote}`,
+            observaciones: `Reversión por eliminación | Pedido: ${proceso.id_consecutivo} | Sublote: ${sub.codigo_sublote}`,
           });
 
-          const currentStock = productosAActualizar.get(sub.producto_terminado_id)?.stock_actual ?? productosTerminados.find(p => p.id === sub.producto_terminado_id)?.stock_actual ?? 0;
-           productosAActualizar.set(sub.producto_terminado_id, {
-             id: sub.producto_terminado_id,
-             stock_actual: currentStock - cantRevertir
-           });
+          const stockPT = productosAActualizar.get(sub.producto_terminado_id)?.stock_actual
+            ?? productosTerminados.find(p => p.id === sub.producto_terminado_id)?.stock_actual ?? 0;
+          productosAActualizar.set(sub.producto_terminado_id, {
+            stock_actual: stockPT - cantRevertir
+          });
         }
       }
       
@@ -659,8 +703,8 @@ export default function Pintura() {
         await MovimientoInventario.bulkCreate(movimientosReversion);
       }
       
-      for (const [id, data] of productosAActualizar) {
-        await ProductoTerminado.update(id, { stock_actual: data.stock_actual });
+      for (const [ptId, data] of productosAActualizar) {
+        await ProductoTerminado.update(ptId, { stock_actual: Math.max(0, data.stock_actual) });
       }
 
       // 3. Eliminar el proceso
