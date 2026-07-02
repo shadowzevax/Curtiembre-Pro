@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Edit, Trash2, Eye, ClipboardList } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, ClipboardList, Workflow } from 'lucide-react';
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
 import InventarioItemDetail from '../components/inventario/InventarioItemDetail';
 import StockAlert from '../components/inventario/StockAlert';
+import SeguimientoProduccionModal from '../components/inventario/SeguimientoProduccionModal';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -36,6 +37,8 @@ export default function InventarioEnProcesoPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [showSeguimientoModal, setShowSeguimientoModal] = useState(false);
+  const [seguimientoItem, setSeguimientoItem] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -118,6 +121,11 @@ export default function InventarioEnProcesoPage() {
   const handleViewDetails = (item) => {
     setSelectedItem(item);
     setShowDetailModal(true);
+  };
+
+  const handleVerSeguimiento = (item) => {
+    setSeguimientoItem(item);
+    setShowSeguimientoModal(true);
   };
 
   const handleSave = async (formData) => {
@@ -211,6 +219,9 @@ export default function InventarioEnProcesoPage() {
           <div className="flex space-x-2">
             <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)}>
               <Eye className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" title="Seguimiento de Producción" className="border-cyan-500 text-cyan-700 hover:bg-cyan-50" onClick={() => handleVerSeguimiento(item)}>
+              <Workflow className="w-4 h-4" />
             </Button>
             <Button variant="outline" size="sm" onClick={() => handleOpenModal(item)}>
               <Edit className="w-4 h-4" />
@@ -309,6 +320,12 @@ export default function InventarioEnProcesoPage() {
         open={showDetailModal}
         onOpenChange={setShowDetailModal}
         item={selectedItem}
+      />
+
+      <SeguimientoProduccionModal
+        open={showSeguimientoModal}
+        onOpenChange={setShowSeguimientoModal}
+        item={seguimientoItem}
       />
     </div>
   );
