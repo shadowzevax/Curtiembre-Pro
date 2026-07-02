@@ -148,19 +148,24 @@ export default function InventarioEnProcesoPage() {
   };
 
   const handleExport = () => {
-    const hdrs = ['Código', 'Descripción', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total'];
+    const hdrs = ['Código', 'Lote Padre', 'Descripción', 'Base/Color', 'Calibre', 'Recurtido Finalizado', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total', 'Observaciones'];
     let csvContent = hdrs.join(',') + '\n';
     filteredProductos.forEach(item => {
       const valorTotal = (item.stock_actual || 0) * (item.costo_promedio || 0);
       const row = [
         `"${item.codigo || ''}"`,
+        `"${item.codigo_lote_padre || ''}"`,
         `"${item.descripcion || ''}"`,
+        `"${item.color_base || ''}"`,
+        `"${item.calibre || ''}"`,
+        `"${RF_LABELS[item.recurtido_finalizado] || ''}"`,
         `"${CATEGORIA_LABELS[item.categoria] || item.categoria || ''}"`,
         item.stock_actual || 0,
         item.stock_minimo || 0,
         `"${item.unidad_medida || ''}"`,
         item.costo_promedio || 0,
         valorTotal,
+        `"${(item.observaciones || '').replace(/"/g, '""')}"`,
       ].join(',');
       csvContent += row + '\n';
     });
@@ -175,10 +180,12 @@ export default function InventarioEnProcesoPage() {
 
   const handlePrint = () => window.print();
 
+  const RF_LABELS = { en_pelo: 'En Pelo', crosta: 'Crosta' };
+
   const tableHeaders = [
-    'Código', 'Descripción', 'Categoría',
+    'Código', 'Lote Padre', 'Descripción', 'Base/Color', 'Calibre', 'Recurtido Finalizado',
     'Stock Actual', 'Stock Mínimo', 'Estado Stock', 'Unidad de Medida',
-    'Costo Promedio', 'Valor Total', 'Acciones'
+    'Costo Promedio', 'Valor Total', 'Observaciones', 'Acciones'
   ];
 
   const renderRow = (item) => {
@@ -186,8 +193,11 @@ export default function InventarioEnProcesoPage() {
     return (
       <tr key={item.id}>
         <td>{item.codigo}</td>
+        <td className="font-mono text-xs">{item.codigo_lote_padre || '—'}</td>
         <td>{item.descripcion}</td>
-        <td>{CATEGORIA_LABELS[item.categoria] || item.categoria || 'N/A'}</td>
+        <td>{item.color_base || '—'}</td>
+        <td>{item.calibre || '—'}</td>
+        <td>{RF_LABELS[item.recurtido_finalizado] || '—'}</td>
         <td className={(item.stock_actual || 0) <= (item.stock_minimo || 0) ? 'text-red-500 font-bold' : ''}>
           {item.stock_actual || 0}
         </td>
@@ -196,6 +206,7 @@ export default function InventarioEnProcesoPage() {
         <td>{item.unidad_medida || 'N/A'}</td>
         <td>{formatCurrency(item.costo_promedio)}</td>
         <td className="text-right font-bold text-emerald-700">{formatCurrency(valorTotal)}</td>
+        <td className="text-xs max-w-[160px] truncate" title={item.observaciones || ''}>{item.observaciones || '—'}</td>
         <td>
           <div className="flex space-x-2">
             <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)}>

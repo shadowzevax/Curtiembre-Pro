@@ -136,6 +136,8 @@ export default function ProcesoRecurtido() {
       cantidad_hojas: proc.cantidad_pieles || 0,
       peso_asignado: proc.peso_actual || 0,
       peso_promedio: proc.peso_promedio || 0,
+      calibre: proc.calibre || '',
+      recurtido_finalizado: proc.recurtido_finalizado || '',
       observaciones: proc.observaciones || '',
       insumos_utilizados: proc.insumos_utilizados || [],
       estado: proc.estado || 'pendiente',
@@ -173,6 +175,8 @@ export default function ProcesoRecurtido() {
       cantidad_hojas: 0,
       peso_asignado: 0,
       peso_promedio: 0,
+      calibre: '',
+      recurtido_finalizado: '',
       observaciones: '',
       insumos_utilizados: [],
       estado: 'pendiente',
@@ -313,6 +317,8 @@ export default function ProcesoRecurtido() {
           cantidad_pieles: parseFloat(sub.cantidad_hojas) || 0,
           peso_actual: parseFloat(sub.peso_asignado) || 0,
           peso_promedio: parseFloat(sub.peso_promedio) || 0,
+          calibre: sub.calibre || '',
+          recurtido_finalizado: sub.recurtido_finalizado || '',
           fecha_inicio: sub.fecha_inicio || new Date().toISOString().split('T')[0],
           fecha_fin: sub.fecha_fin || '',
           observaciones: sub.observaciones || '',
@@ -393,30 +399,62 @@ export default function ProcesoRecurtido() {
       for (const p of sublotes) {
         await ProcesoProduccion.update(p.id, { finalizar_recurtido_general: true });
       }
-      if (inv) {
-        const costoProductos = sublotes.reduce((s, p) => s + (parseFloat(p.subtotal_recurtido) || 0) + (parseFloat(p.subtotal_humectacion) || 0) + (parseFloat(p.subtotal_recromado) || 0), 0);
-        const costoHeredado = parseFloat(inv.costo_acumulado) || 0;
-        const nuevoCostoAcumulado = costoHeredado + costoProductos;
-        const cantHojasFinales = totalRecurtido || (inv.cantidad_hojas || 0);
-        const pesoFinal = sublotes.reduce((mx, p) => Math.max(mx, parseFloat(p.peso_actual) || 0), parseFloat(inv.peso_actual) || 0);
-        const nuevoCostoPorHoja = cantHojasFinales > 0 ? nuevoCostoAcumulado / cantHojasFinales : 0;
-        const nuevoCostoPorKg   = pesoFinal > 0 ? nuevoCostoAcumulado / pesoFinal : 0;
-        const subloteConColor = sublotes.find(p => p.nombre_color);
 
+      const RF_LABELS = { en_pelo: 'EN PELO', crosta: 'CROSTA' };
+
+      if (inv) {
+        const costoHeredadoLote = parseFloat(inv.costo_acumulado) || 0;
+
+        // Crear un registro de Inventario en Proceso por cada sublote generado
+        for (const p of sublotes) {
+          const hojasSub = parseFloat(p.cantidad_pieles) || 0;
+          const pesoSub = parseFloat(p.peso_actual) || 0;
+          const costoHeredadoSub = totalHojas > 0 ? (hojasSub / totalHojas) * costoHeredadoLote : 0;
+          const costoProductosSub = (parseFloat(p.subtotal_recurtido) || 0) + (parseFloat(p.subtotal_humectacion) || 0) + (parseFloat(p.subtotal_recromado) || 0);
+          const costoTotalSub = costoHeredadoSub + costoProductosSub;
+          const costoPorHojaSub = hojasSub > 0 ? costoTotalSub / hojasSub : 0;
+
+          const colorLabel = p.nombre_color || '';
+          const rfLabel = RF_LABELS[p.recurtido_finalizado] || '';
+          const descripcion = rfLabel
+            ? `${rfLabel}-BASE ${colorLabel}`.trim()
+            : `Hojas en proceso - Base ${colorLabel}`.trim();
+
+          const codigoSublote = p.numero_proceso || `${codigoLote}-${String(p.numero_sublote_recurtido || 1).padStart(2, '0')}`;
+
+          await InventarioEnProceso.create({
+            codigo: codigoSublote,
+            descripcion,
+            categoria: 'hojas_procesadas',
+            unidad_medida: 'HOJA',
+            codigo_lote: codigoSublote,
+            codigo_lote_padre: codigoLote,
+            tipo: 'SUBLOTE',
+            origen_modulo: 'recurtido',
+            etapa_actual: 'recurtido',
+            estado_actual: 'EN_PROCESO',
+            estado_proceso: 'piel_recurtida',
+            cantidad_hojas: hojasSub,
+            peso_actual: pesoSub,
+            costo_acumulado: costoTotalSub,
+            costo_promedio: costoPorHojaSub,
+            color_base: colorLabel,
+            codigo_color: p.codigo_color || '',
+            calibre: p.calibre || '',
+            recurtido_finalizado: p.recurtido_finalizado || '',
+            observaciones: p.observaciones || '',
+            proceso_origen_id: p.id,
+          });
+        }
+
+        // El lote padre queda únicamente como registro histórico/trazabilidad, sin stock disponible
         await InventarioEnProceso.update(inv.id, {
-          etapa_actual: 'recurtido',
-          estado_actual: 'FINALIZADO',
-          estado_proceso: 'piel_recurtida',
-          peso_actual: pesoFinal,
-          costo_acumulado: nuevoCostoAcumulado,
-          costo_promedio: nuevoCostoPorHoja,
-          cantidad_hojas: cantHojasFinales,
-          codigo_color: subloteConColor?.codigo_color || inv.codigo_color || '',
-          color_base: subloteConColor?.nombre_color || inv.color_base || '',
+          estado_actual: 'DIVIDIDO',
+          cantidad_hojas: 0,
         });
       }
       await loadData();
-      alert(`✅ Recurtido General del lote ${codigoLote} finalizado.`);
+      alert(`✅ Recurtido General del lote ${codigoLote} finalizado. Se generaron ${sublotes.length} registro(s) de inventario en proceso por sublote.`);
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -857,6 +895,27 @@ export default function ProcesoRecurtido() {
                               value={subloteActivo.cantidad_hojas || ''}
                               onChange={e => handleSubloteFieldChange('cantidad_hojas', parseFloat(e.target.value) || 0)}
                               className={`text-xs ${hojasRestantes < 0 ? 'border-red-400 bg-red-50' : ''}`} />
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-orange-800">Calibre *</Label>
+                            <Select value={subloteActivo.calibre || ''} onValueChange={v => handleSubloteFieldChange('calibre', v)}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar calibre..." /></SelectTrigger>
+                              <SelectContent>
+                                {['0.8 - 1.0 mm', '1.0 - 1.2 mm', '1.2 - 1.4 mm'].map(c => (
+                                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-orange-800">Recurtido Finalizado *</Label>
+                            <Select value={subloteActivo.recurtido_finalizado || ''} onValueChange={v => handleSubloteFieldChange('recurtido_finalizado', v)}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="en_pelo">En Pelo</SelectItem>
+                                <SelectItem value="crosta">Crosta</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Peso Asignado (kg)</Label>
