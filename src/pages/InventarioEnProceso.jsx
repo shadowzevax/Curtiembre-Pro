@@ -142,7 +142,7 @@ export default function InventarioEnProcesoPage() {
       filtered = filtered.filter(p => (p.destino_sublote || 'disponible_pintura') === filterEstadoSublote);
     }
     if (!showZeroExistencia) {
-      filtered = filtered.filter(p => (p.stock_actual || 0) > 0);
+      filtered = filtered.filter(p => (p.cantidad_hojas || p.stock_actual || 0) > 0);
     }
     setFilteredProductos(filtered);
   }, [searchCodigo, searchDescripcion, searchCodigoProducto, searchColorBase, filterEstadoLote, filterEstadoSublote, showZeroExistencia, productos]);
@@ -191,26 +191,22 @@ export default function InventarioEnProcesoPage() {
   };
 
   const handleExport = () => {
-    const hdrs = ['Código', 'Lote Padre', 'Código Producto', 'Descripción Producto', 'Descripción', 'Base/Color', 'Calibre', 'Destino', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total', 'Observaciones'];
+    const hdrs = ['Código Producto', 'Descripción Producto', 'Código Sublote', 'Calibre', 'Destino', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total'];
     let csvContent = hdrs.join(',') + '\n';
     filteredProductos.forEach(item => {
-      const valorTotal = (item.stock_actual || 0) * (item.costo_promedio || 0);
+      const stockActual = item.cantidad_hojas || item.stock_actual || 0;
+      const valorTotal = stockActual * (item.costo_promedio || 0);
       const row = [
-        `"${item.codigo || ''}"`,
-        `"${item.codigo_lote_padre || ''}"`,
         `"${item.codigo_producto_proceso || ''}"`,
         `"${item.descripcion_producto_proceso || ''}"`,
-        `"${item.descripcion || ''}"`,
-        `"${item.color_base || ''}"`,
+        `"${item.codigo_lote || ''}"`,
         `"${item.calibre || ''}"`,
         `"${DESTINO_LABELS[item.destino_sublote || 'disponible_pintura']}"`,
-        `"${CATEGORIA_LABELS[item.categoria] || item.categoria || ''}"`,
-        item.stock_actual || 0,
+        stockActual,
         item.stock_minimo || 0,
         `"${item.unidad_medida || ''}"`,
         item.costo_promedio || 0,
         valorTotal,
-        `"${(item.observaciones || '').replace(/"/g, '""')}"`,
       ].join(',');
       csvContent += row + '\n';
     });
@@ -228,32 +224,29 @@ export default function InventarioEnProcesoPage() {
   const RF_LABELS = { en_pelo: 'En Pelo', crosta: 'Crosta' };
 
   const tableHeaders = [
-    'Código', 'Lote Padre', 'Código Producto', 'Descripción Producto', 'Descripción', 'Base/Color', 'Calibre', 'Destino',
-    'Stock Actual', 'Stock Mínimo', 'Estado Stock', 'Unidad de Medida',
-    'Costo Promedio', 'Valor Total', 'Observaciones', 'Acciones'
+    'Código Producto', 'Descripción Producto', 'Código Sublote', 'Calibre',
+    'Stock Actual', 'Stock Mínimo', 'Estado Stock', 'Destino',
+    'Unidad de Medida', 'Costo Promedio', 'Valor Total', 'Acciones'
   ];
 
   const renderRow = (item) => {
-    const valorTotal = (item.stock_actual || 0) * (item.costo_promedio || 0);
+    const stockActual = item.cantidad_hojas || item.stock_actual || 0;
+    const valorTotal = stockActual * (item.costo_promedio || 0);
     return (
       <tr key={item.id}>
-        <td>{item.codigo}</td>
-        <td className="font-mono text-xs">{item.codigo_lote_padre || '—'}</td>
         <td className="font-mono text-xs font-bold text-cyan-700">{item.codigo_producto_proceso || '—'}</td>
-        <td className="text-xs max-w-[140px] truncate" title={item.descripcion_producto_proceso || ''}>{item.descripcion_producto_proceso || '—'}</td>
-        <td>{item.descripcion}</td>
-        <td>{item.color_base || '—'}</td>
+        <td className="text-xs max-w-[180px] truncate" title={item.descripcion_producto_proceso || ''}>{item.descripcion_producto_proceso || '—'}</td>
+        <td className="font-mono text-xs">{item.codigo_lote || '—'}</td>
         <td>{item.calibre || '—'}</td>
-        <td className="text-xs"><span className={`px-1.5 py-0.5 rounded border ${item.destino_sublote === 'vendido_crosta' ? 'bg-amber-100 text-amber-700 border-amber-300' : item.destino_sublote === 'producto_terminado' ? 'bg-purple-100 text-purple-700 border-purple-300' : item.destino_sublote === 'en_proceso_pintura' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-green-100 text-green-700 border-green-300'}`}>{DESTINO_LABELS[item.destino_sublote || 'disponible_pintura']}</span></td>
-        <td className={(item.stock_actual || 0) <= (item.stock_minimo || 0) ? 'text-red-500 font-bold' : ''}>
-          {item.stock_actual || 0}
+        <td className={stockActual <= (item.stock_minimo || 0) ? 'text-red-500 font-bold' : ''}>
+          {stockActual}
         </td>
         <td>{item.stock_minimo || 0}</td>
-        <td><StockAlert stockActual={item.stock_actual || 0} stockMinimo={item.stock_minimo || 0} /></td>
+        <td><StockAlert stockActual={stockActual} stockMinimo={item.stock_minimo || 0} /></td>
+        <td className="text-xs"><span className={`px-1.5 py-0.5 rounded border ${item.destino_sublote === 'vendido_crosta' ? 'bg-amber-100 text-amber-700 border-amber-300' : item.destino_sublote === 'producto_terminado' ? 'bg-purple-100 text-purple-700 border-purple-300' : item.destino_sublote === 'en_proceso_pintura' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-green-100 text-green-700 border-green-300'}`}>{DESTINO_LABELS[item.destino_sublote || 'disponible_pintura']}</span></td>
         <td>{item.unidad_medida || 'N/A'}</td>
         <td>{formatCurrency(item.costo_promedio)}</td>
         <td className="text-right font-bold text-emerald-700">{formatCurrency(valorTotal)}</td>
-        <td className="text-xs max-w-[160px] truncate" title={item.observaciones || ''}>{item.observaciones || '—'}</td>
         <td>
           <div className="flex space-x-2">
             <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)}>

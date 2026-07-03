@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, ProductoTerminado, MovimientoInventario, InventarioEnProceso } from '@/entities/all';
+import { ProcesoProduccion, Insumo, ProductoTerminado, MovimientoInventario, InventarioEnProceso, ProductoCatalogo } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ export default function ProcesoRecurtido() {
   const [productos, setProductos] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [allInvProceso, setAllInvProceso] = useState([]);
+  const [catalogoProcesos, setCatalogoProcesos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ─── MODAL PRINCIPAL ─────────────────────────────────────────────────────
@@ -71,17 +72,19 @@ export default function ProcesoRecurtido() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, invEnProceso] = await Promise.all([
+      const [procesosData, insumosData, productosData, invEnProceso, catProcesos] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recurtido' }),
         Insumo.list(),
         ProductoTerminado.list(),
-        InventarioEnProceso.list()
+        InventarioEnProceso.list(),
+        ProductoCatalogo.filter({ categoria: 'productos_en_proceso' })
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
       const allInv = Array.isArray(invEnProceso) ? invEnProceso : [];
       setAllInvProceso(allInv);
+      setCatalogoProcesos(Array.isArray(catProcesos) ? catProcesos : []);
       const filtrados = allInv
         .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'curtido');
       setInventarioEnProceso(filtrados);
@@ -455,6 +458,7 @@ export default function ProcesoRecurtido() {
             descripcion_producto_proceso: p.descripcion_producto_proceso || '',
             destino_sublote: 'disponible_pintura',
             observaciones: p.observaciones || '',
+            fecha_ingreso_proceso: new Date().toISOString().split('T')[0],
             proceso_origen_id: p.id,
           });
         }
@@ -551,16 +555,11 @@ export default function ProcesoRecurtido() {
     return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
   });
 
-  // Productos en Proceso únicos para el dropdown "Código Producto en Proceso"
-  const productosProcesoOptions = (() => {
-    const map = new Map();
-    allInvProceso.forEach(i => {
-      const code = i.codigo_producto_proceso || (i.tipo === 'SUBLOTE' ? i.codigo : null);
-      const desc = i.descripcion_producto_proceso || i.descripcion;
-      if (code && !map.has(code)) map.set(code, desc || '');
-    });
-    return Array.from(map, ([code, desc]) => ({ code, desc }));
-  })();
+  // Productos en Proceso desde el Catálogo Maestro (fuente única de códigos)
+  const productosProcesoOptions = catalogoProcesos
+    .filter(p => p.estado === 'activo')
+    .map(p => ({ code: p.codigo, desc: p.descripcion || p.nombre_comercial || '' }))
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   const estadoCostoColor = (estado) => ({
     'Pendiente':    'bg-yellow-100 text-yellow-800 border-yellow-300',

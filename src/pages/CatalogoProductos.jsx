@@ -129,7 +129,7 @@ export default function CatalogoProductos() {
                         } else if (newProduct.categoria === 'productos_terminados') {
                             await ProductoTerminado.create({...baseInventoryData, categoria: 'producto_terminado'});
                         }
-                        // productos_en_proceso: no se crea en inventario estático, se crea al hacer compra
+                        // productos_en_proceso: disponible automáticamente en Recurtido/Pintura vía consulta al Catálogo (fuente única de códigos)
                     } catch (err) {
                         console.error("Error creando en inventario:", err);
                         alert("Producto creado en catálogo, pero hubo un error al agregarlo al inventario. Puede agregarlo manualmente.");
