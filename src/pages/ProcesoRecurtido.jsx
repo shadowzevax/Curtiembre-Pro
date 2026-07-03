@@ -41,6 +41,7 @@ export default function ProcesoRecurtido() {
   const [insumos, setInsumos] = useState([]);
   const [productos, setProductos] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
+  const [allInvProceso, setAllInvProceso] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // ─── MODAL PRINCIPAL ─────────────────────────────────────────────────────
@@ -79,7 +80,9 @@ export default function ProcesoRecurtido() {
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
-      const filtrados = (Array.isArray(invEnProceso) ? invEnProceso : [])
+      const allInv = Array.isArray(invEnProceso) ? invEnProceso : [];
+      setAllInvProceso(allInv);
+      const filtrados = allInv
         .filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'curtido');
       setInventarioEnProceso(filtrados);
     } catch (err) {
@@ -138,6 +141,8 @@ export default function ProcesoRecurtido() {
       peso_promedio: proc.peso_promedio || 0,
       calibre: proc.calibre || '',
       recurtido_finalizado: proc.recurtido_finalizado || '',
+      codigo_producto_proceso: proc.codigo_producto_proceso || '',
+      descripcion_producto_proceso: proc.descripcion_producto_proceso || '',
       observaciones: proc.observaciones || '',
       insumos_utilizados: proc.insumos_utilizados || [],
       estado: proc.estado || 'pendiente',
@@ -177,6 +182,8 @@ export default function ProcesoRecurtido() {
       peso_promedio: 0,
       calibre: '',
       recurtido_finalizado: '',
+      codigo_producto_proceso: '',
+      descripcion_producto_proceso: '',
       observaciones: '',
       insumos_utilizados: [],
       estado: 'pendiente',
@@ -319,6 +326,8 @@ export default function ProcesoRecurtido() {
           peso_promedio: parseFloat(sub.peso_promedio) || 0,
           calibre: sub.calibre || '',
           recurtido_finalizado: sub.recurtido_finalizado || '',
+          codigo_producto_proceso: sub.codigo_producto_proceso || '',
+          descripcion_producto_proceso: sub.descripcion_producto_proceso || '',
           fecha_inicio: sub.fecha_inicio || new Date().toISOString().split('T')[0],
           fecha_fin: sub.fecha_fin || '',
           observaciones: sub.observaciones || '',
@@ -416,9 +425,9 @@ export default function ProcesoRecurtido() {
 
           const colorLabel = p.nombre_color || '';
           const rfLabel = RF_LABELS[p.recurtido_finalizado] || '';
-          const descripcion = rfLabel
+          const descripcion = p.descripcion_producto_proceso || (rfLabel
             ? `${rfLabel}-BASE ${colorLabel}`.trim()
-            : `Hojas en proceso - Base ${colorLabel}`.trim();
+            : `Hojas en proceso - Base ${colorLabel}`.trim());
 
           const codigoSublote = p.numero_proceso || `${codigoLote}-${String(p.numero_sublote_recurtido || 1).padStart(2, '0')}`;
 
@@ -442,6 +451,9 @@ export default function ProcesoRecurtido() {
             codigo_color: p.codigo_color || '',
             calibre: p.calibre || '',
             recurtido_finalizado: p.recurtido_finalizado || '',
+            codigo_producto_proceso: p.codigo_producto_proceso || '',
+            descripcion_producto_proceso: p.descripcion_producto_proceso || '',
+            destino_sublote: 'disponible_pintura',
             observaciones: p.observaciones || '',
             proceso_origen_id: p.id,
           });
@@ -539,6 +551,17 @@ export default function ProcesoRecurtido() {
     return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
   });
 
+  // Productos en Proceso únicos para el dropdown "Código Producto en Proceso"
+  const productosProcesoOptions = (() => {
+    const map = new Map();
+    allInvProceso.forEach(i => {
+      const code = i.codigo_producto_proceso || (i.tipo === 'SUBLOTE' ? i.codigo : null);
+      const desc = i.descripcion_producto_proceso || i.descripcion;
+      if (code && !map.has(code)) map.set(code, desc || '');
+    });
+    return Array.from(map, ([code, desc]) => ({ code, desc }));
+  })();
+
   const estadoCostoColor = (estado) => ({
     'Pendiente':    'bg-yellow-100 text-yellow-800 border-yellow-300',
     'En proceso':   'bg-blue-100 text-blue-800 border-blue-300',
@@ -631,6 +654,8 @@ export default function ProcesoRecurtido() {
                     <tr>
                       <th className="p-2 text-left">Código Sublote</th>
                       <th className="p-2 text-left">Base / Color</th>
+                      <th className="p-2 text-left">Código Producto</th>
+                      <th className="p-2 text-left">Descripción</th>
                       <th className="p-2 text-center">Sublote #</th>
                       <th className="p-2 text-right">Cant. Hojas</th>
                       <th className="p-2 text-right">Peso (kg)</th>
@@ -641,7 +666,7 @@ export default function ProcesoRecurtido() {
                   </thead>
                   <tbody>
                     {sublotesControl.length === 0 ? (
-                      <tr><td colSpan={8} className="p-4 text-center text-slate-400">No hay sublotes. Use "Nuevo Registro Recurtido".</td></tr>
+                      <tr><td colSpan={10} className="p-4 text-center text-slate-400">No hay sublotes. Use "Nuevo Registro Recurtido".</td></tr>
                     ) : sublotesControl.map(proc => {
                       const finalizado = proc.estado === 'completado';
                       const costoProductos = (parseFloat(proc.subtotal_recurtido) || 0) + (parseFloat(proc.subtotal_humectacion) || 0) + (parseFloat(proc.subtotal_recromado) || 0);
@@ -649,6 +674,8 @@ export default function ProcesoRecurtido() {
                         <tr key={proc.id} className={`border-t ${finalizado ? 'bg-green-50' : 'bg-white'}`}>
                           <td className="p-2 font-mono font-bold text-xs text-purple-800">{proc.numero_proceso || proc.codigo_lote}</td>
                           <td className="p-2 font-semibold">{proc.nombre_color || '—'}</td>
+                          <td className="p-2 font-mono text-xs font-bold text-cyan-700">{proc.codigo_producto_proceso || '—'}</td>
+                          <td className="p-2 text-xs text-slate-600 max-w-[140px] truncate" title={proc.descripcion_producto_proceso || ''}>{proc.descripcion_producto_proceso || '—'}</td>
                           <td className="p-2 text-center">
                             <span className="bg-slate-100 text-slate-700 rounded px-2 py-0.5 text-xs font-bold">#{proc.numero_sublote_recurtido || '?'}</span>
                           </td>
@@ -685,7 +712,7 @@ export default function ProcesoRecurtido() {
                   {sublotesControl.length > 0 && (
                     <tfoot>
                       <tr className="bg-slate-100 font-bold border-t-2">
-                        <td colSpan={3} className="p-2 text-right text-xs">TOTAL:</td>
+                        <td colSpan={5} className="p-2 text-right text-xs">TOTAL:</td>
                         <td className="p-2 text-right">{totalRecurtidoControl}</td>
                         <td className="p-2 text-right">{sublotesControl.reduce((s, p) => s + (parseFloat(p.peso_actual) || 0), 0).toFixed(2)} kg</td>
                         <td className="p-2 text-right text-emerald-700">
@@ -908,14 +935,25 @@ export default function ProcesoRecurtido() {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Recurtido Finalizado *</Label>
-                            <Select value={subloteActivo.recurtido_finalizado || ''} onValueChange={v => handleSubloteFieldChange('recurtido_finalizado', v)}>
+                            <Label className="text-xs font-bold text-orange-800">Código Producto en Proceso *</Label>
+                            <Select value={subloteActivo.codigo_producto_proceso || ''} onValueChange={v => {
+                              const opt = productosProcesoOptions.find(o => o.code === v);
+                              setSublotesForm(prev => prev.map((s, i) => i === subloteActivoIdx
+                                ? { ...s, codigo_producto_proceso: v, descripcion_producto_proceso: opt?.desc || '' } : s));
+                            }}>
                               <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="en_pelo">En Pelo</SelectItem>
-                                <SelectItem value="crosta">Crosta</SelectItem>
+                                {productosProcesoOptions.length === 0 && <SelectItem value="__none__" disabled>Sin productos registrados</SelectItem>}
+                                {productosProcesoOptions.map(o => (
+                                  <SelectItem key={o.code} value={o.code}>{o.code} — {o.desc}</SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-orange-800">Descripción</Label>
+                            <Input value={subloteActivo.descripcion_producto_proceso || ''} readOnly className="bg-blue-50 text-xs font-bold text-blue-800 cursor-not-allowed" />
+                            <p className="text-xs text-slate-400 mt-0.5">Auto desde Inventario</p>
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Peso Asignado (kg)</Label>

@@ -54,6 +54,14 @@
       ],
       "description": "Tipo de producto obtenido al finalizar el recurtido del sublote"
     },
+    "codigo_producto_proceso": {
+      "type": "string",
+      "description": "C\u00f3digo del Producto en Proceso seleccionado desde el Inventario de Productos en Proceso"
+    },
+    "descripcion_producto_proceso": {
+      "type": "string",
+      "description": "Descripci\u00f3n del producto en proceso (auto-llenada desde Inventario de Productos en Proceso)"
+    },
     "nombre_proveedor": {
       "type": "string",
       "description": "Nombre del proveedor para trazabilidad"

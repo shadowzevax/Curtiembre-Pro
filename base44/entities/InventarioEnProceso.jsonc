@@ -90,6 +90,28 @@
       ],
       "description": "Estado descriptivo del proceso productivo"
     },
+    "codigo_producto_proceso": {
+      "type": "string",
+      "description": "C\u00f3digo del Producto en Proceso (identificador del tipo de producto obtenido tras recurtido)"
+    },
+    "descripcion_producto_proceso": {
+      "type": "string",
+      "description": "Descripci\u00f3n del producto en proceso (auto-llenada)"
+    },
+    "destino_sublote": {
+      "type": "string",
+      "enum": [
+        "disponible_pintura",
+        "en_proceso_pintura",
+        "producto_terminado",
+        "vendido_crosta",
+        "agotado",
+        "cancelado",
+        "merma"
+      ],
+      "default": "disponible_pintura",
+      "description": "Destino o situaci\u00f3n actual del sublote"
+    },
     "cantidad_hojas": {
       "type": "number",
       "default": 0,
@@ -161,6 +183,29 @@
     "proceso_origen_id": {
       "type": "string",
       "description": "ID del proceso de producci\u00f3n que gener\u00f3 este registro"
+    },
+    "historial_movimientos": {
+      "type": "array",
+      "description": "Historial cronol\u00f3gico de movimientos del lote/sublote",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usuario": {
+            "type": "string"
+          },
+          "movimiento": {
+            "type": "string"
+          },
+          "cantidad_afectada": {
+            "type": "number",
+            "default": 0
+          }
+        }
+      }
     }
   },
   "required": [

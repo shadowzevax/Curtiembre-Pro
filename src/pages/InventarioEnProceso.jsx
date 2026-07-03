@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Edit, Trash2, Eye, ClipboardList, Workflow } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
 import InventarioItemDetail from '../components/inventario/InventarioItemDetail';
@@ -39,6 +40,11 @@ export default function InventarioEnProcesoPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [showSeguimientoModal, setShowSeguimientoModal] = useState(false);
   const [seguimientoItem, setSeguimientoItem] = useState(null);
+  const [searchCodigoProducto, setSearchCodigoProducto] = useState('');
+  const [searchColorBase, setSearchColorBase] = useState('');
+  const [filterEstadoLote, setFilterEstadoLote] = useState('');
+  const [filterEstadoSublote, setFilterEstadoSublote] = useState('');
+  const [showZeroExistencia, setShowZeroExistencia] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -95,7 +101,17 @@ export default function InventarioEnProcesoPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Filtrado por código y descripción
+  const DESTINO_LABELS = {
+    disponible_pintura: 'Disponible Pintura',
+    en_proceso_pintura: 'En Pintura',
+    producto_terminado: 'Producto Terminado',
+    vendido_crosta: 'Vendido Crosta',
+    agotado: 'Agotado',
+    cancelado: 'Cancelado',
+    merma: 'Merma',
+  };
+
+  // Filtrado por código, descripción, producto, color base, estados y existencia
   useEffect(() => {
     let filtered = productos;
     if (searchCodigo) {
@@ -109,8 +125,27 @@ export default function InventarioEnProcesoPage() {
         (p.descripcion || '').toLowerCase().includes(searchDescripcion.toLowerCase())
       );
     }
+    if (searchCodigoProducto) {
+      filtered = filtered.filter(p =>
+        (p.codigo_producto_proceso || '').toLowerCase().includes(searchCodigoProducto.toLowerCase())
+      );
+    }
+    if (searchColorBase) {
+      filtered = filtered.filter(p =>
+        (p.color_base || '').toLowerCase().includes(searchColorBase.toLowerCase())
+      );
+    }
+    if (filterEstadoLote) {
+      filtered = filtered.filter(p => (p.estado_actual || '') === filterEstadoLote);
+    }
+    if (filterEstadoSublote) {
+      filtered = filtered.filter(p => (p.destino_sublote || 'disponible_pintura') === filterEstadoSublote);
+    }
+    if (!showZeroExistencia) {
+      filtered = filtered.filter(p => (p.stock_actual || 0) > 0);
+    }
     setFilteredProductos(filtered);
-  }, [searchCodigo, searchDescripcion, productos]);
+  }, [searchCodigo, searchDescripcion, searchCodigoProducto, searchColorBase, filterEstadoLote, filterEstadoSublote, showZeroExistencia, productos]);
 
   const handleOpenModal = (item = null) => {
     setIsEditing(!!item);
@@ -156,17 +191,19 @@ export default function InventarioEnProcesoPage() {
   };
 
   const handleExport = () => {
-    const hdrs = ['Código', 'Lote Padre', 'Descripción', 'Base/Color', 'Calibre', 'Recurtido Finalizado', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total', 'Observaciones'];
+    const hdrs = ['Código', 'Lote Padre', 'Código Producto', 'Descripción Producto', 'Descripción', 'Base/Color', 'Calibre', 'Destino', 'Categoría', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total', 'Observaciones'];
     let csvContent = hdrs.join(',') + '\n';
     filteredProductos.forEach(item => {
       const valorTotal = (item.stock_actual || 0) * (item.costo_promedio || 0);
       const row = [
         `"${item.codigo || ''}"`,
         `"${item.codigo_lote_padre || ''}"`,
+        `"${item.codigo_producto_proceso || ''}"`,
+        `"${item.descripcion_producto_proceso || ''}"`,
         `"${item.descripcion || ''}"`,
         `"${item.color_base || ''}"`,
         `"${item.calibre || ''}"`,
-        `"${RF_LABELS[item.recurtido_finalizado] || ''}"`,
+        `"${DESTINO_LABELS[item.destino_sublote || 'disponible_pintura']}"`,
         `"${CATEGORIA_LABELS[item.categoria] || item.categoria || ''}"`,
         item.stock_actual || 0,
         item.stock_minimo || 0,
@@ -191,7 +228,7 @@ export default function InventarioEnProcesoPage() {
   const RF_LABELS = { en_pelo: 'En Pelo', crosta: 'Crosta' };
 
   const tableHeaders = [
-    'Código', 'Lote Padre', 'Descripción', 'Base/Color', 'Calibre', 'Recurtido Finalizado',
+    'Código', 'Lote Padre', 'Código Producto', 'Descripción Producto', 'Descripción', 'Base/Color', 'Calibre', 'Destino',
     'Stock Actual', 'Stock Mínimo', 'Estado Stock', 'Unidad de Medida',
     'Costo Promedio', 'Valor Total', 'Observaciones', 'Acciones'
   ];
@@ -202,10 +239,12 @@ export default function InventarioEnProcesoPage() {
       <tr key={item.id}>
         <td>{item.codigo}</td>
         <td className="font-mono text-xs">{item.codigo_lote_padre || '—'}</td>
+        <td className="font-mono text-xs font-bold text-cyan-700">{item.codigo_producto_proceso || '—'}</td>
+        <td className="text-xs max-w-[140px] truncate" title={item.descripcion_producto_proceso || ''}>{item.descripcion_producto_proceso || '—'}</td>
         <td>{item.descripcion}</td>
         <td>{item.color_base || '—'}</td>
         <td>{item.calibre || '—'}</td>
-        <td>{RF_LABELS[item.recurtido_finalizado] || '—'}</td>
+        <td className="text-xs"><span className={`px-1.5 py-0.5 rounded border ${item.destino_sublote === 'vendido_crosta' ? 'bg-amber-100 text-amber-700 border-amber-300' : item.destino_sublote === 'producto_terminado' ? 'bg-purple-100 text-purple-700 border-purple-300' : item.destino_sublote === 'en_proceso_pintura' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-green-100 text-green-700 border-green-300'}`}>{DESTINO_LABELS[item.destino_sublote || 'disponible_pintura']}</span></td>
         <td className={(item.stock_actual || 0) <= (item.stock_minimo || 0) ? 'text-red-500 font-bold' : ''}>
           {item.stock_actual || 0}
         </td>
@@ -266,25 +305,51 @@ export default function InventarioEnProcesoPage() {
       <Card className="mb-6">
         <CardHeader><CardTitle>Filtro de Búsqueda</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="searchCodigo">Código</Label>
-              <Input
-                id="searchCodigo"
-                placeholder="Buscar por código o lote..."
-                value={searchCodigo}
-                onChange={e => setSearchCodigo(e.target.value)}
-              />
+              <Label htmlFor="searchCodigo">Código / Lote</Label>
+              <Input id="searchCodigo" placeholder="Buscar por código o lote..." value={searchCodigo} onChange={e => setSearchCodigo(e.target.value)} />
             </div>
             <div>
               <Label htmlFor="searchDescripcion">Descripción</Label>
-              <Input
-                id="searchDescripcion"
-                placeholder="Buscar por descripción..."
-                value={searchDescripcion}
-                onChange={e => setSearchDescripcion(e.target.value)}
-              />
+              <Input id="searchDescripcion" placeholder="Buscar por descripción..." value={searchDescripcion} onChange={e => setSearchDescripcion(e.target.value)} />
             </div>
+            <div>
+              <Label htmlFor="searchCodigoProducto">Código Producto en Proceso</Label>
+              <Input id="searchCodigoProducto" placeholder="Buscar por código producto..." value={searchCodigoProducto} onChange={e => setSearchCodigoProducto(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="searchColorBase">Color Base</Label>
+              <Input id="searchColorBase" placeholder="Buscar por color base..." value={searchColorBase} onChange={e => setSearchColorBase(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="filterEstadoLote">Estado del Lote</Label>
+              <select id="filterEstadoLote" className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={filterEstadoLote} onChange={e => setFilterEstadoLote(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="EN_PROCESO">En Proceso</option>
+                <option value="FINALIZADO">Finalizado</option>
+                <option value="DIVIDIDO">Dividido</option>
+                <option value="CONSOLIDADO">Consolidado</option>
+                <option value="CERRADO">Cerrado</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="filterEstadoSublote">Estado del Sublote (Destino)</Label>
+              <select id="filterEstadoSublote" className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={filterEstadoSublote} onChange={e => setFilterEstadoSublote(e.target.value)}>
+                <option value="">Todos</option>
+                <option value="disponible_pintura">Disponible para Pintura</option>
+                <option value="en_proceso_pintura">En proceso de Pintura</option>
+                <option value="producto_terminado">Producto Terminado</option>
+                <option value="vendido_crosta">Vendido como Crosta</option>
+                <option value="agotado">Agotado</option>
+                <option value="cancelado">Cancelado</option>
+                <option value="merma">Merma</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <Checkbox id="showZero" checked={showZeroExistencia} onCheckedChange={v => setShowZeroExistencia(!!v)} />
+            <Label htmlFor="showZero" className="text-sm cursor-pointer">Mostrar registros sin existencia</Label>
           </div>
         </CardContent>
       </Card>

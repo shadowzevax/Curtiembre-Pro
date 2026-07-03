@@ -8,7 +8,7 @@
     },
     "nombre_comercial": {
       "type": "string",
-      "description": "Nombre comercial del producto"
+      "description": "Observaciones t\u00e9cnicas del producto"
     },
     "descripcion": {
       "type": "string",
@@ -29,24 +29,23 @@
     "tipo_producto": {
       "type": "string",
       "enum": [
-        "piel_cruda_fresca",
-        "piel_salada",
-        "crosta",
-        "retal_de_cuero",
-        "cuero_en_proceso",
-        "anilina",
+        "cuero",
+        "pintura",
         "pigmento",
-        "sellador",
         "resina",
-        "fijador",
-        "neutralizante",
-        "desengrasante",
-        "curtiente",
-        "recurtiente",
-        "engrasante",
-        "acido",
-        "colorante",
-        "auxiliar_de_acabado"
+        "sellador",
+        "laca",
+        "cera",
+        "aceite",
+        "pegante",
+        "solvente",
+        "quimico",
+        "empaque",
+        "etiqueta",
+        "accesorio",
+        "repuesto",
+        "herramienta",
+        "consumible"
       ]
     },
     "tipo_acabado": {
@@ -55,7 +54,8 @@
         "NAPA",
         "NAPA_MATE",
         "OPACO",
-        "ENVEJECIDO"
+        "ENVEJECIDO",
+        "N/A"
       ],
       "description": "Tipo de acabado del producto"
     },
@@ -82,6 +82,16 @@
         "inactivo"
       ],
       "default": "activo"
+    },
+    "fecha_creacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora de creaci\u00f3n del registro (solo lectura, autom\u00e1tico)"
+    },
+    "ultima_modificacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora de la \u00faltima modificaci\u00f3n (solo lectura, autom\u00e1tico)"
     }
   },
   "required": [

@@ -75,7 +75,7 @@ export default function CatalogoProductos() {
 
         try {
             if (isEditing) {
-                await ProductoCatalogo.update(currentItem.id, currentItem);
+                await ProductoCatalogo.update(currentItem.id, { ...currentItem, ultima_modificacion: new Date().toISOString() });
                 
                 // Sincronizar datos básicos en el inventario espejo al editar
                 if (currentItem.maneja_inventario && currentItem.categoria) {
@@ -102,7 +102,8 @@ export default function CatalogoProductos() {
                     }
                 }
             } else {
-                const newProduct = await ProductoCatalogo.create(currentItem);
+                const now = new Date().toISOString();
+                const newProduct = await ProductoCatalogo.create({ ...currentItem, fecha_creacion: now, ultima_modificacion: now });
                 
                 // Auto-crear en el inventario correspondiente según categoría
                 if (newProduct.maneja_inventario && newProduct.categoria) {
@@ -256,28 +257,29 @@ export default function CatalogoProductos() {
                             <div><Label>Nombre del Producto *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required/></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Descripción</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})}/></div>
+                            <div><Label>Observaciones Técnicas</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})}/></div>
                             <div>
                                 <Label>Tipo de Producto</Label>
                                 <Select value={currentItem?.tipo_producto || ''} onValueChange={v => setCurrentItem({...currentItem, tipo_producto: v})}>
                                     <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="hojas_crudas_en_pelo">Hojas Crudas en Pelo</SelectItem>
-                                        <SelectItem value="hojas_saladas">Hojas Saladas</SelectItem>
-                                        <SelectItem value="retazos">Retazos</SelectItem>
-                                        <SelectItem value="anilinas">Anilinas</SelectItem>
-                                        <SelectItem value="colorantes">Colorantes</SelectItem>
-                                        <SelectItem value="selladores">Selladores</SelectItem>
-                                        <SelectItem value="pigmentos">Pigmentos</SelectItem>
-                                        <SelectItem value="taninos">Taninos</SelectItem>
-                                        <SelectItem value="sales_cloruros">Sales y Cloruros</SelectItem>
-                                        <SelectItem value="solventes">Solventes</SelectItem>
-                                        <SelectItem value="aceites_grasas">Aceites y Grasas</SelectItem>
-                                        <SelectItem value="aditivos_especiales">Aditivos Especiales (Anticoagulantes, Plastificantes, Suavizantes)</SelectItem>
-                                        <SelectItem value="adhesivos">Adhesivos</SelectItem>
-                                        <SelectItem value="catalizadores">Catalizadores</SelectItem>
-                                        <SelectItem value="detergentes_auxiliares">Detergentes y Auxiliares de Limpieza</SelectItem>
-                                        <SelectItem value="acidos_bases">Ácidos y Bases (pH Ajustadores)</SelectItem>
+                                        <SelectItem value="cuero">Cuero</SelectItem>
+                                        <SelectItem value="pintura">Pintura</SelectItem>
+                                        <SelectItem value="pigmento">Pigmento</SelectItem>
+                                        <SelectItem value="resina">Resina</SelectItem>
+                                        <SelectItem value="sellador">Sellador</SelectItem>
+                                        <SelectItem value="laca">Laca</SelectItem>
+                                        <SelectItem value="cera">Cera</SelectItem>
+                                        <SelectItem value="aceite">Aceite</SelectItem>
+                                        <SelectItem value="pegante">Pegante</SelectItem>
+                                        <SelectItem value="solvente">Solvente</SelectItem>
+                                        <SelectItem value="quimico">Químico</SelectItem>
+                                        <SelectItem value="empaque">Empaque</SelectItem>
+                                        <SelectItem value="etiqueta">Etiqueta</SelectItem>
+                                        <SelectItem value="accesorio">Accesorio</SelectItem>
+                                        <SelectItem value="repuesto">Repuesto</SelectItem>
+                                        <SelectItem value="herramienta">Herramienta</SelectItem>
+                                        <SelectItem value="consumible">Consumible</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -292,6 +294,7 @@ export default function CatalogoProductos() {
                                         <SelectItem value="NAPA_MATE">NAPA MATE</SelectItem>
                                         <SelectItem value="OPACO">OPACO</SelectItem>
                                         <SelectItem value="ENVEJECIDO">ENVEJECIDO</SelectItem>
+                                        <SelectItem value="N/A">N/A</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -349,6 +352,26 @@ export default function CatalogoProductos() {
                                         <SelectItem value="inactivo">Inactivo</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 border-t pt-4 bg-slate-50 -mx-1 px-4 py-3 rounded-lg">
+                            <div>
+                                <Label className="text-slate-500">Fecha de Creación</Label>
+                                <Input
+                                    readOnly
+                                    value={currentItem?.fecha_creacion ? new Date(currentItem.fecha_creacion).toLocaleString('es-CO') : (isEditing ? '—' : 'Se registrará al guardar')}
+                                    className="bg-slate-100 text-slate-500 cursor-not-allowed text-sm font-mono"
+                                />
+                                <p className="text-xs text-slate-400 mt-0.5">Automático · solo lectura</p>
+                            </div>
+                            <div>
+                                <Label className="text-slate-500">Última Modificación</Label>
+                                <Input
+                                    readOnly
+                                    value={currentItem?.ultima_modificacion ? new Date(currentItem.ultima_modificacion).toLocaleString('es-CO') : (isEditing ? '—' : 'Se registrará al guardar')}
+                                    className="bg-slate-100 text-slate-500 cursor-not-allowed text-sm font-mono"
+                                />
+                                <p className="text-xs text-slate-400 mt-0.5">Automático · solo lectura</p>
                             </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-4">
