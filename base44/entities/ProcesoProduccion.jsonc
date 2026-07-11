@@ -700,5 +700,15 @@
     "numero_proceso",
     "tipo_proceso",
     "fecha_inicio"
-  ]
+  ],
+  "rls": {
+    "create": null,
+    "read": null,
+    "update": null,
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
 }
