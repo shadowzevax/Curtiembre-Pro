@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProductoCatalogo, UnidadMedida, Insumo, ProductoTerminado, Proveedor } from '@/entities/all';
+import { ProductoCatalogo, UnidadMedida, Insumo, ProductoTerminado, Proveedor, InventarioEnProceso } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -96,6 +96,15 @@ export default function CatalogoProductos() {
                         } else if (currentItem.categoria === 'productos_terminados') {
                             const items = await ProductoTerminado.filter({ codigo: currentItem.codigo });
                             if (items.length > 0) await ProductoTerminado.update(items[0].id, updateData);
+                        } else if (currentItem.categoria === 'productos_en_proceso') {
+                            const items = await InventarioEnProceso.filter({ codigo_producto_proceso: currentItem.codigo });
+                            const syncData = {
+                                descripcion: currentItem.nombre_comercial || currentItem.descripcion || '',
+                                descripcion_producto_proceso: currentItem.nombre_comercial || currentItem.descripcion || '',
+                                unidad_medida: currentItem.unidad_medida || 'UN',
+                                stock_minimo: currentItem.stock_minimo || 0,
+                            };
+                            if (items.length > 0) await InventarioEnProceso.update(items[0].id, syncData);
                         }
                     } catch (err) {
                         console.error("Error sincronizando inventario al editar:", err);
@@ -128,8 +137,25 @@ export default function CatalogoProductos() {
                             await Insumo.create({...baseInventoryData, categoria: 'quimicos'});
                         } else if (newProduct.categoria === 'productos_terminados') {
                             await ProductoTerminado.create({...baseInventoryData, categoria: 'producto_terminado'});
+                        } else if (newProduct.categoria === 'productos_en_proceso') {
+                            await InventarioEnProceso.create({
+                                codigo: newProduct.codigo,
+                                descripcion: newProduct.nombre_comercial || newProduct.descripcion || '',
+                                codigo_producto_proceso: newProduct.codigo,
+                                descripcion_producto_proceso: newProduct.nombre_comercial || newProduct.descripcion || '',
+                                unidad_medida: newProduct.unidad_medida || 'UN',
+                                stock_minimo: newProduct.stock_minimo || 0,
+                                codigo_lote: newProduct.codigo,
+                                origen_modulo: 'compras',
+                                etapa_actual: 'recurtido',
+                                estado_actual: 'EN_PROCESO',
+                                destino_sublote: 'disponible_pintura',
+                                cantidad_hojas: 0,
+                                costo_promedio: 0,
+                                costo_acumulado: 0,
+                                fecha_ingreso_proceso: new Date().toISOString().split('T')[0],
+                            });
                         }
-                        // productos_en_proceso: disponible automáticamente en Recurtido/Pintura vía consulta al Catálogo (fuente única de códigos)
                     } catch (err) {
                         console.error("Error creando en inventario:", err);
                         alert("Producto creado en catálogo, pero hubo un error al agregarlo al inventario. Puede agregarlo manualmente.");
@@ -174,6 +200,28 @@ export default function CatalogoProductos() {
                 } else if (prod.categoria === 'productos_terminados') {
                     const existe = await ProductoTerminado.filter({ codigo: prod.codigo });
                     if (existe.length === 0) { await ProductoTerminado.create({...baseData, categoria: 'producto_terminado'}); creados++; }
+                } else if (prod.categoria === 'productos_en_proceso') {
+                    const existe = await InventarioEnProceso.filter({ codigo_producto_proceso: prod.codigo });
+                    if (existe.length === 0) {
+                        await InventarioEnProceso.create({
+                            codigo: prod.codigo,
+                            descripcion: prod.nombre_comercial || prod.descripcion || '',
+                            codigo_producto_proceso: prod.codigo,
+                            descripcion_producto_proceso: prod.nombre_comercial || prod.descripcion || '',
+                            unidad_medida: prod.unidad_medida || 'UN',
+                            stock_minimo: prod.stock_minimo || 0,
+                            codigo_lote: prod.codigo,
+                            origen_modulo: 'compras',
+                            etapa_actual: 'recurtido',
+                            estado_actual: 'EN_PROCESO',
+                            destino_sublote: 'disponible_pintura',
+                            cantidad_hojas: 0,
+                            costo_promedio: 0,
+                            costo_acumulado: 0,
+                            fecha_ingreso_proceso: new Date().toISOString().split('T')[0],
+                        });
+                        creados++;
+                    }
                 }
             } catch (err) {
                 console.error('Error sincronizando', prod.codigo, err);
