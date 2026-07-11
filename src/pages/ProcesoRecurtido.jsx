@@ -555,11 +555,17 @@ export default function ProcesoRecurtido() {
     return (inv.codigo_lote || '').toLowerCase().includes(s) || (inv.descripcion || '').toLowerCase().includes(s);
   });
 
-  // Productos en Proceso desde el Catálogo Maestro (fuente única de códigos)
-  const productosProcesoOptions = catalogoProcesos
-    .filter(p => p.estado === 'activo')
-    .map(p => ({ code: p.codigo, desc: p.descripcion || p.nombre_comercial || '' }))
-    .sort((a, b) => a.code.localeCompare(b.code));
+  // Productos en Proceso: solo desde InventarioEnProceso (códigos únicos con descripción)
+  const productosProcesoOptions = (() => {
+    const map = new Map();
+    allInvProceso.forEach(i => {
+      const code = i.codigo_producto_proceso;
+      const desc = i.descripcion_producto_proceso || i.descripcion || '';
+      if (code && !map.has(code)) map.set(code, desc);
+    });
+    return Array.from(map, ([code, desc]) => ({ code, desc }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  })();
 
   const estadoCostoColor = (estado) => ({
     'Pendiente':    'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -944,7 +950,7 @@ export default function ProcesoRecurtido() {
                               <SelectContent>
                                 {productosProcesoOptions.length === 0 && <SelectItem value="__none__" disabled>Sin productos registrados</SelectItem>}
                                 {productosProcesoOptions.map(o => (
-                                  <SelectItem key={o.code} value={o.code}>{o.code} — {o.desc}</SelectItem>
+                                   <SelectItem key={o.code} value={o.code}>{o.code}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
