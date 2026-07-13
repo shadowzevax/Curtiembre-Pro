@@ -114,8 +114,8 @@ export default function CatalogoProductos() {
                 const now = new Date().toISOString();
                 const newProduct = await ProductoCatalogo.create({ ...currentItem, fecha_creacion: now, ultima_modificacion: now });
                 
-                // Auto-crear en el inventario correspondiente según categoría
-                if (newProduct.maneja_inventario && newProduct.categoria) {
+                // Auto-crear en el inventario correspondiente según categoría (no aplica para n_a)
+                if (newProduct.maneja_inventario && newProduct.categoria && newProduct.categoria !== 'n_a') {
                     try {
                         const baseInventoryData = {
                             codigo: newProduct.codigo,
@@ -366,6 +366,7 @@ export default function CatalogoProductos() {
                                         <SelectItem value="insumos_quimicos">Insumos y Químicos</SelectItem>
                                         <SelectItem value="productos_en_proceso">Productos en Proceso</SelectItem>
                                         <SelectItem value="productos_terminados">Productos Terminados</SelectItem>
+                                        <SelectItem value="n_a">N/A – No Aplica (sin afectar inventarios)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

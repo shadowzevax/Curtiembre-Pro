@@ -191,7 +191,7 @@ export default function InventarioEnProcesoPage() {
   };
 
   const handleExport = () => {
-    const hdrs = ['Código Producto', 'Descripción Producto', 'Código Sublote', 'Calibre', 'Destino', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total'];
+    const hdrs = ['Código Producto', 'Descripción Producto', 'Código Lote ó Partida Recurtido', 'Calibre', 'Destino', 'Stock Actual', 'Stock Mínimo', 'U. Medida', 'Costo Promedio', 'Valor Total'];
     let csvContent = hdrs.join(',') + '\n';
     filteredProductos.forEach(item => {
       const stockActual = item.cantidad_hojas || item.stock_actual || 0;
@@ -224,7 +224,7 @@ export default function InventarioEnProcesoPage() {
   const RF_LABELS = { en_pelo: 'En Pelo', crosta: 'Crosta' };
 
   const tableHeaders = [
-    'Código Producto', 'Descripción Producto', 'Código Sublote', 'Calibre',
+    'Código Producto', 'Descripción Producto', 'Código Lote ó Partida Recurtido', 'Calibre',
     'Stock Actual', 'Stock Mínimo', 'Estado Stock', 'Destino',
     'Unidad de Medida', 'Costo Promedio', 'Valor Total', 'Acciones'
   ];

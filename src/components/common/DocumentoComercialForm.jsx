@@ -33,11 +33,19 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
   const [newProductCode, setNewProductCode] = useState("");
   const [newProductDesc, setNewProductDesc] = useState("");
   const [pendingItemIndex, setPendingItemIndex] = useState(null);
+  const [productSearchTerms, setProductSearchTerms] = useState({}); // búsqueda por ítem
+  const [showProductDropdown, setShowProductDropdown] = useState({}); // dropdown abierto por ítem
+  const [proveedorSearch, setProveedorSearch] = useState('');
+  const [showProveedorDropdown, setShowProveedorDropdown] = useState(false);
+  const proveedorDropdownRef = useRef(null);
   const [cajas, setCajas] = useState([]);
   const [cuentasBancarias, setCuentasBancarias] = useState([]);
   const [showLotePopup, setShowLotePopup] = useState(false);
   const [loteData, setLoteData] = useState({ codigo_lote: '', estado_cuero: 'CRU' });
   const [lotesDisponibles, setLotesDisponibles] = useState([]);
+
+  // Normalizar texto para búsqueda (sin tildes, minúsculas)
+  const normalize = (str) => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
   useEffect(() => {
       loadCatalogo();
@@ -233,13 +241,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
              newItems[index].precio_unitario = tipoDocumento === 'compra' ? (catalogItem.costo_estandar || 0) : 0;
              newItems[index].unidad_medida = catalogItem.unidad_medida || '';
          } else {
-             if (value) {
-                 if (confirm(`El producto con código "${value}" no existe en el catálogo. ¿Desea crearlo?`)) {
-                     setNewProductCode(value);
-                     setNewProductDesc("");
-                     setPendingItemIndex(index);
-                     setShowProductModal(true);
-                 }
+             if (value && value.trim().length > 0) {
+                 // Solo mostrar mensaje si el código no está siendo escrito aún (el usuario terminó de escribir)
+                 // Se valida al perder el foco - aquí solo limpiamos campos si el código no corresponde
+                 newItems[index].descripcion = '';
+                 newItems[index].categoria = '';
+                 newItems[index].unidad_medida = '';
              }
          }
     }
@@ -1261,44 +1268,66 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {tipoDocumento === 'compra' && (
-                  <div>
-                    <Label>Proveedor *</Label>
-                    {terceros.length === 0 ? (
-                      <div className="p-3 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800 font-medium">
-                        ⚠️ No hay proveedores disponibles. Debe registrar un tercero como proveedor en Administración &gt; Terceros.
-                      </div>
-                    ) : (
-                      <Select value={formData.proveedor_id || ''} onValueChange={v => handleInputChange('proveedor_id', v)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar proveedor...">
-                            {formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id)
-                              ? (() => { const t = terceros.find(x => x.id === formData.proveedor_id); return `${t.codigo || 'S/C'} — ${t.nombre}`; })()
-                              : 'Seleccionar proveedor...'}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {terceros.sort((a,b) => (a.codigo||'').localeCompare(b.codigo||'')).map(t => (
-                            <SelectItem key={t.id} value={t.id}>
-                              <span className="font-mono font-bold text-emerald-700">{t.codigo || 'S/C'}</span>
-                              {' — '}
-                              <span>{t.nombre}</span>
-                              {(t.numero_identificacion || t.nit) && (
-                                <span className="text-gray-500 ml-1">({t.numero_identificacion || t.nit})</span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    {formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id) && (() => {
-                      const t = terceros.find(x => x.id === formData.proveedor_id);
-                      return (
-                        <div className="mt-1 text-xs space-y-0.5">
-                          <p className="text-emerald-600 font-medium">✔ Código: <span className="font-mono">{t.codigo || 'Sin código'}</span></p>
-                          <p className="text-gray-500">ID: {t.numero_identificacion || t.nit || 'N/A'}</p>
+                  <div className="space-y-2">
+                    <div>
+                      <Label>Código del Proveedor *</Label>
+                      {terceros.length === 0 ? (
+                        <div className="p-3 bg-yellow-50 border border-yellow-300 rounded text-xs text-yellow-800 font-medium">
+                          ⚠️ No hay proveedores disponibles. Debe registrar un tercero como proveedor en Administración &gt; Terceros.
                         </div>
-                      );
-                    })()}
+                      ) : (
+                        <div className="relative" ref={proveedorDropdownRef}>
+                          <Input
+                            placeholder="Buscar por código o nombre del proveedor..."
+                            value={proveedorSearch !== '' ? proveedorSearch : (formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id)
+                              ? (() => { const t = terceros.find(x => x.id === formData.proveedor_id); return `${t.codigo || 'S/C'} – ${t.nombre}`; })()
+                              : '')}
+                            onChange={e => { setProveedorSearch(e.target.value); setShowProveedorDropdown(true); }}
+                            onFocus={() => setShowProveedorDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowProveedorDropdown(false), 200)}
+                            className="h-9 text-sm"
+                          />
+                          {showProveedorDropdown && (
+                            <div className="absolute z-50 left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg max-h-52 overflow-y-auto mt-1">
+                              {terceros
+                                .filter(t => {
+                                  const term = normalize(proveedorSearch);
+                                  if (!term) return true;
+                                  return normalize(t.codigo).includes(term) || normalize(t.nombre).includes(term);
+                                })
+                                .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+                                .map(t => (
+                                  <div key={t.id}
+                                    className="px-3 py-2 text-sm cursor-pointer hover:bg-emerald-50 border-b last:border-0"
+                                    onMouseDown={() => {
+                                      handleInputChange('proveedor_id', t.id);
+                                      setProveedorSearch('');
+                                      setShowProveedorDropdown(false);
+                                    }}
+                                  >
+                                    <span className="font-mono font-bold text-emerald-700">{t.codigo || 'S/C'}</span>
+                                    <span className="text-gray-600"> – {t.nombre}</span>
+                                    {(t.numero_identificacion || t.nit) && (
+                                      <span className="text-gray-400 text-xs ml-1">({t.numero_identificacion || t.nit})</span>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label>Nombre del Proveedor</Label>
+                      <Input
+                        readOnly
+                        value={formData.proveedor_id && terceros.find(t => t.id === formData.proveedor_id)
+                          ? terceros.find(t => t.id === formData.proveedor_id).nombre
+                          : ''}
+                        className="bg-gray-100 text-gray-700 cursor-not-allowed text-sm"
+                        placeholder="Se completa automáticamente al seleccionar el proveedor"
+                      />
+                    </div>
                   </div>
                 )}
                 {tipoDocumento === 'venta' && (
@@ -1342,17 +1371,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                     })()}
                   </div>
                 )}
-                {/* Campo cliente personalizado solo para compras */}
-                {tipoDocumento === 'compra' && (
-                <div><Label>{terceroLabel}</Label>
-                    {!terceroPersonalizado ? (
-                    <Select value={formData[terceroIdField]} onValueChange={v => v === 'personalizado' ? setTerceroPersonalizado(true) : handleInputChange(terceroIdField, v)}>
-                        <SelectTrigger><SelectValue placeholder={`Seleccionar ${terceroLabel}`} /></SelectTrigger>
-                        <SelectContent>{terceros.map(t => <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>)}<SelectItem value="personalizado">🖊️ Personalizado</SelectItem></SelectContent>
-                    </Select>
-                    ) : (<div className="flex gap-2"><Input placeholder={`Escriba nombre de ${terceroLabel}`} value={formData.tercero_personalizado} onChange={e => handleInputChange('tercero_personalizado', e.target.value)}/><Button type="button" variant="outline" size="sm" onClick={() => setTerceroPersonalizado(false)}>Cancelar</Button></div>)}
-                </div>
-                )}
+                {/* Campo cliente personalizado solo para compras - eliminado duplicado, ahora se maneja arriba */}
                 <div><Label>CC/NIT</Label><Input value={formData[nitField]} onChange={e => handleInputChange(nitField, e.target.value)} /></div>
                 {tipoDocumento === 'venta' && (
                   <div>
@@ -1517,28 +1536,66 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                         <tbody>
                             {formData.items.map((item, index) => (
                                 <tr key={index} className="border-t">
-                                    <td className="p-1 min-w-[150px]">
-                                        <div className="space-y-1">
+                                    <td className="p-1 min-w-[200px]">
+                                        <div className="relative">
                                             <Input 
-                                                placeholder="Código" 
-                                                value={item.codigo || ""} 
-                                                onChange={(e) => handleItemChange(index, 'codigo', e.target.value)}
-                                                list={`datalist-catalogo-${index}`}
+                                                placeholder="Buscar código o nombre..." 
+                                                value={productSearchTerms[index] !== undefined ? productSearchTerms[index] : (item.codigo ? `${item.codigo}${item.descripcion ? ' – ' + item.descripcion : ''}` : '')}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setProductSearchTerms(prev => ({ ...prev, [index]: val }));
+                                                    setShowProductDropdown(prev => ({ ...prev, [index]: true }));
+                                                    if (!val) handleItemChange(index, 'codigo', '');
+                                                }}
+                                                onFocus={() => setShowProductDropdown(prev => ({ ...prev, [index]: true }))}
+                                                onBlur={() => {
+                                                    // Delay to allow click on dropdown
+                                                    setTimeout(() => {
+                                                        setShowProductDropdown(prev => ({ ...prev, [index]: false }));
+                                                        // Validar código al perder foco
+                                                        const currentCode = item.codigo;
+                                                        if (productSearchTerms[index] !== undefined && productSearchTerms[index] !== '' && !currentCode) {
+                                                            alert(`El código de producto ingresado no existe en el Catálogo Maestro de Productos.`);
+                                                            setProductSearchTerms(prev => ({ ...prev, [index]: '' }));
+                                                        }
+                                                    }, 200);
+                                                }}
                                                 className="h-8 text-xs"
                                             />
-                                            <datalist id={`datalist-catalogo-${index}`}>
-                                                {productosCatalogo
-                                                    .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
-                                                    .filter(p => {
-                                                        const searchTerm = (item.codigo || '').toLowerCase();
-                                                        return !searchTerm || 
-                                                               (p.codigo || '').toLowerCase().includes(searchTerm) ||
-                                                               (p.descripcion || '').toLowerCase().includes(searchTerm);
-                                                    })
-                                                    .map(p => (
-                                                        <option key={p.id} value={p.codigo}>{p.descripcion}</option>
-                                                    ))}
-                                            </datalist>
+                                            {showProductDropdown[index] && (
+                                                <div className="absolute z-50 left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto mt-1">
+                                                    {productosCatalogo
+                                                        .filter(p => {
+                                                            const term = normalize(productSearchTerms[index] !== undefined ? productSearchTerms[index] : '');
+                                                            if (!term) return true;
+                                                            return normalize(p.codigo).includes(term) || normalize(p.descripcion).includes(term);
+                                                        })
+                                                        .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
+                                                        .slice(0, 30)
+                                                        .map(p => (
+                                                            <div key={p.id}
+                                                                className="px-3 py-1.5 text-xs cursor-pointer hover:bg-emerald-50 border-b last:border-0"
+                                                                onMouseDown={() => {
+                                                                    handleItemChange(index, 'codigo', p.codigo);
+                                                                    setProductSearchTerms(prev => ({ ...prev, [index]: `${p.codigo} – ${p.descripcion}` }));
+                                                                    setShowProductDropdown(prev => ({ ...prev, [index]: false }));
+                                                                }}
+                                                            >
+                                                                <span className="font-mono font-bold text-emerald-700">{p.codigo}</span>
+                                                                <span className="text-gray-600"> – {p.descripcion}</span>
+                                                            </div>
+                                                        ))}
+                                                    {productosCatalogo.filter(p => {
+                                                        const term = normalize(productSearchTerms[index] !== undefined ? productSearchTerms[index] : '');
+                                                        if (!term) return false;
+                                                        return normalize(p.codigo).includes(term) || normalize(p.descripcion).includes(term);
+                                                    }).length === 0 && productSearchTerms[index] && (
+                                                        <div className="px-3 py-2 text-xs text-red-600 font-medium">
+                                                            El código de producto ingresado no existe en el Catálogo Maestro de Productos.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-1 min-w-[180px]"><Input value={item.descripcion} onChange={e => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripción" className="h-8 text-xs"/></td>

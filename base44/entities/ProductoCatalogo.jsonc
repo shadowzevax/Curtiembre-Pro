@@ -23,7 +23,8 @@
         "materia_prima",
         "insumos_quimicos",
         "productos_terminados",
-        "productos_en_proceso"
+        "productos_en_proceso",
+        "n_a"
       ]
     },
     "tipo_producto": {

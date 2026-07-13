@@ -27,12 +27,9 @@ const calcInsumoTotales = (insumo) => {
 const calcSubtotalInsumos = (insumos) =>
   (insumos || []).reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
 
-// Genera código partida recurtido: LOTE-PADRE-COLOR o LOTE-PADRE-01
-const genCodigoSublote = (lotePadre, colorBase, idx) => {
-  const ref = colorBase
-    ? colorBase.toUpperCase().replace(/\s+/g, '-').slice(0, 10)
-    : String(idx + 1).padStart(2, '0');
-  return `${lotePadre}-${ref}`;
+// Genera código partida recurtido: LOTE-PADRE-PR-001
+const genCodigoSublote = (lotePadre, colorBase, consecutivo) => {
+  return `${lotePadre}-PR-${String(consecutivo).padStart(3, '0')}`;
 };
 
 export default function ProcesoRecurtido() {
@@ -173,11 +170,14 @@ export default function ProcesoRecurtido() {
   // ─── AGREGAR PARTIDA RECURTIDO AL FORMULARIO ────────────────────────────────────────
   const handleAgregarSublote = () => {
     if (!invSeleccionado) { alert('Seleccione primero un lote en proceso.'); return; }
-    const idx = sublotesForm.length;
     const lotePadre = invSeleccionado.codigo_lote;
+    // Calcular consecutivo: existentes en DB + los ya en el form
+    const existentesDB = getSublotesLote(lotePadre);
+    const consecutivo = existentesDB.length + sublotesForm.length + 1;
+    const newIdx = sublotesForm.length;
     setSublotesForm(prev => [...prev, {
-      id_temp: `new-${Date.now()}-${idx}`,
-      codigo_sublote: genCodigoSublote(lotePadre, '', idx),
+      id_temp: `new-${Date.now()}-${prev.length}`,
+      codigo_sublote: genCodigoSublote(lotePadre, '', consecutivo),
       color_base: '',
       codigo_color: '',
       cantidad_hojas: 0,
@@ -194,7 +194,7 @@ export default function ProcesoRecurtido() {
       fecha_fin: '',
       finalizar_recurtido: false,
     }]);
-    setSubloteActivoIdx(idx);
+    setSubloteActivoIdx(newIdx);
   };
 
   const handleEliminarSubloteForm = (idx) => {
@@ -208,10 +208,7 @@ export default function ProcesoRecurtido() {
       if (i !== subloteActivoIdx) return s;
       let updated = { ...s, [field]: value };
 
-      // Auto-actualizar código sublote cuando cambia color_base
-      if (field === 'color_base' && invSeleccionado) {
-        updated.codigo_sublote = genCodigoSublote(invSeleccionado.codigo_lote, value, i);
-      }
+      // El código de partida NO cambia al modificar color_base (ya fue generado al agregar)
 
       // Recalcular peso_promedio cuando cambia peso o cantidad hojas
       if (field === 'peso_asignado' || field === 'cantidad_hojas') {
@@ -287,8 +284,11 @@ export default function ProcesoRecurtido() {
   const pesoRestante     = totalPesoLote - pesoAsignado;
 
   // ─── GUARDAR ──────────────────────────────────────────────────────────────
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSaving) return; // Prevenir doble clic
 
     if (!invSeleccionado && !isEditing) { alert('⚠️ Seleccione un código en proceso.'); return; }
     if (sublotesForm.length === 0) { alert('⚠️ Agregue al menos una Partida Recurtido.'); return; }
@@ -307,8 +307,19 @@ export default function ProcesoRecurtido() {
       alert(`❌ El peso asignado (${pesoAsignado} kg) supera el peso disponible (${totalPesoLote} kg).`); return;
     }
 
+    setIsSaving(true);
     try {
       const sublotesExistentes = getSublotesLote(codigoLote);
+
+      // Validar duplicados: verificar que ningún código ya exista en BD
+      for (const sub of sublotesForm) {
+        const yaExiste = sublotesExistentes.some(p => p.numero_proceso === sub.codigo_sublote);
+        if (yaExiste && !isEditing) {
+          alert(`❌ El Código de Partida de Recurtido "${sub.codigo_sublote}" ya se encuentra registrado. No es posible guardar un registro duplicado.`);
+          setIsSaving(false);
+          return;
+        }
+      }
 
       for (let idx = 0; idx < sublotesForm.length; idx++) {
         const sub = sublotesForm[idx];
@@ -318,7 +329,7 @@ export default function ProcesoRecurtido() {
 
         const dataToSave = {
           tipo_proceso: 'recurtido',
-          numero_proceso: sub.codigo_sublote || `${codigoLote}-RCT-${String(numSublote).padStart(2, '0')}`,
+          numero_proceso: sub.codigo_sublote || `${codigoLote}-PR-${String(numSublote).padStart(3, '0')}`,
           numero_sublote_recurtido: numSublote,
           codigo_lote: codigoLote,
           inv_proceso_id: invSeleccionado?.id || sub.inv_proceso_id || '',
@@ -379,6 +390,8 @@ export default function ProcesoRecurtido() {
     } catch (err) {
       console.error(err);
       alert('Error al guardar: ' + err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -432,7 +445,7 @@ export default function ProcesoRecurtido() {
             ? `${rfLabel}-BASE ${colorLabel}`.trim()
             : `Hojas en proceso - Base ${colorLabel}`.trim());
 
-          const codigoSublote = p.numero_proceso || `${codigoLote}-${String(p.numero_sublote_recurtido || 1).padStart(2, '0')}`;
+          const codigoSublote = p.numero_proceso || `${codigoLote}-PR-${String(p.numero_sublote_recurtido || 1).padStart(3, '0')}`;
 
           await InventarioEnProceso.create({
             codigo: codigoSublote,
@@ -1273,8 +1286,8 @@ export default function ProcesoRecurtido() {
 
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button type="submit" className="bg-violet-700 hover:bg-violet-800" disabled={sublotesForm.length === 0}>
-                {isEditing ? 'Guardar Cambios' : `Guardar ${sublotesForm.length} Sublote(s)`}
+              <Button type="submit" className="bg-violet-700 hover:bg-violet-800" disabled={sublotesForm.length === 0 || isSaving}>
+                {isSaving ? 'Guardando...' : isEditing ? 'Guardar Cambios' : `Guardar ${sublotesForm.length} Partida(s)`}
               </Button>
             </div>
           </form>
@@ -1284,11 +1297,11 @@ export default function ProcesoRecurtido() {
       {/* ══════════════════ MODAL DETALLE ══════════════════ */}
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Detalle del Sublote de Recurtido</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Detalle de Partida de Recurtido</DialogTitle></DialogHeader>
           {selectedItem && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded border">
-                <div><span className="font-semibold">Código Sublote:</span> <span className="font-mono font-bold text-purple-800">{selectedItem.numero_proceso || selectedItem.codigo_lote}</span></div>
+                <div><span className="font-semibold">Código Partida Recurtido:</span> <span className="font-mono font-bold text-purple-800">{selectedItem.numero_proceso || selectedItem.codigo_lote}</span></div>
                 <div><span className="font-semibold">Lote Padre:</span> <span className="font-mono">{selectedItem.codigo_lote}</span></div>
                 <div><span className="font-semibold">Base/Color:</span> {selectedItem.codigo_color} — {selectedItem.nombre_color}</div>
                 <div><span className="font-semibold">Sublote #:</span> {selectedItem.numero_sublote_recurtido}</div>
