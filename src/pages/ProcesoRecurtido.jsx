@@ -27,7 +27,7 @@ const calcInsumoTotales = (insumo) => {
 const calcSubtotalInsumos = (insumos) =>
   (insumos || []).reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
 
-// Genera código sublote: LOTE-PADRE-COLOR o LOTE-PADRE-01
+// Genera código partida recurtido: LOTE-PADRE-COLOR o LOTE-PADRE-01
 const genCodigoSublote = (lotePadre, colorBase, idx) => {
   const ref = colorBase
     ? colorBase.toUpperCase().replace(/\s+/g, '-').slice(0, 10)
@@ -53,8 +53,8 @@ export default function ProcesoRecurtido() {
   const [invSeleccionado, setInvSeleccionado] = useState(null);
   const [searchEnProceso, setSearchEnProceso] = useState('');
 
-  // ── SUBLOTES del formulario actual (array de sublotes a crear/editar) ──
-  // Cada sublote: { id_temp, codigo_sublote, color_base, cantidad_hojas, peso_asignado, observaciones, insumos_utilizados, estado }
+  // ── PARTIDAS RECURTIDO del formulario actual (array de partidas a crear/editar) ──
+  // Cada partida: { id_temp, codigo_sublote, color_base, cantidad_hojas, peso_asignado, observaciones, insumos_utilizados, estado }
   const [sublotesForm, setSublotesForm] = useState([]);
   const [subloteActivoIdx, setSubloteActivoIdx] = useState(0);
 
@@ -127,7 +127,7 @@ export default function ProcesoRecurtido() {
     setShowModal(true);
   };
 
-  // ─── ABRIR MODAL EDITAR (un sublote existente) ────────────────────────────
+  // ─── ABRIR MODAL EDITAR (una partida recurtido existente) ────────────────────────────
   const handleEditSublote = (proc) => {
     setIsEditing(true);
     const inv = inventarioEnProceso.find(i => i.codigo_lote === proc.codigo_lote) || null;
@@ -170,7 +170,7 @@ export default function ProcesoRecurtido() {
     setSubloteActivoIdx(0);
   };
 
-  // ─── AGREGAR SUBLOTE AL FORMULARIO ────────────────────────────────────────
+  // ─── AGREGAR PARTIDA RECURTIDO AL FORMULARIO ────────────────────────────────────────
   const handleAgregarSublote = () => {
     if (!invSeleccionado) { alert('Seleccione primero un lote en proceso.'); return; }
     const idx = sublotesForm.length;
@@ -291,7 +291,7 @@ export default function ProcesoRecurtido() {
     e.preventDefault();
 
     if (!invSeleccionado && !isEditing) { alert('⚠️ Seleccione un código en proceso.'); return; }
-    if (sublotesForm.length === 0) { alert('⚠️ Agregue al menos un sublote.'); return; }
+    if (sublotesForm.length === 0) { alert('⚠️ Agregue al menos una Partida Recurtido.'); return; }
 
     const codigoLote = invSeleccionado?.codigo_lote || sublotesForm[0]?.codigo_sublote?.split('-').slice(0, -1).join('-');
 
@@ -375,7 +375,7 @@ export default function ProcesoRecurtido() {
 
       setShowModal(false);
       await loadData();
-      alert(`✅ ${sublotesForm.length} sublote(s) de recurtido guardado(s) correctamente.`);
+      alert(`✅ ${sublotesForm.length} Partida(s) Recurtido guardada(s) correctamente.`);
     } catch (err) {
       console.error(err);
       alert('Error al guardar: ' + err.message);
@@ -384,7 +384,7 @@ export default function ProcesoRecurtido() {
 
   // ─── FINALIZAR SUBLOTE ───────────────────────────────────────────────────
   const handleFinalizarSublote = async (proc) => {
-    if (!window.confirm(`¿Finalizar sublote "${proc.nombre_color || proc.numero_proceso}"?`)) return;
+    if (!window.confirm(`¿Finalizar Partida Recurtido "${proc.nombre_color || proc.numero_proceso}"?`)) return;
     try {
       await ProcesoProduccion.update(proc.id, { estado: 'completado', finalizar_recurtido: true, fecha_fin: new Date().toISOString().split('T')[0] });
       await loadData();
@@ -400,7 +400,7 @@ export default function ProcesoRecurtido() {
     const pendientes = sublotes.filter(p => p.estado !== 'completado');
 
     if (pendientes.length > 0) {
-      alert(`❌ Existen ${pendientes.length} sublote(s) pendientes. Finalice todos antes de cerrar.`); return;
+      alert(`❌ Existen ${pendientes.length} Partida(s) Recurtido pendientes. Finalice todas antes de cerrar.`); return;
     }
     if (totalHojas > 0 && totalRecurtido < totalHojas) {
       alert(`❌ Faltan ${totalHojas - totalRecurtido} hojas por registrar.`); return;
@@ -470,14 +470,14 @@ export default function ProcesoRecurtido() {
         });
       }
       await loadData();
-      alert(`✅ Recurtido General del lote ${codigoLote} finalizado. Se generaron ${sublotes.length} registro(s) de inventario en proceso por sublote.`);
+      alert(`✅ Recurtido General del lote ${codigoLote} finalizado. Se generaron ${sublotes.length} registro(s) de inventario en proceso por Partida Recurtido.`);
     } catch (err) {
       alert('Error: ' + err.message);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar este sublote?')) return;
+    if (!window.confirm('¿Eliminar esta Partida Recurtido?')) return;
     try { await ProcesoProduccion.delete(id); loadData(); } catch (err) { console.error(err); }
   };
 
@@ -600,7 +600,7 @@ export default function ProcesoRecurtido() {
       {/* ══════════════════ TABLA DE CONTROL ══════════════════ */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3 flex-wrap gap-2">
-          <CardTitle className="text-base">Control de Recurtido por Sublote</CardTitle>
+          <CardTitle className="text-base">Control de Recurtido por Partida Recurtido</CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1">
               <Label className="text-xs text-slate-500 whitespace-nowrap">Lote:</Label>
@@ -616,7 +616,7 @@ export default function ProcesoRecurtido() {
             </div>
             {lotePadreControl && sublotesDelPadreControl.length > 0 && (
               <div className="flex items-center gap-1">
-                <Label className="text-xs text-slate-500 whitespace-nowrap">Sublote:</Label>
+                <Label className="text-xs text-slate-500 whitespace-nowrap">Partida Recurtido:</Label>
                 <Select value={subloteControl} onValueChange={setSubloteControl}>
                   <SelectTrigger className="w-48 h-8 text-xs"><SelectValue placeholder="Todos..." /></SelectTrigger>
                   <SelectContent>
@@ -657,11 +657,11 @@ export default function ProcesoRecurtido() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="p-2 text-left">Código Sublote</th>
-                      <th className="p-2 text-left">Base / Color</th>
-                      <th className="p-2 text-left">Código Producto</th>
-                      <th className="p-2 text-left">Descripción</th>
-                      <th className="p-2 text-center">Sublote #</th>
+                     <th className="p-2 text-left">Código Partida Recurtido</th>
+                     <th className="p-2 text-left">Base / Color</th>
+                     <th className="p-2 text-left">Código Producto</th>
+                     <th className="p-2 text-left">Descripción</th>
+                     <th className="p-2 text-center">Partida #</th>
                       <th className="p-2 text-right">Cant. Hojas</th>
                       <th className="p-2 text-right">Peso (kg)</th>
                       <th className="p-2 text-right">Costo Productos</th>
@@ -671,7 +671,7 @@ export default function ProcesoRecurtido() {
                   </thead>
                   <tbody>
                     {sublotesControl.length === 0 ? (
-                      <tr><td colSpan={10} className="p-4 text-center text-slate-400">No hay sublotes. Use "Nuevo Registro Recurtido".</td></tr>
+                      <tr><td colSpan={10} className="p-4 text-center text-slate-400">No hay Partidas Recurtido. Use "Nuevo Registro Recurtido".</td></tr>
                     ) : sublotesControl.map(proc => {
                       const finalizado = proc.estado === 'completado';
                       const costoProductos = (parseFloat(proc.subtotal_recurtido) || 0) + (parseFloat(proc.subtotal_humectacion) || 0) + (parseFloat(proc.subtotal_recromado) || 0);
@@ -780,7 +780,7 @@ export default function ProcesoRecurtido() {
                   {generalFinalizado && <span className="flex items-center gap-1 text-green-700 font-medium"><CheckCircle2 className="w-4 h-4" />Recurtido General FINALIZADO</span>}
                   {!generalFinalizado && !puedeFinalizarGeneral && sublotesControl.length > 0 && (
                     <span className="flex items-center gap-1 text-amber-700"><AlertCircle className="w-4 h-4" />
-                      {faltanHojas > 0 ? `Faltan ${faltanHojas} hojas` : `Hay ${sublotesControl.filter(p => p.estado !== 'completado').length} sublote(s) pendiente(s)`}
+                      {faltanHojas > 0 ? `Faltan ${faltanHojas} hojas` : `Hay ${sublotesControl.filter(p => p.estado !== 'completado').length} Partida(s) Recurtido pendiente(s)`}
                     </span>
                   )}
                 </div>
@@ -793,7 +793,7 @@ export default function ProcesoRecurtido() {
             </>
           ) : (
             <p className="text-slate-400 text-center py-8 text-sm">
-              {procesos.length === 0 ? 'Sin sublotes registrados. Use "Nuevo Registro Recurtido".' : 'Seleccione un lote.'}
+              {procesos.length === 0 ? 'Sin Partidas Recurtido registradas. Use "Nuevo Registro Recurtido".' : 'Seleccione un lote.'}
             </p>
           )}
         </CardContent>
@@ -840,7 +840,7 @@ export default function ProcesoRecurtido() {
             {isEditing && (
               <div className="p-2 bg-slate-50 border rounded text-sm">
                 <span className="font-semibold">Lote:</span> <span className="font-mono">{invSeleccionado?.codigo_lote || '—'}</span>
-                <span className="ml-4 font-semibold">Modo:</span> Edición de sublote existente
+                <span className="ml-4 font-semibold">Modo:</span> Edición de Partida Recurtido existente
               </div>
             )}
 
@@ -850,13 +850,13 @@ export default function ProcesoRecurtido() {
                 {/* Header */}
                 <div className="bg-orange-600 text-white px-5 py-3 flex items-center justify-between">
                   <div>
-                    <h3 className="font-bold text-base tracking-wide">② DIVISIÓN DE SUBLOTES</h3>
-                    <p className="text-xs text-orange-200 mt-0.5">Cada sublote es una unidad de producción independiente con trazabilidad propia</p>
+                    <h3 className="font-bold text-base tracking-wide">② PARTIDAS DE RECURTIDO</h3>
+                    <p className="text-xs text-orange-200 mt-0.5">Cada Partida Recurtido es una unidad de producción independiente con trazabilidad propia</p>
                   </div>
                   {!isEditing && (
                     <Button type="button" onClick={handleAgregarSublote}
                       className="bg-white text-orange-700 hover:bg-orange-50 text-xs h-8">
-                      <Plus className="w-3 h-3 mr-1" />Agregar Sublote
+                      <Plus className="w-3 h-3 mr-1" />Agregar Partida Recurtido
                     </Button>
                   )}
                 </div>
@@ -878,7 +878,7 @@ export default function ProcesoRecurtido() {
 
                 {sublotesForm.length === 0 ? (
                   <div className="px-5 py-6 text-center text-slate-400 bg-white">
-                    <p className="text-sm">Sin sublotes agregados. Haga clic en "Agregar Sublote" para comenzar.</p>
+                    <p className="text-sm">Sin Partidas Recurtido agregadas. Haga clic en "Agregar Partida Recurtido" para comenzar.</p>
                   </div>
                 ) : (
                   <>
@@ -888,7 +888,7 @@ export default function ProcesoRecurtido() {
                         <button key={sub.id_temp} type="button"
                           onClick={() => setSubloteActivoIdx(idx)}
                           className={`flex items-center gap-1 px-3 py-1.5 rounded-t-lg text-xs font-semibold border-b-2 whitespace-nowrap transition-all ${subloteActivoIdx === idx ? 'bg-orange-100 border-orange-500 text-orange-800' : 'bg-gray-50 border-transparent text-slate-500 hover:bg-orange-50'}`}>
-                          {sub.color_base ? sub.color_base.toUpperCase() : `Sublote ${idx + 1}`}
+                          {sub.color_base ? sub.color_base.toUpperCase() : `Partida Recurtido ${idx + 1}`}
                           {!isEditing && (
                             <span onClick={e => { e.stopPropagation(); handleEliminarSubloteForm(idx); }}
                               className="ml-1 text-red-400 hover:text-red-600 font-bold leading-none">×</span>
@@ -906,7 +906,7 @@ export default function ProcesoRecurtido() {
                             <Input value={invSeleccionado?.codigo_lote || '—'} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" />
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Código Sublote</Label>
+                            <Label className="text-xs font-bold text-orange-800">Código Partida Recurtido</Label>
                             <Input value={subloteActivo.codigo_sublote || ''} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" />
                             <p className="text-xs text-orange-500 mt-0.5">Automático</p>
                           </div>
@@ -1025,10 +1025,10 @@ export default function ProcesoRecurtido() {
                         </div>
 
                         <div>
-                          <Label className="text-xs font-bold text-orange-800">Observaciones del Sublote</Label>
+                          <Label className="text-xs font-bold text-orange-800">Observaciones de la Partida Recurtido</Label>
                           <Textarea value={subloteActivo.observaciones || ''}
                             onChange={e => handleSubloteFieldChange('observaciones', e.target.value)}
-                            rows={2} className="text-xs" placeholder="Observaciones específicas de este sublote..." />
+                            rows={2} className="text-xs" placeholder="Observaciones específicas de esta Partida Recurtido..." />
                         </div>
                       </div>
                     )}
@@ -1043,7 +1043,7 @@ export default function ProcesoRecurtido() {
                 <div className="bg-blue-700 text-white px-5 py-3 flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-base tracking-wide">
-                      ③ ÍTEMS / PRODUCTOS — Sublote: <span className="text-blue-200 font-mono">{subloteActivo.color_base || `Sublote ${subloteActivoIdx + 1}`}</span>
+                      ③ ÍTEMS / PRODUCTOS — Partida Recurtido: <span className="text-blue-200 font-mono">{subloteActivo.color_base || `Partida Recurtido ${subloteActivoIdx + 1}`}</span>
                     </h3>
                     <p className="text-xs text-blue-200 mt-0.5">
                       Productos químicos registrados exclusivamente para este sublote · Peso: {subloteActivo.peso_asignado} kg
@@ -1117,7 +1117,7 @@ export default function ProcesoRecurtido() {
                     {(subloteActivo.insumos_utilizados || []).length > 0 && (
                       <tfoot>
                         <tr className="bg-blue-100 font-bold border-t-2 border-blue-300">
-                          <td colSpan={5} className="p-2 text-right text-xs text-blue-800">TOTAL PRODUCTOS QUÍMICOS — {subloteActivo.color_base || `Sublote ${subloteActivoIdx + 1}`}:</td>
+                          <td colSpan={5} className="p-2 text-right text-xs text-blue-800">TOTAL PRODUCTOS QUÍMICOS — {subloteActivo.color_base || `Partida Recurtido ${subloteActivoIdx + 1}`}:</td>
                           <td className="p-2 text-right text-emerald-800 text-sm">{formatCurrency(calcSubtotalInsumos(subloteActivo.insumos_utilizados))}</td>
                           <td></td>
                         </tr>
@@ -1138,8 +1138,8 @@ export default function ProcesoRecurtido() {
                     <div>
                       <p className="font-bold text-base tracking-wide">④ CONTROL DE COSTOS DEL PROCESO — RECURTIDO</p>
                       <p className="text-xs text-violet-200 mt-0.5">
-                        Sublote activo: <strong className="text-violet-100 font-mono">{subloteActivo.color_base || `Sublote ${subloteActivoIdx + 1}`}</strong>
-                        &nbsp;· Trazabilidad financiera independiente por sublote
+                        Partida Recurtido activa: <strong className="text-violet-100 font-mono">{subloteActivo.color_base || `Partida Recurtido ${subloteActivoIdx + 1}`}</strong>
+                        &nbsp;· Trazabilidad financiera independiente por Partida Recurtido
                       </p>
                     </div>
                     <span className={`text-xs px-3 py-1 rounded-full border font-bold ${estadoCostoColor(estadoCosto)}`}>{estadoCosto}</span>
@@ -1218,7 +1218,7 @@ export default function ProcesoRecurtido() {
                     </div>
                   </div>
                   <div className="bg-slate-50 border-t border-slate-200 px-5 py-2 text-xs text-slate-500">
-                    🔗 <strong>Trazabilidad:</strong> Al finalizar el Recurtido General, el Costo Total Acumulado y Costo Promedio/Hoja de cada sublote se enviarán automáticamente a <strong>Pintura</strong>.
+                    🔗 <strong>Trazabilidad:</strong> Al finalizar el Recurtido General, el Costo Total Acumulado y Costo Promedio/Hoja de cada Partida Recurtido se enviarán automáticamente a <strong>Pintura</strong>.
                   </div>
                 </div>
               );
