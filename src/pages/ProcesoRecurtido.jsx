@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Eye, Table, CheckCircle2, Lock, AlertCircle, Search, X, Edit2, Ban, History, ChevronDown } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
+import RecurtidoFichaIntegral from '../components/produccion/RecurtidoFichaIntegral';
 
 const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(v || 0);
 const fmt2 = (v) => (parseFloat(v) || 0).toFixed(2);
@@ -532,6 +533,16 @@ export default function ProcesoRecurtido() {
     }
   };
 
+  // ─── INDICADORES GLOBALES ─────────────────────────────────────────────────
+  const totalPartidas = procesos.filter(p => p.estado !== 'anulado').length;
+  const partidasPendientes = procesos.filter(p => p.estado === 'pendiente' || p.estado === 'en_proceso').length;
+  const partidasFinalizadas = procesos.filter(p => p.estado === 'completado').length;
+  const totalHojasGlobal = procesos.filter(p => p.estado !== 'anulado').reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
+  const totalHojasPendientesGlobal = (() => {
+    const totalInv = allInvProceso.reduce((s, i) => s + (parseFloat(i.cantidad_hojas) || 0), 0);
+    return Math.max(0, totalInv - totalHojasGlobal);
+  })();
+
   // ─── DATOS TABLA FILTRADA ─────────────────────────────────────────────────
   const normalize = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -626,6 +637,30 @@ export default function ProcesoRecurtido() {
           </Button>
         }
       />
+
+      {/* ══════════ PANEL INDICADORES ══════════ */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-slate-500">Total Partidas</p>
+          <p className="text-3xl font-extrabold text-blue-700">{totalPartidas}</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-slate-500">Pendientes</p>
+          <p className="text-3xl font-extrabold text-amber-700">{partidasPendientes}</p>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-slate-500">Finalizadas</p>
+          <p className="text-3xl font-extrabold text-green-700">{partidasFinalizadas}</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-slate-500">Total Hojas Procesadas</p>
+          <p className="text-3xl font-extrabold text-purple-700">{totalHojasGlobal}</p>
+        </div>
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-slate-500">Hojas Pendientes</p>
+          <p className="text-3xl font-extrabold text-rose-700">{totalHojasPendientesGlobal}</p>
+        </div>
+      </div>
 
       {/* ══════════ PANEL FILTROS ══════════ */}
       <Card>
@@ -780,64 +815,128 @@ export default function ProcesoRecurtido() {
                   <th className="p-2 text-left">Código Partida Recurtido</th>
                   <th className="p-2 text-center">Estado</th>
                   <th className="p-2 text-left">Base / Color</th>
-                  <th className="p-2 text-left">Código Producto</th>
+                  <th className="p-2 text-left">Cód. Producto</th>
                   <th className="p-2 text-left max-w-[120px]">Descripción</th>
                   <th className="p-2 text-right">Hojas</th>
                   <th className="p-2 text-right">Peso (kg)</th>
                   <th className="p-2 text-right">Costo</th>
-                  <th className="p-2 text-center">Fecha Registro</th>
+                  <th className="p-2 text-center">Fecha Reg.</th>
                   <th className="p-2 text-center">Proceso Actual</th>
+                  <th className="p-2 text-center min-w-[90px]">% Avance</th>
+                  <th className="p-2 text-left min-w-[130px]">Estado Lote Padre</th>
+                  <th className="p-2 text-left">Alertas</th>
+                  <th className="p-2 text-center">Último Mov.</th>
                   <th className="p-2 text-left">Observaciones</th>
                   <th className="p-2 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={12} className="p-4 text-center text-slate-400">Cargando...</td></tr>
+                  <tr><td colSpan={16} className="p-4 text-center text-slate-400">Cargando...</td></tr>
                 ) : procesosFiltrados.length === 0 ? (
-                  <tr><td colSpan={12} className="p-4 text-center text-slate-400">No hay Partidas Recurtido. Use "Nueva Partida Recurtido".</td></tr>
+                  <tr><td colSpan={16} className="p-4 text-center text-slate-400">No hay Partidas Recurtido. Use "Nueva Partida Recurtido".</td></tr>
                 ) : procesosFiltrados.map(proc => {
                   const finalizado = proc.estado === 'completado';
                   const { costoTotal } = getCostosControl(proc);
                   const bloqueado = finalizado || proc.finalizar_recurtido_general;
-                  // Determinar proceso actual
+                  // Proceso actual
                   const invRec = allInvProceso.find(i => i.proceso_origen_id === proc.id);
-                  let procesoActual = 'Recurtido';
+                  let procesoActual = '🔄 Recurtido';
                   if (invRec) {
-                    if (invRec.etapa_actual === 'pintura') procesoActual = '🎨 En Pintura';
-                    else if (invRec.destino_sublote === 'producto_terminado') procesoActual = '✅ Producto Terminado';
-                    else if (invRec.etapa_actual === 'recurtido') procesoActual = '🔄 Recurtido';
+                    if (invRec.etapa_actual === 'pintura') procesoActual = '🎨 Pintura';
+                    else if (invRec.destino_sublote === 'producto_terminado') procesoActual = '✅ Terminado';
                   }
+                  // % Avance del lote padre
+                  const siblingsPadre = procesos.filter(p => p.codigo_lote === proc.codigo_lote && p.estado !== 'anulado');
+                  const invPadre = allInvProceso.find(i => i.codigo_lote === proc.codigo_lote);
+                  const totalHPadre = parseFloat(invPadre?.cantidad_hojas) || 0;
+                  const hojasUsadasPadre = siblingsPadre.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
+                  const hojasPendPadre = Math.max(0, totalHPadre - hojasUsadasPadre);
+                  const pctPadre = totalHPadre > 0 ? Math.min(100, (hojasUsadasPadre / totalHPadre) * 100) : 0;
+                  // % Avance de la propia partida (completado = 100%)
+                  const pctPartida = proc.estado === 'completado' ? 100 : proc.estado === 'anulado' ? 0 : 50;
+                  // Alertas
+                  const diasSinMov = proc.updated_date
+                    ? Math.floor((Date.now() - new Date(proc.updated_date).getTime()) / (1000*60*60*24)) : 0;
+                  const alertas = [];
+                  if (proc.estado === 'pendiente') alertas.push('⏳ Pendiente de Finalización');
+                  if (diasSinMov > 7) alertas.push(`⚠️ Sin mov. ${diasSinMov}d`);
+                  if (!invRec) alertas.push('📦 Pendiente de Inventario');
+                  if (invRec?.etapa_actual === 'recurtido' && proc.estado === 'completado') alertas.push('🎨 Pendiente de Pintura');
+                  const ultimoMov = proc.updated_date || proc.created_date;
                   return (
-                    <tr key={proc.id} className={`border-t ${finalizado ? 'bg-green-50' : proc.estado === 'anulado' ? 'bg-red-50' : 'bg-white'} hover:bg-slate-50`}>
+                    <tr key={proc.id}
+                      className={`border-t cursor-pointer ${finalizado ? 'bg-green-50' : proc.estado === 'anulado' ? 'bg-red-50' : 'bg-white'} hover:bg-purple-50`}
+                      onDoubleClick={() => { setSelectedItem(proc); setShowDetailModal(true); }}
+                      title="Doble clic para ver Ficha Integral">
                       <td className="p-2 font-mono font-bold text-purple-800">{proc.numero_proceso || proc.codigo_lote}</td>
                       <td className="p-2 text-center">{estadoBadge(proc.estado)}</td>
                       <td className="p-2 font-semibold">{proc.nombre_color || '—'}</td>
-                      <td className="p-2 font-mono text-cyan-700 font-bold">{proc.codigo_producto_proceso || '—'}</td>
+                      <td className="p-2 font-mono text-cyan-700 font-bold text-xs">{proc.codigo_producto_proceso || '—'}</td>
                       <td className="p-2 text-slate-600 max-w-[120px] truncate" title={proc.descripcion_producto_proceso || ''}>{proc.descripcion_producto_proceso || '—'}</td>
                       <td className="p-2 text-right font-bold">{proc.cantidad_pieles || 0}</td>
                       <td className="p-2 text-right text-slate-600">{proc.peso_actual || 0} kg</td>
                       <td className="p-2 text-right font-semibold text-emerald-700">{formatCurrency(costoTotal)}</td>
                       <td className="p-2 text-center text-slate-500">{fmtDate(proc.fecha_inicio)}</td>
                       <td className="p-2 text-center text-xs">{procesoActual}</td>
+                      {/* % Avance Partida */}
+                      <td className="p-2">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1">
+                            <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
+                              <div className={`h-2 rounded-full ${pctPartida >= 100 ? 'bg-green-500' : 'bg-amber-400'}`} style={{ width: `${pctPartida}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-600">{pctPartida}%</span>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Estado Lote Padre */}
+                      <td className="p-2 text-xs">
+                        <div className="text-slate-500 leading-tight">
+                          <p className="font-mono font-bold text-purple-700 text-xs">{proc.codigo_lote}</p>
+                          <p>{hojasUsadasPadre} de {totalHPadre} hojas</p>
+                          <p className="text-amber-600">Pend: {hojasPendPadre}</p>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                              <div className={`h-1.5 rounded-full ${pctPadre >= 100 ? 'bg-green-500' : 'bg-purple-400'}`} style={{ width: `${pctPadre}%` }} />
+                            </div>
+                            <span className="font-bold text-purple-700">{pctPadre.toFixed(1)}%</span>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Alertas */}
+                      <td className="p-2 text-xs">
+                        {alertas.length === 0
+                          ? <span className="text-green-600">✔ OK</span>
+                          : <div className="space-y-0.5">{alertas.map((a, i) => <p key={i} className="text-amber-700 leading-tight">{a}</p>)}</div>}
+                      </td>
+                      {/* Último movimiento */}
+                      <td className="p-2 text-center text-xs text-slate-500">
+                        {ultimoMov ? (
+                          <div>
+                            <p>{fmtDate(ultimoMov)}</p>
+                            <p className="text-slate-400">{diasSinMov}d</p>
+                          </div>
+                        ) : '—'}
+                      </td>
                       <td className="p-2 text-slate-500 max-w-[100px] truncate" title={proc.observaciones || ''}>{proc.observaciones || '—'}</td>
                       <td className="p-2">
                         <div className="flex items-center justify-center gap-1 flex-wrap">
-                          <Button variant="ghost" size="sm" onClick={() => { setSelectedItem(proc); setShowDetailModal(true); }} className="h-7 w-7 p-0" title="Ver detalle">
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedItem(proc); setShowDetailModal(true); }} className="h-7 w-7 p-0" title="Ver Ficha Integral">
                             <Eye className="w-3 h-3" />
                           </Button>
                           {!bloqueado && (
-                            <Button variant="ghost" size="sm" onClick={() => handleEditSublote(proc)} className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700" title="Modificar">
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEditSublote(proc); }} className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700" title="Modificar">
                               <Edit2 className="w-3 h-3" />
                             </Button>
                           )}
                           {!bloqueado && (
-                            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 px-1.5" onClick={() => handleFinalizarSublote(proc)} title="Finalizar">
+                            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 px-1.5" onClick={(e) => { e.stopPropagation(); handleFinalizarSublote(proc); }} title="Finalizar">
                               <CheckCircle2 className="w-3 h-3" />
                             </Button>
                           )}
                           {!bloqueado && (
-                            <Button variant="ghost" size="sm" onClick={() => handleAnularPartida(proc)} className="h-7 w-7 p-0 text-red-500 hover:text-red-700" title="Anular">
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleAnularPartida(proc); }} className="h-7 w-7 p-0 text-red-500 hover:text-red-700" title="Anular">
                               <Ban className="w-3 h-3" />
                             </Button>
                           )}
@@ -1182,63 +1281,14 @@ export default function ProcesoRecurtido() {
         </DialogContent>
       </Dialog>
 
-      {/* ══════════ MODAL DETALLE ══════════ */}
-      <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Detalle de Partida de Recurtido</DialogTitle></DialogHeader>
-          {selectedItem && (
-            <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded border">
-                <div><span className="font-semibold">Código Partida:</span> <span className="font-mono font-bold text-purple-800">{selectedItem.numero_proceso}</span></div>
-                <div><span className="font-semibold">Lote Padre:</span> <span className="font-mono">{selectedItem.codigo_lote}</span></div>
-                <div><span className="font-semibold">Base/Color:</span> {selectedItem.nombre_color}</div>
-                <div><span className="font-semibold">Estado:</span> {estadoBadge(selectedItem.estado)}</div>
-                <div><span className="font-semibold">Cantidad Hojas:</span> {selectedItem.cantidad_pieles}</div>
-                <div><span className="font-semibold">Peso:</span> {selectedItem.peso_actual} kg</div>
-                <div><span className="font-semibold">Fecha Inicio:</span> {fmtDate(selectedItem.fecha_inicio)}</div>
-                <div><span className="font-semibold">Fecha Fin:</span> {fmtDate(selectedItem.fecha_fin)}</div>
-                <div className="col-span-2"><span className="font-semibold">Código Producto:</span> {selectedItem.codigo_producto_proceso || '—'}</div>
-                <div className="col-span-2"><span className="font-semibold">Descripción:</span> {selectedItem.descripcion_producto_proceso || '—'}</div>
-                {selectedItem.observaciones && <div className="col-span-2"><span className="font-semibold">Observaciones:</span> {selectedItem.observaciones}</div>}
-              </div>
-              {/* Trazabilidad */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded">
-                <p className="font-semibold text-blue-800 text-xs mb-2">🔗 Trazabilidad del Proceso</p>
-                <div className="flex items-center gap-1 text-xs text-slate-600 flex-wrap">
-                  {['Recepción','Limpieza','Curtido','Recurtido ←','Pintura','Producto Terminado'].map((e, i) => (
-                    <React.Fragment key={e}>
-                      <span className={e.includes('←') ? 'font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded' : ''}>{e.replace(' ←','')}</span>
-                      {i < 5 && <span className="text-slate-400">→</span>}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-              {(selectedItem.insumos_utilizados || []).length > 0 && (
-                <div className="border rounded overflow-hidden">
-                  <div className="bg-blue-700 text-white px-3 py-1.5 text-xs font-bold">Productos Químicos Utilizados</div>
-                  <table className="w-full text-xs">
-                    <thead className="bg-blue-50">
-                      <tr><th className="p-1 text-left">Código</th><th className="p-1 text-left">Producto</th><th className="p-1 text-right">Cant.</th><th className="p-1 text-right">Costo Unit.</th><th className="p-1 text-right font-bold">Total</th></tr>
-                    </thead>
-                    <tbody>
-                      {selectedItem.insumos_utilizados.map((ins, idx) => (
-                        <tr key={idx} className="border-t">
-                          <td className="p-1 font-mono">{ins.codigo}</td>
-                          <td className="p-1">{ins.producto}</td>
-                          <td className="p-1 text-right">{fmt2(ins.cantidad)}</td>
-                          <td className="p-1 text-right">{formatCurrency(ins.costo_unitario)}</td>
-                          <td className="p-1 text-right font-bold text-emerald-700">{formatCurrency(ins.valor_total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="flex justify-end pt-4"><Button onClick={() => setShowDetailModal(false)}>Cerrar</Button></div>
-        </DialogContent>
-      </Dialog>
+      <RecurtidoFichaIntegral
+        open={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        selectedItem={selectedItem}
+        allInvProceso={allInvProceso}
+        procesos={procesos}
+        getCostosControl={getCostosControl}
+      />
 
       {/* ══════════ MODAL ANULAR ══════════ */}
       <Dialog open={showAnularModal} onOpenChange={setShowAnularModal}>
