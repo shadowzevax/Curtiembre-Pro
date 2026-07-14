@@ -159,6 +159,14 @@ const menuItems = [
         ]
     },
     {
+        title: "Seguimiento de Producción",
+        icon: TrendingUp,
+        roles: ["admin", "operario"],
+        subItems: [
+            { title: "Seguimiento General de Producción", url: createPageUrl("SeguimientoProduccion"), icon: TrendingUp }
+        ]
+    },
+    {
         title: "Administración",
         icon: Users,
         roles: ["admin"],

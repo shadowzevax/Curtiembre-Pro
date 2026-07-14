@@ -129,6 +129,7 @@ import TransferenciasBancarias from './pages/TransferenciasBancarias';
 import TrasladoInventario from './pages/TrasladoInventario';
 import UsuariosSistema from './pages/UsuariosSistema';
 import VentaProductos from './pages/VentaProductos';
+import SeguimientoProduccion from './pages/SeguimientoProduccion';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
 import __Layout from './Layout.jsx';
@@ -212,6 +213,7 @@ export const PAGES = {
     "ReportesProduccion": ReportesProduccion,
     "ReportesVentas": ReportesVentas,
     "RolesPermisos": RolesPermisos,
+    "SeguimientoProduccion": SeguimientoProduccion,
     "ServiciosProduccion": ServiciosProduccion,
     "TransferenciasBancarias": TransferenciasBancarias,
     "TrasladoInventario": TrasladoInventario,
