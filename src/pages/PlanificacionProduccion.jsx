@@ -503,8 +503,6 @@ export default function PlanificacionProduccion() {
         <CatalogoModal
           open={showCatalogoModal}
           onClose={() => setShowCatalogoModal(false)}
-          tiposCuero={tiposCuero}
-          placas={placas}
           onSave={loadData}
         />
       )}
@@ -850,66 +848,260 @@ function EntregaModal({ open, onClose, ordenes, solicitudes, clientes, onSave })
 }
 
 // ─── CatalogoModal ───
-function CatalogoModal({ open, onClose, tiposCuero, placas, onSave }) {
+function CatalogoModal({ open, onClose, onSave }) {
   const [catalogoTab, setCatalogoTab] = useState("tipos");
+  // Tipos de Acabado
+  const [allTipos, setAllTipos] = useState([]);
+  const [searchTipo, setSearchTipo] = useState("");
   const [nuevoTipo, setNuevoTipo] = useState("");
+  const [editingTipo, setEditingTipo] = useState(null); // {id, nombre}
+  const [errorTipo, setErrorTipo] = useState("");
+  // Placas
+  const [allPlacas, setAllPlacas] = useState([]);
+  const [searchPlaca, setSearchPlaca] = useState("");
   const [nuevaPlacaCod, setNuevaPlacaCod] = useState("");
   const [nuevaPlacaNom, setNuevaPlacaNom] = useState("");
+  const [editingPlaca, setEditingPlaca] = useState(null); // {id, codigo, nombre}
+  const [errorPlaca, setErrorPlaca] = useState("");
+
+  const fmtDT = (d) => { if (!d) return "—"; try { return new Date(d).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }); } catch { return d; } };
+
+  const loadCatalogos = async () => {
+    const [tipos, placas] = await Promise.all([
+      base44.entities.TipoCueroPCP.list(),
+      base44.entities.PlacaPCP.list(),
+    ]);
+    setAllTipos(tipos);
+    setAllPlacas(placas);
+  };
+
+  useEffect(() => { if (open) loadCatalogos(); }, [open]);
+
+  // ── Tipos de Acabado ──
+  const tiposFiltrados = allTipos
+    .filter(t => {
+      const q = searchTipo.toLowerCase();
+      return !q || t.nombre?.toLowerCase().includes(q);
+    })
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
 
   const agregarTipo = async () => {
-    if (!nuevoTipo.trim()) return;
-    await base44.entities.TipoCueroPCP.create({ nombre: nuevoTipo.trim(), activo: true });
+    const nombre = nuevoTipo.trim();
+    if (!nombre) return;
+    const dup = allTipos.find(t => t.nombre?.toLowerCase() === nombre.toLowerCase());
+    if (dup) { setErrorTipo(`Ya existe un tipo de acabado con el nombre "${nombre}".`); return; }
+    setErrorTipo("");
+    await base44.entities.TipoCueroPCP.create({ nombre, activo: true });
     setNuevoTipo("");
+    await loadCatalogos();
     onSave();
   };
 
+  const guardarEditTipo = async () => {
+    if (!editingTipo) return;
+    const nombre = editingTipo.nombre.trim();
+    if (!nombre) return;
+    const dup = allTipos.find(t => t.nombre?.toLowerCase() === nombre.toLowerCase() && t.id !== editingTipo.id);
+    if (dup) { setErrorTipo(`Ya existe un tipo de acabado con el nombre "${nombre}".`); return; }
+    setErrorTipo("");
+    await base44.entities.TipoCueroPCP.update(editingTipo.id, { nombre });
+    setEditingTipo(null);
+    await loadCatalogos();
+    onSave();
+  };
+
+  const toggleActivoTipo = async (t) => {
+    await base44.entities.TipoCueroPCP.update(t.id, { activo: !t.activo });
+    await loadCatalogos();
+    onSave();
+  };
+
+  // ── Placas ──
+  const placasFiltradas = allPlacas
+    .filter(p => {
+      const q = searchPlaca.toLowerCase();
+      return !q || p.codigo?.toLowerCase().includes(q) || p.nombre?.toLowerCase().includes(q);
+    })
+    .sort((a, b) => (a.codigo || "").localeCompare(b.codigo || "", "es", { numeric: true }));
+
   const agregarPlaca = async () => {
-    if (!nuevaPlacaCod.trim()) return;
-    await base44.entities.PlacaPCP.create({ codigo: nuevaPlacaCod.trim(), nombre: nuevaPlacaNom.trim() || nuevaPlacaCod.trim(), activo: true });
+    const codigo = nuevaPlacaCod.trim();
+    const nombre = nuevaPlacaNom.trim() || codigo;
+    if (!codigo) return;
+    const dupCod = allPlacas.find(p => p.codigo?.toLowerCase() === codigo.toLowerCase());
+    if (dupCod) { setErrorPlaca(`Ya existe una placa con el código "${codigo}".`); return; }
+    const dupNom = allPlacas.find(p => p.nombre?.toLowerCase() === nombre.toLowerCase());
+    if (dupNom) { setErrorPlaca(`Ya existe una placa con el nombre "${nombre}".`); return; }
+    setErrorPlaca("");
+    await base44.entities.PlacaPCP.create({ codigo, nombre, activo: true });
     setNuevaPlacaCod(""); setNuevaPlacaNom("");
+    await loadCatalogos();
+    onSave();
+  };
+
+  const guardarEditPlaca = async () => {
+    if (!editingPlaca) return;
+    const codigo = editingPlaca.codigo.trim();
+    const nombre = editingPlaca.nombre.trim();
+    if (!codigo) return;
+    const dupCod = allPlacas.find(p => p.codigo?.toLowerCase() === codigo.toLowerCase() && p.id !== editingPlaca.id);
+    if (dupCod) { setErrorPlaca(`Ya existe una placa con el código "${codigo}".`); return; }
+    const dupNom = allPlacas.find(p => p.nombre?.toLowerCase() === nombre.toLowerCase() && p.id !== editingPlaca.id);
+    if (dupNom) { setErrorPlaca(`Ya existe una placa con el nombre "${nombre}".`); return; }
+    setErrorPlaca("");
+    await base44.entities.PlacaPCP.update(editingPlaca.id, { codigo, nombre });
+    setEditingPlaca(null);
+    await loadCatalogos();
+    onSave();
+  };
+
+  const toggleActivoPlaca = async (p) => {
+    await base44.entities.PlacaPCP.update(p.id, { activo: !p.activo });
+    await loadCatalogos();
     onSave();
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>⚙ Catálogos PCP</DialogTitle></DialogHeader>
-        <Tabs value={catalogoTab ?? "tipos"} onValueChange={setCatalogoTab}>
+        <Tabs value={catalogoTab} onValueChange={v => { setCatalogoTab(v); setErrorTipo(""); setErrorPlaca(""); setEditingTipo(null); setEditingPlaca(null); }}>
           <TabsList>
-            <TabsTrigger value="tipos">Tipos de Cuero</TabsTrigger>
+            <TabsTrigger value="tipos">Tipos de Acabado</TabsTrigger>
             <TabsTrigger value="placas">Placas</TabsTrigger>
           </TabsList>
-          <TabsContent value="tipos">
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value)} placeholder="Nombre del tipo de cuero..." />
-                <Button onClick={agregarTipo}><Plus className="w-4 h-4" /></Button>
-              </div>
-              <div className="border rounded overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-100"><tr><th className="p-2 text-left">Nombre</th><th className="p-2 text-center">Estado</th></tr></thead>
-                  <tbody>
-                    {tiposCuero.map(t => <tr key={t.id} className="border-t"><td className="p-2">{t.nombre}</td><td className="p-2 text-center"><Badge className="text-xs bg-green-100 text-green-700">Activo</Badge></td></tr>)}
-                  </tbody>
-                </table>
-              </div>
+
+          {/* ── TIPOS DE ACABADO ── */}
+          <TabsContent value="tipos" className="space-y-3 mt-3">
+            {/* Agregar nuevo */}
+            <div className="flex gap-2">
+              <Input value={nuevoTipo} onChange={e => { setNuevoTipo(e.target.value); setErrorTipo(""); }} placeholder="Nombre del tipo de acabado..." onKeyDown={e => e.key === "Enter" && agregarTipo()} />
+              <Button onClick={agregarTipo} className="bg-emerald-600 hover:bg-emerald-700 shrink-0"><Plus className="w-4 h-4 mr-1" /> Agregar</Button>
+            </div>
+            {errorTipo && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-1.5">⚠ {errorTipo}</p>}
+            {/* Búsqueda */}
+            <Input value={searchTipo} onChange={e => setSearchTipo(e.target.value)} placeholder="🔍 Buscar por nombre..." className="text-xs h-8" />
+            {/* Tabla */}
+            <div className="border rounded overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="p-2 text-left">Nombre</th>
+                    <th className="p-2 text-center w-24">Estado</th>
+                    <th className="p-2 text-center w-36">Fecha de Creación</th>
+                    <th className="p-2 text-center w-36">Última Modificación</th>
+                    <th className="p-2 text-center w-24">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tiposFiltrados.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-slate-400">Sin registros.</td></tr>}
+                  {tiposFiltrados.map(t => (
+                    <tr key={t.id} className={`border-t ${!t.activo ? "bg-gray-50 opacity-70" : "hover:bg-slate-50"}`}>
+                      <td className="p-2">
+                        {editingTipo?.id === t.id
+                          ? <Input autoFocus value={editingTipo.nombre} onChange={e => setEditingTipo(p => ({ ...p, nombre: e.target.value }))} className="h-7 text-xs" onKeyDown={e => e.key === "Enter" && guardarEditTipo()} />
+                          : <span className={!t.activo ? "line-through text-slate-400" : ""}>{t.nombre}</span>
+                        }
+                      </td>
+                      <td className="p-2 text-center">
+                        <Badge className={`text-xs ${t.activo ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                          {t.activo ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </td>
+                      <td className="p-2 text-center text-slate-500">{fmtDT(t.created_date)}</td>
+                      <td className="p-2 text-center text-slate-500">{fmtDT(t.updated_date)}</td>
+                      <td className="p-2 text-center">
+                        <div className="flex justify-center gap-1">
+                          {editingTipo?.id === t.id ? (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" onClick={guardarEditTipo} title="Guardar"><Save className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400" onClick={() => { setEditingTipo(null); setErrorTipo(""); }} title="Cancelar"><X className="w-3 h-3" /></Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-600" onClick={() => { setEditingTipo({ id: t.id, nombre: t.nombre }); setErrorTipo(""); }} title="Editar"><Edit2 className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className={`h-6 w-6 ${t.activo ? "text-amber-600" : "text-emerald-600"}`} onClick={() => toggleActivoTipo(t)} title={t.activo ? "Inactivar" : "Activar"}>
+                                {t.activo ? <X className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </TabsContent>
-          <TabsContent value="placas">
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input value={nuevaPlacaCod} onChange={e => setNuevaPlacaCod(e.target.value)} placeholder="Código..." className="w-24" />
-                <Input value={nuevaPlacaNom} onChange={e => setNuevaPlacaNom(e.target.value)} placeholder="Nombre..." />
-                <Button onClick={agregarPlaca}><Plus className="w-4 h-4" /></Button>
-              </div>
-              <div className="border rounded overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-100"><tr><th className="p-2 text-left">Código</th><th className="p-2 text-left">Nombre</th></tr></thead>
-                  <tbody>
-                    {placas.map(p => <tr key={p.id} className="border-t"><td className="p-2 font-mono">{p.codigo}</td><td className="p-2">{p.nombre}</td></tr>)}
-                  </tbody>
-                </table>
-              </div>
+
+          {/* ── PLACAS ── */}
+          <TabsContent value="placas" className="space-y-3 mt-3">
+            {/* Agregar nuevo */}
+            <div className="flex gap-2">
+              <Input value={nuevaPlacaCod} onChange={e => { setNuevaPlacaCod(e.target.value); setErrorPlaca(""); }} placeholder="Código..." className="w-28" />
+              <Input value={nuevaPlacaNom} onChange={e => { setNuevaPlacaNom(e.target.value); setErrorPlaca(""); }} placeholder="Nombre..." onKeyDown={e => e.key === "Enter" && agregarPlaca()} />
+              <Button onClick={agregarPlaca} className="bg-emerald-600 hover:bg-emerald-700 shrink-0"><Plus className="w-4 h-4 mr-1" /> Agregar</Button>
+            </div>
+            {errorPlaca && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-1.5">⚠ {errorPlaca}</p>}
+            {/* Búsqueda */}
+            <Input value={searchPlaca} onChange={e => setSearchPlaca(e.target.value)} placeholder="🔍 Buscar por código o nombre..." className="text-xs h-8" />
+            {/* Tabla */}
+            <div className="border rounded overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="p-2 text-left w-28">Código</th>
+                    <th className="p-2 text-left">Nombre</th>
+                    <th className="p-2 text-center w-24">Estado</th>
+                    <th className="p-2 text-center w-36">Fecha de Creación</th>
+                    <th className="p-2 text-center w-36">Última Modificación</th>
+                    <th className="p-2 text-center w-24">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {placasFiltradas.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">Sin registros.</td></tr>}
+                  {placasFiltradas.map(p => (
+                    <tr key={p.id} className={`border-t ${!p.activo ? "bg-gray-50 opacity-70" : "hover:bg-slate-50"}`}>
+                      <td className="p-2 font-mono">
+                        {editingPlaca?.id === p.id
+                          ? <Input autoFocus value={editingPlaca.codigo} onChange={e => setEditingPlaca(prev => ({ ...prev, codigo: e.target.value }))} className="h-7 text-xs font-mono" />
+                          : <span className={!p.activo ? "line-through text-slate-400" : ""}>{p.codigo}</span>
+                        }
+                      </td>
+                      <td className="p-2">
+                        {editingPlaca?.id === p.id
+                          ? <Input value={editingPlaca.nombre} onChange={e => setEditingPlaca(prev => ({ ...prev, nombre: e.target.value }))} className="h-7 text-xs" onKeyDown={e => e.key === "Enter" && guardarEditPlaca()} />
+                          : <span className={!p.activo ? "line-through text-slate-400" : ""}>{p.nombre}</span>
+                        }
+                      </td>
+                      <td className="p-2 text-center">
+                        <Badge className={`text-xs ${p.activo ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                          {p.activo ? "Activo" : "Inactivo"}
+                        </Badge>
+                      </td>
+                      <td className="p-2 text-center text-slate-500">{fmtDT(p.created_date)}</td>
+                      <td className="p-2 text-center text-slate-500">{fmtDT(p.updated_date)}</td>
+                      <td className="p-2 text-center">
+                        <div className="flex justify-center gap-1">
+                          {editingPlaca?.id === p.id ? (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" onClick={guardarEditPlaca} title="Guardar"><Save className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400" onClick={() => { setEditingPlaca(null); setErrorPlaca(""); }} title="Cancelar"><X className="w-3 h-3" /></Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-600" onClick={() => { setEditingPlaca({ id: p.id, codigo: p.codigo, nombre: p.nombre }); setErrorPlaca(""); }} title="Editar"><Edit2 className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className={`h-6 w-6 ${p.activo ? "text-amber-600" : "text-emerald-600"}`} onClick={() => toggleActivoPlaca(p)} title={p.activo ? "Inactivar" : "Activar"}>
+                                {p.activo ? <X className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </TabsContent>
         </Tabs>
