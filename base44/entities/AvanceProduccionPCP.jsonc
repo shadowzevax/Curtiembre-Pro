@@ -1,0 +1,46 @@
+{
+  "name": "AvanceProduccionPCP",
+  "type": "object",
+  "properties": {
+    "orden_id": {
+      "type": "string"
+    },
+    "orden_numero": {
+      "type": "string"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "cantidad_producida": {
+      "type": "number",
+      "default": 0
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "orden_id",
+    "fecha",
+    "cantidad_producida"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": null,
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

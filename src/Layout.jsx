@@ -73,6 +73,14 @@ const menuItems = [
         ]
     },
     {
+        title: "Planificación y Control de Producción",
+        icon: Package,
+        roles: ["admin", "operario"],
+        subItems: [
+            { title: "Planificación y Control de Producción", url: createPageUrl("PlanificacionProduccion"), icon: Package }
+        ]
+    },
+    {
         title: "Gestión de Pedidos",
         icon: Package,
         roles: ["admin", "contador", "operario"],

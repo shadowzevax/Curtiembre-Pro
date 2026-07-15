@@ -97,6 +97,7 @@ import LibroMayor from './pages/LibroMayor';
 import LoteDetalladoConsolidado from './pages/LoteDetalladoConsolidado';
 import MovimientosBancarios from './pages/MovimientosBancarios';
 import PedidoNuevo from './pages/PedidoNuevo';
+import PlanificacionProduccion from './pages/PlanificacionProduccion';
 import PedidosIndividuales from './pages/PedidosIndividuales';
 import Pintura from './pages/Pintura';
 import PlanCuentas from './pages/PlanCuentas';
@@ -186,6 +187,7 @@ export const PAGES = {
     "LoteDetalladoConsolidado": LoteDetalladoConsolidado,
     "MovimientosBancarios": MovimientosBancarios,
     "PedidoNuevo": PedidoNuevo,
+    "PlanificacionProduccion": PlanificacionProduccion,
     "PedidosIndividuales": PedidosIndividuales,
     "Pintura": Pintura,
     "PlanCuentas": PlanCuentas,

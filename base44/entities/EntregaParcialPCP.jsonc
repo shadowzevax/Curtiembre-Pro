@@ -1,0 +1,61 @@
+{
+  "name": "EntregaParcialPCP",
+  "type": "object",
+  "properties": {
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "cliente_id": {
+      "type": "string"
+    },
+    "cliente_nombre": {
+      "type": "string"
+    },
+    "orden_id": {
+      "type": "string"
+    },
+    "orden_numero": {
+      "type": "string"
+    },
+    "solicitud_id": {
+      "type": "string"
+    },
+    "solicitud_numero": {
+      "type": "string"
+    },
+    "cantidad_entregada": {
+      "type": "number",
+      "default": 0
+    },
+    "responsable": {
+      "type": "string"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fecha",
+    "orden_id",
+    "cantidad_entregada"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": null,
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

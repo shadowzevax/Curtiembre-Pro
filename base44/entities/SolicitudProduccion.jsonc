@@ -1,0 +1,116 @@
+{
+  "name": "SolicitudProduccion",
+  "type": "object",
+  "properties": {
+    "numero_solicitud": {
+      "type": "string",
+      "description": "N\u00famero autogenerado de la solicitud"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "cliente_id": {
+      "type": "string"
+    },
+    "cliente_nombre": {
+      "type": "string"
+    },
+    "prioridad": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "urgente",
+        "muy_urgente"
+      ],
+      "default": "normal"
+    },
+    "fecha_compromiso": {
+      "type": "string",
+      "format": "date"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "consolidada",
+        "en_produccion",
+        "entregada",
+        "cancelada"
+      ],
+      "default": "pendiente"
+    },
+    "observaciones": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "codigo_producto": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "tipo_cuero_id": {
+            "type": "string"
+          },
+          "tipo_cuero_nombre": {
+            "type": "string"
+          },
+          "codigo_color": {
+            "type": "string"
+          },
+          "nombre_color": {
+            "type": "string"
+          },
+          "placa_id": {
+            "type": "string"
+          },
+          "placa_nombre": {
+            "type": "string"
+          },
+          "cantidad_hojas": {
+            "type": "number",
+            "default": 0
+          },
+          "hojas_producidas": {
+            "type": "number",
+            "default": 0
+          },
+          "hojas_entregadas": {
+            "type": "number",
+            "default": 0
+          },
+          "observaciones": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "fecha",
+    "cliente_nombre"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": null,
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

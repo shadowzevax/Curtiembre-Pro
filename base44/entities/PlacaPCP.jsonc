@@ -1,0 +1,40 @@
+{
+  "name": "PlacaPCP",
+  "type": "object",
+  "properties": {
+    "codigo": {
+      "type": "string",
+      "description": "C\u00f3digo de la placa"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre o descripci\u00f3n de la placa"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "codigo",
+    "nombre"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": null,
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

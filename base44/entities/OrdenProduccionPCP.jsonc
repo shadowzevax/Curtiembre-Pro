@@ -1,0 +1,92 @@
+{
+  "name": "OrdenProduccionPCP",
+  "type": "object",
+  "properties": {
+    "numero_orden": {
+      "type": "string",
+      "description": "N\u00famero autogenerado de la orden"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date"
+    },
+    "tipo_cuero_id": {
+      "type": "string"
+    },
+    "tipo_cuero_nombre": {
+      "type": "string"
+    },
+    "codigo_color": {
+      "type": "string"
+    },
+    "nombre_color": {
+      "type": "string"
+    },
+    "placa_id": {
+      "type": "string"
+    },
+    "placa_nombre": {
+      "type": "string"
+    },
+    "cantidad_total_hojas": {
+      "type": "number",
+      "default": 0
+    },
+    "hojas_producidas": {
+      "type": "number",
+      "default": 0
+    },
+    "hojas_entregadas": {
+      "type": "number",
+      "default": 0
+    },
+    "pintor_id": {
+      "type": "string"
+    },
+    "pintor_nombre": {
+      "type": "string"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "en_produccion",
+        "suspendida",
+        "finalizada"
+      ],
+      "default": "pendiente"
+    },
+    "solicitudes_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "IDs de solicitudes que originaron esta orden"
+    },
+    "observaciones": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "fecha",
+    "cantidad_total_hojas"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": null,
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
