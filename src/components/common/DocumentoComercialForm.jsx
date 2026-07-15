@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, X, Save, Upload, CheckCircle2 } from 'lucide-react';
 import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
+import ProductSelectorCell from './ProductSelectorCell';
 import NumericInput from './NumericInput';
 import { ProductoCatalogo, OrdenCompra, OrdenVenta, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
 
@@ -1537,68 +1538,13 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                             {formData.items.map((item, index) => (
                                 <tr key={index} className="border-t">
                                     <td className="p-1 min-w-[200px]">
-                                        <div className="relative">
-                                            {/* Botón selector — no permite escritura directa */}
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setProductSearchTerms(prev => ({ ...prev, [index]: '' }));
-                                                    setShowProductDropdown(prev => ({ ...prev, [index]: !prev[index] }));
-                                                }}
-                                                className="w-full h-8 px-2 text-xs text-left border border-gray-300 rounded-md bg-white hover:bg-emerald-50 hover:border-emerald-400 flex items-center justify-between gap-1 transition-colors"
-                                            >
-                                                <span className={item.codigo ? 'font-mono font-bold text-emerald-700' : 'text-gray-400'}>
-                                                    {item.codigo ? `${item.codigo}` : 'Seleccionar producto...'}
-                                                </span>
-                                                <svg className="w-3 h-3 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                                            </button>
-                                            {showProductDropdown[index] && (
-                                                <div className="absolute z-50 left-0 right-0 bg-white border border-gray-200 rounded-md shadow-lg mt-1" style={{minWidth: '280px'}}>
-                                                    {/* Buscador interno del dropdown */}
-                                                    <div className="p-2 border-b">
-                                                        <input
-                                                            autoFocus
-                                                            type="text"
-                                                            placeholder="Buscar por código o nombre..."
-                                                            className="w-full h-7 px-2 text-xs border border-gray-300 rounded focus:outline-none focus:border-emerald-400"
-                                                            value={productSearchTerms[index] || ''}
-                                                            onChange={e => setProductSearchTerms(prev => ({ ...prev, [index]: e.target.value }))}
-                                                            onBlur={() => setTimeout(() => setShowProductDropdown(prev => ({ ...prev, [index]: false })), 200)}
-                                                        />
-                                                    </div>
-                                                    <div className="max-h-48 overflow-y-auto">
-                                                        {productosCatalogo
-                                                            .filter(p => {
-                                                                const term = normalize(productSearchTerms[index] || '');
-                                                                if (!term) return true;
-                                                                return normalize(p.codigo).includes(term) || normalize(p.descripcion).includes(term);
-                                                            })
-                                                            .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
-                                                            .slice(0, 50)
-                                                            .map(p => (
-                                                                <div key={p.id}
-                                                                    className="px-3 py-1.5 text-xs cursor-pointer hover:bg-emerald-50 border-b last:border-0"
-                                                                    onMouseDown={() => {
-                                                                        handleItemChange(index, 'codigo', p.codigo);
-                                                                        setProductSearchTerms(prev => ({ ...prev, [index]: '' }));
-                                                                        setShowProductDropdown(prev => ({ ...prev, [index]: false }));
-                                                                    }}
-                                                                >
-                                                                    <span className="font-mono font-bold text-emerald-700">{p.codigo}</span>
-                                                                    <span className="text-gray-600"> – {p.descripcion}</span>
-                                                                </div>
-                                                            ))}
-                                                        {productosCatalogo.filter(p => {
-                                                            const term = normalize(productSearchTerms[index] || '');
-                                                            if (!term) return false;
-                                                            return normalize(p.codigo).includes(term) || normalize(p.descripcion).includes(term);
-                                                        }).length === 0 && productSearchTerms[index] && (
-                                                            <div className="px-3 py-2 text-xs text-red-500 italic">Sin resultados en el Catálogo Maestro.</div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
+                                        <ProductSelectorCell
+                                            index={index}
+                                            item={item}
+                                            productosCatalogo={productosCatalogo}
+                                            normalize={normalize}
+                                            onSelect={(codigo) => handleItemChange(index, 'codigo', codigo)}
+                                        />
                                     </td>
                                     <td className="p-1 min-w-[180px]"><Input value={item.descripcion} onChange={e => handleItemChange(index, 'descripcion', e.target.value)} placeholder="Descripción" className="h-8 text-xs"/></td>
                                     <td className="p-1 min-w-[120px]"><Input value={item.categoria} onChange={e => handleItemChange(index, 'categoria', e.target.value)} placeholder="Cat." className="h-8 text-xs" readOnly title="Auto-fill"/></td>
