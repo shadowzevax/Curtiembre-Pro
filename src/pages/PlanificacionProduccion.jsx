@@ -551,7 +551,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
     else setForm({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
   }, [solicitud, open]);
 
-  const addItem = () => setForm(p => ({ ...p, items: [...p.items, { codigo_producto: "", descripcion: "", tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_hojas: 0, observaciones: "" }] }));
+  const addItem = () => setForm(p => ({ ...p, items: [...p.items, { codigo_producto: "", descripcion: "", tipo_cuero_id: "", tipo_cuero_nombre: "", color_id: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_hojas: 0, observaciones: "" }] }));
   const updateItem = (idx, field, val) => setForm(p => { const items = [...p.items]; items[idx] = { ...items[idx], [field]: val }; return { ...p, items }; });
   const removeItem = (idx) => setForm(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
 
@@ -619,6 +619,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                 <thead className="bg-slate-100">
                   <tr>
                     <th className="p-2 text-left">Tipo Cuero</th>
+                    <th className="p-2 text-left">Código Color</th>
                     <th className="p-2 text-left">Color</th>
                     <th className="p-2 text-left">Placa</th>
                     <th className="p-2 text-right">Cant. Hojas</th>
@@ -635,10 +636,16 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                           <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>)}</SelectContent>
                         </Select>
                       </td>
+                      <td className="p-1 w-28">
+                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo || ""); updateItem(idx, "nombre_color", c?.nombre || ""); }}>
+                          <SelectTrigger className="h-8 text-xs font-mono"><SelectValue placeholder="Cód..." /></SelectTrigger>
+                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </td>
                       <td className="p-1">
-                        <Select value={item.codigo_color} onValueChange={v => { const c = colores.find(x => x.id === v || x.codigo === v); updateItem(idx, "codigo_color", c?.codigo || v); updateItem(idx, "nombre_color", c?.nombre || ""); }}>
+                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo || ""); updateItem(idx, "nombre_color", c?.nombre || ""); }}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Color..." /></SelectTrigger>
-                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo} — {c.nombre}</SelectItem>)}</SelectContent>
+                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
                         </Select>
                       </td>
                       <td className="p-1">
@@ -652,7 +659,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                       <td className="p-1"><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeItem(idx)}><X className="w-3 h-3 text-red-500" /></Button></td>
                     </tr>
                   ))}
-                  {form.items.length === 0 && <tr><td colSpan={6} className="p-3 text-center text-slate-400">Agregue al menos un ítem.</td></tr>}
+                  {form.items.length === 0 && <tr><td colSpan={7} className="p-3 text-center text-slate-400">Agregue al menos un ítem.</td></tr>}
                 </tbody>
               </table>
             </div>
