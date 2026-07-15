@@ -1,25 +1,9 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 
-export default function ProductSelectorCell({ index, item, productosCatalogo, normalize, onSelect }) {
+export default function ProductSelectorCell({ item, productosCatalogo, normalize, onSelect }) {
     const [open, setOpen] = useState(false);
     const [search, setSearch] = useState('');
-    const btnRef = useRef(null);
-    const [dropdownStyle, setDropdownStyle] = useState({});
-
-    const openDropdown = () => {
-        if (btnRef.current) {
-            const rect = btnRef.current.getBoundingClientRect();
-            setDropdownStyle({
-                position: 'fixed',
-                top: rect.bottom + 4,
-                left: rect.left,
-                width: Math.max(rect.width, 320),
-                zIndex: 9999,
-            });
-        }
-        setSearch('');
-        setOpen(true);
-    };
+    const containerRef = useRef(null);
 
     const filtered = productosCatalogo
         .filter(p => {
@@ -28,14 +12,14 @@ export default function ProductSelectorCell({ index, item, productosCatalogo, no
             return normalize(p.codigo).includes(term) || normalize(p.descripcion).includes(term);
         })
         .sort((a, b) => (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true, sensitivity: 'base' }))
-        .slice(0, 50);
+        .slice(0, 80);
 
     return (
-        <div className="relative">
+        <div ref={containerRef} style={{ position: 'relative' }}>
+            {/* Botón selector */}
             <button
-                ref={btnRef}
                 type="button"
-                onClick={openDropdown}
+                onClick={() => { setSearch(''); setOpen(o => !o); }}
                 className="w-full h-8 px-2 text-xs text-left border border-gray-300 rounded-md bg-white hover:bg-emerald-50 hover:border-emerald-400 flex items-center justify-between gap-1 transition-colors"
             >
                 <span className={item.codigo ? 'font-mono font-bold text-emerald-700 truncate' : 'text-gray-400'}>
@@ -46,44 +30,59 @@ export default function ProductSelectorCell({ index, item, productosCatalogo, no
                 </svg>
             </button>
 
+            {/* Dropdown pegado al botón */}
             {open && (
                 <div
-                    style={dropdownStyle}
-                    className="bg-white border border-gray-200 rounded-md shadow-2xl"
+                    style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        minWidth: '300px',
+                        zIndex: 9999,
+                        marginTop: '2px',
+                    }}
+                    className="bg-white border border-gray-300 rounded-md shadow-xl"
+                    onMouseDown={e => e.preventDefault()} // evita que el blur cierre antes del click
                 >
-                    <div className="p-2 border-b">
+                    {/* Buscador */}
+                    <div className="p-1.5 border-b border-gray-200">
                         <input
                             autoFocus
                             type="text"
-                            placeholder="Buscar por código o nombre..."
+                            placeholder="Buscar..."
                             className="w-full h-7 px-2 text-xs border border-gray-300 rounded focus:outline-none focus:border-emerald-400"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            onBlur={() => setTimeout(() => setOpen(false), 200)}
                         />
                     </div>
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-52 overflow-y-auto">
                         {filtered.map(p => (
                             <div
                                 key={p.id}
                                 className="px-3 py-1.5 text-xs cursor-pointer hover:bg-emerald-50 border-b last:border-0"
-                                onMouseDown={() => {
+                                onClick={() => {
                                     onSelect(p.codigo);
                                     setOpen(false);
+                                    setSearch('');
                                 }}
                             >
                                 <span className="font-mono font-bold text-emerald-700">{p.codigo}</span>
                                 <span className="text-gray-600"> – {p.descripcion}</span>
                             </div>
                         ))}
-                        {filtered.length === 0 && search && (
-                            <div className="px-3 py-2 text-xs text-red-500 italic">Sin resultados en el Catálogo Maestro.</div>
-                        )}
-                        {filtered.length === 0 && !search && (
-                            <div className="px-3 py-2 text-xs text-gray-400 italic">Cargando catálogo...</div>
+                        {filtered.length === 0 && (
+                            <div className="px-3 py-2 text-xs text-gray-400 italic">Sin resultados.</div>
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* Capa invisible para cerrar al hacer clic fuera */}
+            {open && (
+                <div
+                    style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+                    onClick={() => setOpen(false)}
+                />
             )}
         </div>
     );
