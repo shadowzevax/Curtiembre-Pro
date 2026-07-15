@@ -1518,7 +1518,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
             {/* Ítems */}
             <div>
                 <Label className="text-base font-semibold">Ítems</Label>
-                <div className="border rounded-lg mt-2" style={{overflowX: 'auto', overflowY: 'visible'}}>
+                <div className="border rounded-lg overflow-x-auto mt-2">
                     <table className="w-full text-xs">
                         <thead className="bg-gray-50">
                             <tr>
