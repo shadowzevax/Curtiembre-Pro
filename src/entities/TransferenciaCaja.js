@@ -1,0 +1,1 @@
+export { TransferenciaCaja } from './all';

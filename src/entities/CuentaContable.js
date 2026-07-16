@@ -1,0 +1,1 @@
+export { CuentaContable } from './all';

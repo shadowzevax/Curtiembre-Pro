@@ -1,0 +1,1 @@
+export { CuentaBancaria } from './all';

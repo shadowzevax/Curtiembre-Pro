@@ -1,0 +1,1 @@
+export { Insumo } from './all';

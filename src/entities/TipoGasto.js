@@ -1,0 +1,1 @@
+export { TipoGasto } from './all';

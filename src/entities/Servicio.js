@@ -1,0 +1,1 @@
+export { Servicio } from './all';

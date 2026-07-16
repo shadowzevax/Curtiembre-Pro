@@ -1,0 +1,1 @@
+export { TrasladoInventario } from './all';

@@ -1,0 +1,1 @@
+export { MovimientoBancario } from './all';

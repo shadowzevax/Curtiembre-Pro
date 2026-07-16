@@ -1,0 +1,1 @@
+export { DocumentoInventario } from './all';

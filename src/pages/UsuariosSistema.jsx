@@ -51,9 +51,12 @@ export default function UsuariosSistema() {
                     role: currentItem.role
                 });
             } else {
-                // La creación de usuarios usualmente se hace por invitación. 
-                // Esta es una simulación. La función invite() sería más apropiada.
-                alert("La creación de usuarios se realiza mediante invitación desde el panel de Base44.");
+                await User.create({
+                    full_name: currentItem.full_name,
+                    email: currentItem.email,
+                    role: currentItem.role,
+                    password: currentItem.password
+                });
             }
             setShowModal(false);
             loadUsers();
@@ -101,7 +104,7 @@ export default function UsuariosSistema() {
                 onPrint={handlePrint}
                 actionButton={
                     <Button onClick={() => handleOpenModal()} className="bg-emerald-600 hover:bg-emerald-700">
-                        <Plus className="w-4 h-4 mr-2" /> Nuevo Usuario (Invitar)
+                        <Plus className="w-4 h-4 mr-2" /> Nuevo Usuario
                     </Button>
                 }
             />
@@ -118,7 +121,7 @@ export default function UsuariosSistema() {
                     <DialogHeader>
                         <DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Usuario</DialogTitle>
                         <DialogDescription>
-                            {isEditing ? 'Modifique los detalles del usuario.' : 'Para crear un usuario, utilice la función de invitación de Base44.'}
+                            {isEditing ? 'Modifique los detalles del usuario.' : 'Crea un usuario con email y contraseña.'}
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleSave} className="space-y-4 pt-4">
@@ -144,12 +147,12 @@ export default function UsuariosSistema() {
                         {!isEditing && (
                             <div>
                                 <Label htmlFor="password">Contraseña</Label>
-                                <Input id="password" type="password" value={currentItem?.password || ''} onChange={(e) => setCurrentItem({ ...currentItem, password: e.target.value })}/>
+                                <Input id="password" type="password" value={currentItem?.password || ''} onChange={(e) => setCurrentItem({ ...currentItem, password: e.target.value })} required minLength={6}/>
                             </div>
                         )}
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-                            <Button type="submit" disabled={!isEditing}>Guardar Cambios</Button>
+                            <Button type="submit">Guardar Cambios</Button>
                         </div>
                     </form>
                 </DialogContent>

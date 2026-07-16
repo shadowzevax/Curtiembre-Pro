@@ -1,0 +1,1 @@
+export { TransferenciaInterna } from './all';

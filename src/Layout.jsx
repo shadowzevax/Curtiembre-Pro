@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { User } from "@/entities/User";
 import { Button } from "@/components/ui/button";
-import ChatBotFloating from "@/components/agent/ChatBotFloating";
 import SidebarSearch from "@/components/layout/SidebarSearch";
 
 const menuItems = [
@@ -677,9 +676,6 @@ export default function Layout({ children, currentPageName }) {
                 </div>
             </main>
 
-            {/* Copiloto ERP - Chat Flotante Global */}
-            <ChatBotFloating agentName="copiloto_erp" />
-            
             {/* Custom scrollbar styles global */}
             <style>
                 {`

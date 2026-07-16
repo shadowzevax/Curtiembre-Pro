@@ -1,0 +1,1 @@
+export { Actividad } from './all';

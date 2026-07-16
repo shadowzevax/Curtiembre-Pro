@@ -1,0 +1,1 @@
+export { Empleado } from './all';

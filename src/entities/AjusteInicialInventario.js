@@ -1,0 +1,1 @@
+export { AjusteInicialInventario } from './all';

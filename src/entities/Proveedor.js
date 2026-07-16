@@ -1,0 +1,1 @@
+export { Proveedor } from './all';

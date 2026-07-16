@@ -1,0 +1,1 @@
+export { RecetaPintura } from './all';

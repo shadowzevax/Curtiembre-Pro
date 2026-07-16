@@ -1,0 +1,1 @@
+export { ReciboCaja } from './all';

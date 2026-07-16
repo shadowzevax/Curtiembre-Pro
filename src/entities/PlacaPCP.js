@@ -1,0 +1,1 @@
+export { PlacaPCP } from './all';

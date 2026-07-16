@@ -1,0 +1,1 @@
+export { Tercero } from './all';

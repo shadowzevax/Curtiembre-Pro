@@ -1,0 +1,1 @@
+export { AsientoContable } from './all';
