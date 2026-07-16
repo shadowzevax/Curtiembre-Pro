@@ -40,6 +40,21 @@ Originalmente construido en Base44; ahora funciona con infraestructura propia:
 - Framework: Vite (detectado automático). Las funciones de [api/](api/) se despliegan solas.
 - Variables de entorno requeridas en Vercel: `DATABASE_URL`, `JWT_SECRET`.
 
+## Sistema de versiones (copias de seguridad)
+
+Cada cambio publicado es una versión (v1, v2, ...). Se conservan las **últimas 5**.
+La versión en ejecución se muestra en el menú lateral, debajo de "Salir".
+
+Desde VS Code: menú **Terminal → Run Task** y elegir:
+
+- **💾 Guardar nueva versión** — pide una descripción, publica y etiqueta la versión
+- **📋 Ver versiones guardadas** — lista las últimas 5 con fecha y descripción
+- **⏪ Restaurar versión** — eliges una y TODA la página vuelve a ese estado (se publica sola en ~1 min)
+
+Equivalentes por terminal: `npm run version:guardar`, `npm run version:listar`, `npm run version:restaurar`.
+
+Las restauraciones no borran historial: restaurar v2 crea una versión nueva con el contenido de v2.
+
 ## Estructura relevante
 
 - [api/[...path].js](api/[...path].js) — punto de entrada de la API (auth, entidades, usuarios, archivos)

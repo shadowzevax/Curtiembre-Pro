@@ -14,7 +14,10 @@
     "preview": "vite preview",
     "db:init": "node migration/init-db.mjs",
     "export:base44": "node migration/export-base44.mjs",
-    "import:neon": "node migration/import-to-neon.mjs"
+    "import:neon": "node migration/import-to-neon.mjs",
+    "version:guardar": "node scripts/version.mjs guardar",
+    "version:listar": "node scripts/version.mjs listar",
+    "version:restaurar": "node scripts/version.mjs restaurar"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",

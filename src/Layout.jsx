@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { User } from "@/entities/User";
 import { Button } from "@/components/ui/button";
+import versionInfo from "@/version.json";
 import SidebarSearch from "@/components/layout/SidebarSearch";
 
 const menuItems = [
@@ -648,6 +649,9 @@ export default function Layout({ children, currentPageName }) {
                         <LogOut className="w-5 h-5 flex-shrink-0" />
                         <span className={`font-medium transition-opacity duration-300 ${isCollapsed ? 'opacity-0 select-none' : 'opacity-100'}`}>Salir</span>
                     </button>
+                    <p className="text-center text-[10px] text-gray-400 select-none pt-1" title={`Versión ${versionInfo.version} — ${versionInfo.fecha}`}>
+                        v{versionInfo.version}
+                    </p>
                 </div>
             </aside>
 
