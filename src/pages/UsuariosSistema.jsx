@@ -44,12 +44,12 @@ export default function UsuariosSistema() {
         e.preventDefault();
         try {
             if (isEditing) {
-                // La API de usuarios puede que no permita cambiar el email o contraseña directamente así.
-                // Esta es una representación. La lógica real depende de la API.
-                await User.update(currentItem.id, {
+                const cambios = {
                     full_name: currentItem.full_name,
                     role: currentItem.role
-                });
+                };
+                if (currentItem.password) cambios.password = currentItem.password;
+                await User.update(currentItem.id, cambios);
             } else {
                 await User.create({
                     full_name: currentItem.full_name,
@@ -144,12 +144,10 @@ export default function UsuariosSistema() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        {!isEditing && (
-                            <div>
-                                <Label htmlFor="password">Contraseña</Label>
-                                <Input id="password" type="password" value={currentItem?.password || ''} onChange={(e) => setCurrentItem({ ...currentItem, password: e.target.value })} required minLength={6}/>
-                            </div>
-                        )}
+                        <div>
+                            <Label htmlFor="password">{isEditing ? 'Nueva contraseña (dejar vacío para no cambiarla)' : 'Contraseña'}</Label>
+                            <Input id="password" type="password" value={currentItem?.password || ''} onChange={(e) => setCurrentItem({ ...currentItem, password: e.target.value })} required={!isEditing} minLength={6}/>
+                        </div>
                         <div className="flex justify-end gap-2 pt-4">
                             <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
                             <Button type="submit">Guardar Cambios</Button>

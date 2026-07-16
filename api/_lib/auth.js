@@ -59,17 +59,22 @@ export async function getMe(auth) {
   return userToPublic(rows[0]);
 }
 
-// updateMyUserData: campos arbitrarios (ej. pinned_shortcuts) van a data jsonb
+// updateMyUserData: campos arbitrarios (ej. pinned_shortcuts) van a data jsonb.
+// password se trata aparte: siempre hasheada, nunca en data.
 export async function updateMyData(auth, patch) {
   const sql = getSql();
-  const { full_name, ...rest } = patch || {};
+  const { full_name, password, ...rest } = patch || {};
+  if (password && String(password).length < 6) {
+    throw new HttpError(400, 'La contraseña debe tener al menos 6 caracteres');
+  }
   const rows = await sql.query(
     `UPDATE app_users
      SET data = data || $2::jsonb,
          full_name = COALESCE($3, full_name),
+         password_hash = COALESCE($4, password_hash),
          updated_date = now()
      WHERE id = $1 RETURNING *`,
-    [auth.sub, JSON.stringify(rest), full_name ?? null]
+    [auth.sub, JSON.stringify(rest), full_name ?? null, password ? hashPassword(password) : null]
   );
   if (!rows[0]) throw new HttpError(404, 'Usuario no existe');
   return userToPublic(rows[0]);
