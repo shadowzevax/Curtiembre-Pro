@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { OrdenCompra, Insumo, Tercero } from "@/entities/all";
+import { recalcularDesdeMovimientos } from '@/lib/costoPromedio';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,29 +206,17 @@ export default function CompraInsumos() {
               }
               
               if (entityType && currentItemData) {
-                // Recalcular stock SIN este movimiento
+                // Recalcular stock Y costo promedio reproduciendo los movimientos restantes
+                // (sin este), para que el costo promedio quede correcto (no inflado).
                 const todosMovimientos = await MovimientoInventario.filter({ insumo_id: mov.insumo_id });
-                const stockSinEsteMovimiento = todosMovimientos
-                  .filter(m => m.id !== mov.id)
-                  .reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-                
-                // Recalcular costo promedio sin este movimiento
-                let nuevoCostoPromedio = 0;
-                if (stockSinEsteMovimiento > 0) {
-                  const movimientosRestantes = todosMovimientos.filter(m => m.id !== mov.id && m.tipo_movimiento === 'entrada');
-                  if (movimientosRestantes.length > 0) {
-                    const valorTotal = movimientosRestantes.reduce((sum, m) => {
-                      return sum + (parseFloat(m.cantidad) || 0) * (parseFloat(m.costo_unitario) || 0);
-                    }, 0);
-                    nuevoCostoPromedio = valorTotal / stockSinEsteMovimiento;
-                  }
-                }
-                
+                const restantes = todosMovimientos.filter(m => m.id !== mov.id);
+                const { stock: stockSinEsteMovimiento, costoPromedio: nuevoCostoPromedio } = recalcularDesdeMovimientos(restantes);
+
                 await entityType.update(currentItemData.id, {
                   stock_actual: stockSinEsteMovimiento,
                   costo_promedio: nuevoCostoPromedio
                 });
-                
+
                 console.log(`✅ Stock actualizado para ${currentItemData.codigo}: Stock=${stockSinEsteMovimiento}, Costo=${nuevoCostoPromedio}`);
               }
             } catch (err) {

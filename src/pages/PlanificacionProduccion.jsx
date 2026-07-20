@@ -551,7 +551,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
     else setForm({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
   }, [solicitud, open]);
 
-  const addItem = () => setForm(p => ({ ...p, items: [...p.items, { codigo_producto: "", descripcion: "", tipo_cuero_id: "", tipo_cuero_nombre: "", color_id: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_hojas: 0, observaciones: "" }] }));
+  const addItem = () => setForm(p => ({ ...p, items: [...p.items, { codigo_producto: "", descripcion: "", tipo_cuero_id: "", tipo_cuero_nombre: "", color_id: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", calibre: "", cantidad_hojas: 0, observaciones: "" }] }));
   const updateItem = (idx, field, val) => setForm(p => { const items = [...p.items]; items[idx] = { ...items[idx], [field]: val }; return { ...p, items }; });
   const removeItem = (idx) => setForm(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
 
@@ -622,6 +622,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                     <th className="p-2 text-left">Código Color</th>
                     <th className="p-2 text-left">Color</th>
                     <th className="p-2 text-left">Placa</th>
+                    <th className="p-2 text-left">Calibre</th>
                     <th className="p-2 text-right">Cant. Hojas</th>
                     <th className="p-2 text-left">Obs.</th>
                     <th className="p-2"></th>
@@ -637,15 +638,15 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                         </Select>
                       </td>
                       <td className="p-1 w-28">
-                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo || ""); updateItem(idx, "nombre_color", c?.nombre || ""); }}>
+                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo_color || ""); updateItem(idx, "nombre_color", c?.nombre_color || ""); }}>
                           <SelectTrigger className="h-8 text-xs font-mono"><SelectValue placeholder="Cód..." /></SelectTrigger>
-                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo}</SelectItem>)}</SelectContent>
+                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo_color}</SelectItem>)}</SelectContent>
                         </Select>
                       </td>
                       <td className="p-1">
-                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo || ""); updateItem(idx, "nombre_color", c?.nombre || ""); }}>
+                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo_color || ""); updateItem(idx, "nombre_color", c?.nombre_color || ""); }}>
                           <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Color..." /></SelectTrigger>
-                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
+                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre_color}</SelectItem>)}</SelectContent>
                         </Select>
                       </td>
                       <td className="p-1">
@@ -654,12 +655,22 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                           <SelectContent>{placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}</SelectContent>
                         </Select>
                       </td>
+                      <td className="p-1 w-20">
+                        <Select value={item.calibre || ""} onValueChange={v => updateItem(idx, "calibre", v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Calibre..." /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0.5">0.5</SelectItem>
+                            <SelectItem value="0.7">0.7</SelectItem>
+                            <SelectItem value="0.8">0.8</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </td>
                       <td className="p-1 w-20"><Input type="number" className="h-8 text-xs text-right" value={item.cantidad_hojas} onChange={e => updateItem(idx, "cantidad_hojas", parseFloat(e.target.value) || 0)} /></td>
                       <td className="p-1"><Input className="h-8 text-xs" placeholder="Obs..." value={item.observaciones} onChange={e => updateItem(idx, "observaciones", e.target.value)} /></td>
                       <td className="p-1"><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeItem(idx)}><X className="w-3 h-3 text-red-500" /></Button></td>
                     </tr>
                   ))}
-                  {form.items.length === 0 && <tr><td colSpan={7} className="p-3 text-center text-slate-400">Agregue al menos un ítem.</td></tr>}
+                  {form.items.length === 0 && <tr><td colSpan={8} className="p-3 text-center text-slate-400">Agregue al menos un ítem.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -726,9 +737,9 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
             </div>
             <div>
               <Label>Color</Label>
-              <Select value={form.codigo_color} onValueChange={v => { const c = colores.find(x => x.id === v); setForm(p => ({ ...p, codigo_color: c?.codigo || v, nombre_color: c?.nombre || "" })); }}>
+              <Select value={form.codigo_color} onValueChange={v => { const c = colores.find(x => x.id === v); setForm(p => ({ ...p, codigo_color: c?.codigo_color || v, nombre_color: c?.nombre_color || "" })); }}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo} — {c.nombre}</SelectItem>)}</SelectContent>
+                <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo_color} — {c.nombre_color}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>

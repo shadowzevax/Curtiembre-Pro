@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, X, Save, Upload, CheckCircle2 } from 'lucide-react';
 import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
+import { calcularCostoPromedioCompra, recalcularDesdeMovimientos } from '@/lib/costoPromedio';
 import ProductSelectorCell from './ProductSelectorCell';
 import NumericInput from './NumericInput';
 import { ProductoCatalogo, OrdenCompra, OrdenVenta, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
@@ -600,17 +601,19 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                         }
                         
                         if (entityType && currentItemData) {
-                            // Recalcular stock desde movimientos EXCLUYENDO este que vamos a borrar
+                            // Recalcular stock Y costo promedio reproduciendo los movimientos
+                            // restantes (excluyendo el que se va a borrar), para que el costo
+                            // promedio quede exactamente como si esta compra nunca hubiera existido.
                             const todosMovimientos = await MovimientoInventario.filter({ insumo_id: mov.insumo_id });
-                            const stockSinEsteMovimiento = todosMovimientos
-                                .filter(m => m.id !== mov.id)
-                                .reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-                            
+                            const restantes = todosMovimientos.filter(m => m.id !== mov.id);
+                            const { stock: stockSinEsteMovimiento, costoPromedio } = recalcularDesdeMovimientos(restantes);
+
                             await entityType.update(currentItemData.id, {
-                                stock_actual: stockSinEsteMovimiento
+                                stock_actual: stockSinEsteMovimiento,
+                                costo_promedio: costoPromedio
                             });
-                            
-                            console.log(`✅ Stock revertido para ${currentItemData.codigo}: ${stockSinEsteMovimiento}`);
+
+                            console.log(`✅ Stock/costo revertidos para ${currentItemData.codigo}: Stock=${stockSinEsteMovimiento}, Costo=${costoPromedio}`);
                         }
                     } catch (err) {
                         console.error('Error revirtiendo stock:', err);
@@ -707,19 +710,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
 
                      const nuevoStock = stockActual + cantidadCompra;
 
-                     // Calcular nuevo costo promedio ponderado correctamente
-                     let nuevoCostoPromedio = costoUnitarioCompra;
-
-                     if (nuevoStock > 0) {
-                         // Calcular valor total de todos los movimientos de entrada existentes
-                         const movimientosEntrada = movimientos.filter(m => m.tipo_movimiento === 'entrada');
-                         const valorTotalExistente = movimientosEntrada.reduce((sum, m) => {
-                             return sum + (parseFloat(m.cantidad) || 0) * (parseFloat(m.costo_unitario) || 0);
-                         }, 0);
-
-                         const valorTotalCompra = cantidadCompra * costoUnitarioCompra;
-                         nuevoCostoPromedio = (valorTotalExistente + valorTotalCompra) / nuevoStock;
-                     }
+                     // Costo promedio ponderado correcto: se parte del costo promedio VIGENTE
+                     // aplicado al stock actual (no de la suma histórica de todas las entradas,
+                     // que queda inflada cuando parte de ese stock ya fue consumido/vendido).
+                     const nuevoCostoPromedio = calcularCostoPromedioCompra(
+                         stockActual, currentItemData.costo_promedio, cantidadCompra, costoUnitarioCompra
+                     );
 
                      // Crear Movimiento de Entrada PRIMERO (con el costo unitario de la compra)
                      await MovimientoInventario.create({
