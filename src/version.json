@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": "3.1",
   "fecha": "2026-07-20",
-  "descripcion": "Corrige costo promedio ponderado en compras (formula correcta, ya no se infla); en Solicitudes de Produccion arregla autocompletado Codigo Color/Color desde Catalogo de Colores (bug de nombres de campo) y agrega columna Calibre (0.5/0.7/0.8)"
+  "descripcion": "Pintura fase 1: agrega campo obligatorio Placa por Producto Terminado/Sublote (catalogo PlacaPCP), visible en tabla resumen y en detalle de pedidos existentes. Sistema de sub-versiones v3.x habilitado para cambios grandes por fases"
 }

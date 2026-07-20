@@ -9,6 +9,13 @@
       "presentation": { "reveal": "always", "panel": "new", "focus": true }
     },
     {
+      "label": "🧩 Guardar fase (sub-versión v3.1, v3.2...)",
+      "type": "shell",
+      "command": "node scripts/version.mjs fase \"${input:descripcion}\"",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "new", "focus": true }
+    },
+    {
       "label": "📋 Ver versiones guardadas",
       "type": "shell",
       "command": "node scripts/version.mjs listar",

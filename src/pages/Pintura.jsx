@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura } from '@/entities/all';
+import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, PlacaPCP } from '@/entities/all';
 import { agruparPorCodigoProducto, calcularConsumoFIFO } from '@/lib/inventarioProceso';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +28,7 @@ const newSublote = (idx, idPedido) => ({
   id_temp: `sub-${Date.now()}-${idx}`,
   codigo_sublote: idPedido ? `${idPedido}-S${String(idx + 1).padStart(2, '0')}` : `SUB-${String(idx + 1).padStart(2, '0')}`,
   producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '',
+  placa_id: '', placa_codigo: '', placa_nombre: '',
   tipo_acabado: '', color_final: '', cantidad_hojas: 0, pct_participacion: 0,
   observaciones: '', estado: 'pendiente', insumos: [], mano_obra: [],
   hojas_iniciales: 0, hojas_buenas: 0, hojas_defectuosas: 0, hojas_rechazadas: 0, obs_calidad: '',
@@ -58,6 +59,7 @@ export default function Pintura() {
   const [insumosQuimicos, setInsumosQuimicos] = useState([]);
   const [productosTerminados, setProductosTerminados] = useState([]);
   const [coloresCatalogo, setColoresCatalogo] = useState([]);
+  const [placas, setPlacas] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showModal, setShowModal] = useState(false);
@@ -80,17 +82,19 @@ export default function Pintura() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, inventarioData, productosTermData, coloresData] = await Promise.all([
+      const [procesosData, insumosData, inventarioData, productosTermData, coloresData, placasData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'pintura' }),
         Insumo.list(), InventarioEnProceso.list(),
         ProductoTerminado.filter({ categoria: 'producto_terminado' }),
-        ColorPintura.list()
+        ColorPintura.list(),
+        PlacaPCP.filter({ activo: true }),
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumosQuimicos(Array.isArray(insumosData) ? insumosData : []);
       setInventarioEnProceso(Array.isArray(inventarioData) ? inventarioData : []);
       setProductosTerminados(Array.isArray(productosTermData) ? productosTermData : []);
       setColoresCatalogo(Array.isArray(coloresData) ? coloresData.filter(c => c.estado === 'activo') : []);
+      setPlacas(Array.isArray(placasData) ? placasData : []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
@@ -306,6 +310,7 @@ export default function Pintura() {
       const ini = parseFloat(sub.cantidad_hojas) || 0;
       if (!sub.tipo_acabado) errores.push(`Sublote ${sub.codigo_sublote}: falta el Tipo de Acabado.`);
       if (!sub.color_final) errores.push(`Sublote ${sub.codigo_sublote}: falta el Color Final.`);
+      if (!sub.placa_id) errores.push(`Sublote ${sub.codigo_sublote}: falta la Placa.`);
       if (ini === 0) errores.push(`Sublote ${sub.codigo_sublote}: Cantidad de Hojas es 0.`);
       const buenas = parseFloat(sub.hojas_buenas) || 0;
       const def = parseFloat(sub.hojas_defectuosas) || 0;
@@ -1278,7 +1283,7 @@ export default function Pintura() {
                 {sublotes.length > 0 && (
                   <div className="overflow-x-auto bg-white">
                     <table className="w-full text-xs">
-                      <thead className="bg-teal-100 border-b border-teal-300"><tr><th className="p-2 text-left font-semibold">Código Sublote</th><th className="p-2 text-left font-semibold">Nombre Producto Terminado</th><th className="p-2 text-left font-semibold">Tipo Acabado</th><th className="p-2 text-left font-semibold">Color Final</th><th className="p-2 text-center font-semibold">Cant. Hojas</th><th className="p-2 text-center font-semibold">Estado</th><th className="p-2 text-center font-semibold">Acciones</th></tr></thead>
+                      <thead className="bg-teal-100 border-b border-teal-300"><tr><th className="p-2 text-left font-semibold">Código Sublote</th><th className="p-2 text-left font-semibold">Nombre Producto Terminado</th><th className="p-2 text-left font-semibold">Tipo Acabado</th><th className="p-2 text-left font-semibold">Color Final</th><th className="p-2 text-left font-semibold">Placa</th><th className="p-2 text-center font-semibold">Cant. Hojas</th><th className="p-2 text-center font-semibold">Estado</th><th className="p-2 text-center font-semibold">Acciones</th></tr></thead>
                       <tbody>
                         {sublotes.map((sub, idx) => (
                           <tr key={idx} className={`border-t ${subloteActivoIdx === idx ? 'bg-teal-50 ring-1 ring-inset ring-teal-400' : 'hover:bg-teal-50'}`}>
@@ -1286,6 +1291,7 @@ export default function Pintura() {
                             <td className="p-2 font-semibold text-slate-700">{sub.producto_terminado_nombre || <span className="text-slate-400 italic">Sin asignar</span>}</td>
                             <td className="p-2">{sub.tipo_acabado || <span className="text-slate-400">—</span>}</td>
                             <td className="p-2 font-semibold">{sub.color_final || <span className="text-slate-400">—</span>}</td>
+                            <td className="p-2 font-mono text-xs">{sub.placa_codigo || <span className="text-slate-400">—</span>}</td>
                             <td className="p-2 text-center font-bold">{sub.cantidad_hojas || 0}</td>
                             <td className="p-2 text-center"><span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${sub.estado === 'completado' ? 'bg-green-100 text-green-700' : sub.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{sub.estado === 'completado' ? 'Completo' : sub.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}</span></td>
                             <td className="p-2 text-center"><div className="flex gap-1 justify-center"><button type="button" onClick={() => handleVerSublote(idx)} className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Ver</button>{!esFinalizado && (<button type="button" onClick={() => handleCambiarSubloteActivo(idx)} className={`px-2 py-0.5 rounded text-xs font-semibold ${subloteActivoIdx === idx ? 'bg-teal-500 text-white' : 'bg-teal-100 hover:bg-teal-200 text-teal-700'}`}>Editar</button>)}{!esFinalizado && (<button type="button" onClick={() => handleEliminarSublote(idx)} className="px-2 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold">Eliminar</button>)}</div></td>
@@ -1416,6 +1422,19 @@ export default function Pintura() {
                             <SelectContent className="max-h-48 overflow-y-auto">
                               {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.nombre_color}>{c.codigo_color} - {c.nombre_color}</SelectItem>)}
                               {coloresCatalogo.length === 0 && COLORES_BASE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold text-orange-800">Placa *</Label>
+                          <Select value={subloteActivo.placa_id || ''} onValueChange={v => {
+                            const p = placas.find(x => x.id === v);
+                            setSubloteActivo({ placa_id: v, placa_codigo: p?.codigo || '', placa_nombre: p?.nombre || '' });
+                          }} disabled={esFinalizado}>
+                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar placa..." /></SelectTrigger>
+                            <SelectContent className="max-h-48 overflow-y-auto">
+                              {placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}
+                              {placas.length === 0 && <SelectItem value="__none__" disabled>Sin placas registradas</SelectItem>}
                             </SelectContent>
                           </Select>
                         </div>
@@ -1956,6 +1975,7 @@ export default function Pintura() {
                       <th className="p-2 text-center">Hojas Asignadas</th>
                       <th className="p-2 text-left">Color Final</th>
                       <th className="p-2 text-left">Tipo Acabado</th>
+                      <th className="p-2 text-left">Placa</th>
                       <th className="p-2 text-center">Estado</th>
                       <th className="p-2 text-left">Fecha Creación</th>
                     </tr>
@@ -1967,6 +1987,7 @@ export default function Pintura() {
                         <td className="p-2 text-center font-bold">{s.cantidad_hojas || 0}</td>
                         <td className="p-2 font-semibold">{s.color_final || '—'}</td>
                         <td className="p-2">{s.tipo_acabado || '—'}</td>
+                        <td className="p-2 font-mono text-xs">{s.placa_codigo || '—'}</td>
                         <td className="p-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${s.estado === 'completado' ? 'bg-green-100 text-green-700' : s.estado === 'en_proceso' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                             {s.estado === 'completado' ? 'Completo' : s.estado === 'en_proceso' ? 'En Proceso' : 'Pendiente'}
