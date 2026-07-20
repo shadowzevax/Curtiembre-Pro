@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura } from '@/entities/all';
+import { agruparPorCodigoProducto, calcularConsumoFIFO } from '@/lib/inventarioProceso';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -141,6 +142,7 @@ export default function Pintura() {
       pintor_responsable: '', estado_pedido_pintura: 'pendiente', observaciones: '', finalizar_pintura: false,
     });
     setCueroSeleccionado(null); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
+    setCodigoProductoFifo(''); setCantidadDeseadaFifo(0); setAvisoFifo(null);
     setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
     setMostrarSelectorContinuar(false); setContinuarBusqueda('');
     setBusquedaProducto(''); setBusquedaNombre('');
@@ -153,6 +155,44 @@ export default function Pintura() {
     if (!inv) return;
     setCueroSeleccionado(inv); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
     setCurrentItem(prev => ({ ...prev, inv_proceso_id: inv.id, codigo_lote: inv.codigo_lote }));
+  };
+
+  // ─── SELECCIÓN POR CÓDIGO PRODUCTO CON CONSUMO FIFO AUTOMÁTICO ────────────
+  // El usuario solo elige el Código Producto y la cantidad; el sistema decide
+  // automáticamente cuál partida usar (siempre la más antigua disponible).
+  const [codigoProductoFifo, setCodigoProductoFifo] = useState('');
+  const [cantidadDeseadaFifo, setCantidadDeseadaFifo] = useState(0);
+  const [avisoFifo, setAvisoFifo] = useState(null);
+
+  const productosEnProcesoConsolidados = agruparPorCodigoProducto(cueroDisponible)
+    .filter(p => p.stock_total > 0);
+
+  const aplicarSeleccionFifo = (codigo, cantidad) => {
+    setCodigoProductoFifo(codigo);
+    setCantidadDeseadaFifo(cantidad);
+    if (!codigo || !cantidad || cantidad <= 0) { setAvisoFifo(null); return; }
+    const { distribucion, faltante } = calcularConsumoFIFO(cueroDisponible, codigo, cantidad);
+    if (distribucion.length === 0) {
+      setAvisoFifo({ tipo: 'error', texto: 'No hay existencias disponibles para este Código Producto.' });
+      return;
+    }
+    const primera = distribucion[0];
+    const inv = inventarioEnProceso.find(i => i.id === primera.partidaId);
+    if (!inv) return;
+    setCueroSeleccionado(inv);
+    setHojasAConsumir(primera.cantidad);
+    setSublotes(prev => recalcPct(prev, primera.cantidad));
+    setCurrentItem(prev => ({ ...prev, inv_proceso_id: inv.id, codigo_lote: inv.codigo_lote }));
+
+    if (distribucion.length > 1 || faltante > 0) {
+      setAvisoFifo({
+        tipo: 'aviso',
+        texto: `El sistema tomó automáticamente ${primera.cantidad} hojas de la partida más antigua (${primera.codigoPartida}, FIFO). ` +
+          `Para consumir el resto (${cantidad - primera.cantidad} hojas) de partidas más recientes, registre un segundo movimiento de Pintura con ese Código Producto una vez guarde este.`,
+      });
+    } else {
+      setAvisoFifo({ tipo: 'ok', texto: `Se consumirá automáticamente de la partida ${primera.codigoPartida} (la más antigua disponible), siguiendo FIFO.` });
+    }
   };
 
   const totalHojasAsignadas = sublotes.reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
@@ -505,6 +545,15 @@ export default function Pintura() {
         observaciones: currentItem.observaciones || '',
         inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
         codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
+        // Trazabilidad del consumo FIFO: de qué partida y lote padre provino el cuero usado.
+        trazabilidad_consumo_fifo: cueroSeleccionado ? {
+          codigo_producto_proceso: cueroSeleccionado.codigo_producto_proceso || '',
+          codigo_partida: cueroSeleccionado.codigo_lote,
+          lote_padre: cueroSeleccionado.codigo_lote_padre || '',
+          cantidad_consumida: hojasAConsumir,
+          fecha: new Date().toISOString(),
+          costo_aplicado: cueroSeleccionado.costo_promedio || 0,
+        } : (currentItem.trazabilidad_consumo_fifo || null),
         hojas_a_consumir: hojasAConsumir,
         total_hojas_enviadas_pintura: hojasAConsumir,
         sublotes_pintura: sublotesConContabilizado, // guardamos con inv_contabilizado
@@ -582,6 +631,15 @@ export default function Pintura() {
         ...currentItem,
         inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
         codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
+        // Trazabilidad del consumo FIFO: de qué partida y lote padre provino el cuero usado.
+        trazabilidad_consumo_fifo: cueroSeleccionado ? {
+          codigo_producto_proceso: cueroSeleccionado.codigo_producto_proceso || '',
+          codigo_partida: cueroSeleccionado.codigo_lote,
+          lote_padre: cueroSeleccionado.codigo_lote_padre || '',
+          cantidad_consumida: hojasAConsumir,
+          fecha: new Date().toISOString(),
+          costo_aplicado: cueroSeleccionado.costo_promedio || 0,
+        } : (currentItem.trazabilidad_consumo_fifo || null),
         hojas_a_consumir: hojasAConsumir,
         total_hojas_enviadas_pintura: hojasAConsumir,
         sublotes_pintura: sublotes,
@@ -989,7 +1047,36 @@ export default function Pintura() {
                   <p className="text-xs text-indigo-200 mt-0.5">Busque y seleccione hojas disponibles desde el inventario de productos en proceso</p>
                 </div>
                 <div className="bg-white px-5 py-3">
-                  <Label className="text-xs font-bold text-indigo-700">Productos en Proceso *</Label>
+                  <div className="mb-4 p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
+                    <Label className="text-xs font-bold text-cyan-800">Código Producto (el sistema elige la partida automáticamente — FIFO) *</Label>
+                    <div className="mt-1 flex flex-col md:flex-row gap-2">
+                      <Select value={codigoProductoFifo} onValueChange={(v) => aplicarSeleccionFifo(v, cantidadDeseadaFifo)} disabled={esFinalizado}>
+                        <SelectTrigger className="md:w-72 text-xs"><SelectValue placeholder="Seleccionar Código Producto..." /></SelectTrigger>
+                        <SelectContent className="max-h-60 overflow-y-auto">
+                          {productosEnProcesoConsolidados.length === 0 && <SelectItem value="__e__" disabled>Sin productos disponibles</SelectItem>}
+                          {productosEnProcesoConsolidados.map(p => (
+                            <SelectItem key={p.codigo_producto_proceso} value={p.codigo_producto_proceso}>
+                              {p.codigo_producto_proceso} — {p.descripcion} (Stock: {p.stock_total})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input type="number" min="1" placeholder="Cantidad a consumir..." disabled={esFinalizado || !codigoProductoFifo}
+                        value={cantidadDeseadaFifo || ''}
+                        onChange={(e) => aplicarSeleccionFifo(codigoProductoFifo, parseFloat(e.target.value) || 0)}
+                        className="md:w-48 text-xs" />
+                    </div>
+                    {avisoFifo && (
+                      <p className={`text-xs mt-2 ${avisoFifo.tipo === 'error' ? 'text-red-700' : avisoFifo.tipo === 'aviso' ? 'text-amber-700' : 'text-green-700'}`}>
+                        {avisoFifo.tipo === 'ok' ? '✔ ' : avisoFifo.tipo === 'aviso' ? '⚠ ' : '❌ '}{avisoFifo.texto}
+                      </p>
+                    )}
+                  </div>
+
+                  <details className="mb-2">
+                    <summary className="text-xs font-semibold text-slate-500 cursor-pointer select-none">Avanzado: elegir una partida específica manualmente</summary>
+                    <div className="mt-2">
+                  <Label className="text-xs font-bold text-indigo-700">Productos en Proceso (partida específica)</Label>
                   <Select value={cueroSeleccionado?.id || ''} onValueChange={handleSeleccionarCuero} disabled={esFinalizado}>
                     <SelectTrigger className="mt-1"><SelectValue placeholder="Seleccionar producto en proceso..." /></SelectTrigger>
                     <SelectContent className="max-h-60 overflow-y-auto">
@@ -1007,6 +1094,8 @@ export default function Pintura() {
                       ))}
                     </SelectContent>
                   </Select>
+                    </div>
+                  </details>
 
                   {cueroSeleccionado && (
                     <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-indigo-50 border border-indigo-200 rounded p-3">

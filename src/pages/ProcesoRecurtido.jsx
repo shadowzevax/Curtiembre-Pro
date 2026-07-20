@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Eye, Table, CheckCircle2, Lock, AlertCircle, Search, X, Edit2, Ban, History, ChevronDown } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 import RecurtidoFichaIntegral from '../components/produccion/RecurtidoFichaIntegral';
+import { deriveCodigoProducto, calcularRemanentePadre } from '@/lib/inventarioProceso';
 
 const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(v || 0);
 const fmt2 = (v) => (parseFloat(v) || 0).toFixed(2);
@@ -92,7 +93,13 @@ export default function ProcesoRecurtido() {
       setProductos(Array.isArray(productosData) ? productosData : []);
       const allInv = Array.isArray(invEnProceso) ? invEnProceso : [];
       setAllInvProceso(allInv);
-      const filtrados = allInv.filter(i => i.estado_actual === 'EN_PROCESO' && i.etapa_actual === 'curtido');
+      // Un lote padre ya distribuido al 100% nunca debe volver a aparecer como
+      // existencia disponible (evita la duplicidad lote padre + partidas).
+      const filtrados = allInv.filter(i => {
+        if (i.estado_actual !== 'EN_PROCESO' || i.etapa_actual !== 'curtido') return false;
+        const { remanente } = calcularRemanentePadre(i, allInv);
+        return remanente > 0;
+      });
       setInventarioEnProceso(filtrados);
     } catch (err) {
       console.error(err);
@@ -213,6 +220,7 @@ export default function ProcesoRecurtido() {
       for (const r of invRecs) await InventarioEnProceso.delete(r.id);
       // Marcar como anulado
       await ProcesoProduccion.update(itemToAnular.id, { estado: 'anulado', observaciones: (itemToAnular.observaciones || '') + ' [ANULADO]' });
+      await recalcularLotePadre(itemToAnular.codigo_lote);
       setShowAnularModal(false);
       setItemToAnular(null);
       await loadData();
@@ -282,6 +290,14 @@ export default function ProcesoRecurtido() {
           const dos = parseFloat(ins.dosificacion) || 0;
           return calcInsumoTotales({ ...ins, cantidad: (newPeso * dos) / 100 });
         });
+      }
+      // El Código Producto en Proceso NUNCA se digita: se deriva automáticamente
+      // del Color Base seleccionado, reutilizando el mismo código si ese color
+      // ya se ha usado antes (uniformidad en todos los procesos).
+      if (field === 'color_base') {
+        const { codigo, descripcion } = deriveCodigoProducto(value, allInvProceso);
+        updated.codigo_producto_proceso = codigo;
+        updated.descripcion_producto_proceso = descripcion;
       }
       return updated;
     }));
@@ -385,6 +401,37 @@ export default function ProcesoRecurtido() {
     }
   };
 
+  // ─── RECALCULAR LOTE PADRE (evita duplicidad de inventario) ──────────────
+  // Ejecuta el movimiento de inventario descrito en el requerimiento: al
+  // guardar o anular una Partida, el lote padre se actualiza para reflejar
+  // únicamente lo que NO ha sido distribuido. Si la distribución llega al
+  // 100%, el padre queda en 0 y se marca CONSUMIDO/No Disponible: deja de
+  // existir como stock disponible y solo permanece como trazabilidad histórica.
+  const recalcularLotePadre = async (codigoLote) => {
+    try {
+      const freshInv = await InventarioEnProceso.list();
+      const padre = freshInv.find(i => i.codigo_lote === codigoLote && !i.codigo_lote_padre);
+      if (!padre) return;
+      const { totalOriginal, remanente } = calcularRemanentePadre(padre, freshInv);
+      if (remanente <= 0) {
+        await InventarioEnProceso.update(padre.id, {
+          cantidad_hojas_original: totalOriginal,
+          cantidad_hojas: 0,
+          estado_actual: 'CONSUMIDO',
+          destino_sublote: 'no_disponible',
+        });
+      } else {
+        await InventarioEnProceso.update(padre.id, {
+          cantidad_hojas_original: totalOriginal,
+          cantidad_hojas: remanente,
+          estado_actual: 'EN_PROCESO',
+        });
+      }
+    } catch (err) {
+      console.error('No se pudo recalcular el lote padre:', err);
+    }
+  };
+
   // ─── GUARDAR ──────────────────────────────────────────────────────────────
   const handleSave = async (e) => {
     e.preventDefault();
@@ -479,6 +526,7 @@ export default function ProcesoRecurtido() {
         }
       }
 
+      await recalcularLotePadre(codigoLote);
       setShowModal(false);
       await loadData();
       alert(`✅ ${sublotesForm.length} Partida(s) Recurtido guardada(s) y Inventario en Proceso actualizado.`);
@@ -569,17 +617,6 @@ export default function ProcesoRecurtido() {
   const generalFinalizado = sublotesPadreSeleccionado.some(p => p.finalizar_recurtido_general);
   const todosFinalizados  = sublotesPadreSeleccionado.length > 0 && sublotesPadreSeleccionado.every(p => p.estado === 'completado');
   const puedeFinalizarGeneral = todosFinalizados && hojasPendientes === 0 && !generalFinalizado && sublotesPadreSeleccionado.length > 0;
-
-  // Opciones productos en proceso
-  const productosProcesoOptions = (() => {
-    const map = new Map();
-    allInvProceso.forEach(i => {
-      const code = i.codigo_producto_proceso;
-      const desc = i.descripcion_producto_proceso || i.descripcion || '';
-      if (code && !map.has(code)) map.set(code, desc);
-    });
-    return Array.from(map, ([code, desc]) => ({ code, desc })).sort((a, b) => a.code.localeCompare(b.code));
-  })();
 
   const invFiltrados = inventarioEnProceso.filter(inv => {
     if (!searchEnProceso) return true;
@@ -1096,20 +1133,10 @@ export default function ProcesoRecurtido() {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Código Producto en Proceso *</Label>
-                            <Select value={subloteActivo.codigo_producto_proceso || ''} onValueChange={v => {
-                              const opt = productosProcesoOptions.find(o => o.code === v);
-                              setSublotesForm(prev => prev.map((s, i) => i === subloteActivoIdx
-                                ? { ...s, codigo_producto_proceso: v, descripcion_producto_proceso: opt?.desc || '' } : s));
-                            }}>
-                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                              <SelectContent>
-                                {productosProcesoOptions.length === 0 && <SelectItem value="__none__" disabled>Sin productos registrados</SelectItem>}
-                                {productosProcesoOptions.map(o => (
-                                  <SelectItem key={o.code} value={o.code}>{o.code}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Label className="text-xs font-bold text-orange-800">Código Producto en Proceso</Label>
+                            <Input value={subloteActivo.codigo_producto_proceso || ''} readOnly
+                              className="bg-cyan-50 font-mono text-xs font-bold text-cyan-800 cursor-not-allowed" />
+                            <p className="text-xs text-cyan-600 mt-0.5">Automático según Color Base</p>
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Descripción</Label>

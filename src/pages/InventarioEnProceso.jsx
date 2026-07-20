@@ -6,13 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, Edit, Trash2, Eye, ClipboardList, Workflow } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, ClipboardList, Workflow, Layers, ListTree } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import InventarioItemForm from '../components/inventario/InventarioItemForm';
 import AjusteInventarioModal from '../components/inventario/AjusteInventarioModal';
 import InventarioItemDetail from '../components/inventario/InventarioItemDetail';
 import StockAlert from '../components/inventario/StockAlert';
 import SeguimientoProduccionModal from '../components/inventario/SeguimientoProduccionModal';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { agruparPorCodigoProducto } from '@/lib/inventarioProceso';
 
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount || 0);
@@ -45,6 +47,8 @@ export default function InventarioEnProcesoPage() {
   const [filterEstadoLote, setFilterEstadoLote] = useState('');
   const [filterEstadoSublote, setFilterEstadoSublote] = useState('');
   const [showZeroExistencia, setShowZeroExistencia] = useState(false);
+  const [vistaConsolidada, setVistaConsolidada] = useState(true);
+  const [detalleExistencias, setDetalleExistencias] = useState(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -222,6 +226,7 @@ export default function InventarioEnProcesoPage() {
   const handlePrint = () => window.print();
 
   const RF_LABELS = { en_pelo: 'En Pelo', crosta: 'Crosta' };
+  const filasConsolidadas = agruparPorCodigoProducto(showZeroExistencia ? productos : productos.filter(p => (p.cantidad_hojas || 0) > 0 || (p.stock_actual || 0) > 0));
 
   const tableHeaders = [
     'Código Producto', 'Descripción Producto', 'Código Lote ó Partida Recurtido', 'Calibre',
@@ -285,6 +290,15 @@ export default function InventarioEnProcesoPage() {
         onPrint={handlePrint}
         actionButton={
           <div className="flex gap-2">
+            <Button
+              onClick={() => setVistaConsolidada(v => !v)}
+              variant="outline"
+              title={vistaConsolidada ? 'Ver todas las partidas por separado' : 'Ver consolidado por Código Producto'}
+              className={vistaConsolidada ? 'bg-cyan-50 border-cyan-600 text-cyan-700 hover:bg-cyan-100' : ''}
+            >
+              {vistaConsolidada ? <Layers className="w-4 h-4 mr-2" /> : <ListTree className="w-4 h-4 mr-2" />}
+              {vistaConsolidada ? 'Vista: Por Código Producto' : 'Vista: Todas las Partidas'}
+            </Button>
             <Button onClick={() => setShowAjusteModal(true)} variant="outline" className="bg-amber-50 border-amber-600 text-amber-700 hover:bg-amber-100">
               <ClipboardList className="w-4 h-4 mr-2" /> Ajustes
             </Button>
@@ -347,12 +361,97 @@ export default function InventarioEnProcesoPage() {
         </CardContent>
       </Card>
 
-      <Card id="tabla-imprimible">
-        <CardHeader><CardTitle>Stock de Productos en Proceso</CardTitle></CardHeader>
-        <CardContent>
-          <DataTable headers={tableHeaders} data={filteredProductos} renderRow={renderRow} loading={loading} />
-        </CardContent>
-      </Card>
+      {vistaConsolidada ? (
+        <Card id="tabla-imprimible">
+          <CardHeader>
+            <CardTitle>Stock Consolidado por Código Producto</CardTitle>
+            <p className="text-xs text-slate-500">
+              Cada Código Producto agrupa automáticamente todas sus partidas de recurtido, sin duplicar el stock del lote padre.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <DataTable
+              headers={['Código Producto', 'Descripción', 'Color Base', 'Calibre', 'Stock Total', 'Stock Mínimo', 'Estado Stock', 'U. Medida', 'Costo Promedio', 'Valor Total', 'N° Partidas', 'Acciones']}
+              data={filasConsolidadas}
+              loading={loading}
+              renderRow={(fila) => (
+                <tr key={fila.codigo_producto_proceso}>
+                  <td className="font-mono text-xs font-bold text-cyan-700">{fila.codigo_producto_proceso}</td>
+                  <td className="text-xs max-w-[200px] truncate" title={fila.descripcion}>{fila.descripcion || '—'}</td>
+                  <td className="text-xs">{fila.color_base || '—'}</td>
+                  <td className="text-xs">{fila.calibre || '—'}</td>
+                  <td className={fila.stock_total <= fila.stock_minimo ? 'text-red-500 font-bold' : 'font-semibold'}>{fila.stock_total}</td>
+                  <td>{fila.stock_minimo}</td>
+                  <td><StockAlert stockActual={fila.stock_total} stockMinimo={fila.stock_minimo} /></td>
+                  <td>{fila.unidad_medida}</td>
+                  <td>{formatCurrency(fila.costo_promedio)}</td>
+                  <td className="text-right font-bold text-emerald-700">{formatCurrency(fila.valor_total)}</td>
+                  <td className="text-center">{fila.cantidad_partidas}</td>
+                  <td>
+                    <Button variant="outline" size="sm" onClick={() => setDetalleExistencias(fila)} title="Detalle de Existencias (trazabilidad de partidas)">
+                      <Eye className="w-4 h-4 mr-1" /> Detalle
+                    </Button>
+                  </td>
+                </tr>
+              )}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card id="tabla-imprimible">
+          <CardHeader><CardTitle>Stock de Productos en Proceso (todas las partidas)</CardTitle></CardHeader>
+          <CardContent>
+            <DataTable headers={tableHeaders} data={filteredProductos} renderRow={renderRow} loading={loading} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detalle de Existencias: trazabilidad de las partidas que conforman un Código Producto */}
+      <Dialog open={!!detalleExistencias} onOpenChange={(v) => !v && setDetalleExistencias(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              Detalle de Existencias — <span className="font-mono text-cyan-700">{detalleExistencias?.codigo_producto_proceso}</span>
+            </DialogTitle>
+            <p className="text-xs text-slate-500">{detalleExistencias?.descripcion}</p>
+          </DialogHeader>
+          <div className="overflow-x-auto border rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-800 text-white">
+                <tr>
+                  <th className="p-2 text-left">Código Partida</th>
+                  <th className="p-2 text-left">Lote Padre</th>
+                  <th className="p-2 text-center">Fecha</th>
+                  <th className="p-2 text-right">Cantidad Inicial</th>
+                  <th className="p-2 text-right">Stock Disponible</th>
+                  <th className="p-2 text-right">Costo Promedio</th>
+                  <th className="p-2 text-center">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(detalleExistencias?.partidas || []).map((p) => (
+                  <tr key={p.id} className="border-t">
+                    <td className="p-2 font-mono font-bold text-purple-800">{p.codigo_partida}</td>
+                    <td className="p-2 font-mono">{p.lote_padre}</td>
+                    <td className="p-2 text-center">{p.fecha ? new Date(p.fecha).toLocaleDateString('es-CO') : '—'}</td>
+                    <td className="p-2 text-right">{p.cantidad_inicial}</td>
+                    <td className="p-2 text-right font-semibold">{p.stock_disponible}</td>
+                    <td className="p-2 text-right">{formatCurrency(p.costo_promedio)}</td>
+                    <td className="p-2 text-center">
+                      <span className={`px-1.5 py-0.5 rounded border text-xs ${p.estado === 'Disponible' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-gray-100 text-gray-500 border-gray-300'}`}>
+                        {p.estado}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {(detalleExistencias?.partidas || []).length === 0 && (
+                  <tr><td colSpan={7} className="p-4 text-center text-slate-400">Sin partidas registradas.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {showModal && (
         <InventarioItemForm

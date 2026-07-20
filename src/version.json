@@ -1,5 +1,5 @@
 {
-  "version": 1,
-  "fecha": "2026-07-16",
-  "descripcion": "Version inicial con sistema de versiones"
+  "version": 2,
+  "fecha": "2026-07-20",
+  "descripcion": "Recurtido/Inventario en Proceso/Pintura: elimina duplicidad de inventario, codigo producto automatico por color, consolidado con FIFO; mayusculas obligatorias en Catalogo de Productos y Terceros; Unidad de Medida obligatoria"
 }

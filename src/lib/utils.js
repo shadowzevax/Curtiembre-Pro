@@ -7,3 +7,9 @@ export function cn(...inputs) {
 
 
 export const isIframe = window.self !== window.top;
+
+// Fuerza mayúsculas en un input controlado de texto, preservando la posición
+// del cursor. Uso: onChange={e => setForm({ ...form, campo: toUpperCase(e) })}
+export function toUpperCase(e) {
+  return (e?.target?.value || '').toUpperCase();
+}

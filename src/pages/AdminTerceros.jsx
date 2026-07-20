@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Tercero } from '@/entities/all';
+import { toUpperCase } from '@/lib/utils';
 import { UploadFile } from '@/integrations/Core';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -214,11 +215,11 @@ export default function AdminTerceros() {
                 </div>
                 <div>
                     <Label>Nombre Completo / Razón Social *</Label>
-                    <Input value={currentItem?.nombre || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre: e.target.value })} required />
+                    <Input value={currentItem?.nombre || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre: toUpperCase(e) })} required className="uppercase" />
                 </div>
                 <div>
                     <Label>Nombre Comercial</Label>
-                    <Input value={currentItem?.nombre_comercial || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre_comercial: e.target.value })} />
+                    <Input value={currentItem?.nombre_comercial || ''} onChange={(e) => setCurrentItem({ ...currentItem, nombre_comercial: toUpperCase(e) })} className="uppercase" />
                 </div>
                 <div>
                     <Label>Es Cliente</Label>
@@ -242,20 +243,20 @@ export default function AdminTerceros() {
                 </div>
                 <div>
                     <Label>País</Label>
-                    <Input value={currentItem?.pais || 'Colombia'} onChange={(e) => setCurrentItem({ ...currentItem, pais: e.target.value })} />
+                    <Input value={currentItem?.pais || 'Colombia'} onChange={(e) => setCurrentItem({ ...currentItem, pais: toUpperCase(e) })} className="uppercase" />
                 </div>
                 <div>
                     <Label>Departamento</Label>
-                    <Input value={currentItem?.departamento || ''} onChange={(e) => setCurrentItem({ ...currentItem, departamento: e.target.value })} />
+                    <Input value={currentItem?.departamento || ''} onChange={(e) => setCurrentItem({ ...currentItem, departamento: toUpperCase(e) })} className="uppercase" />
                 </div>
                 <div>
                     <Label>Ciudad/Municipio</Label>
-                    <Input value={currentItem?.ciudad || ''} onChange={(e) => setCurrentItem({ ...currentItem, ciudad: e.target.value })} />
+                    <Input value={currentItem?.ciudad || ''} onChange={(e) => setCurrentItem({ ...currentItem, ciudad: toUpperCase(e) })} className="uppercase" />
                 </div>
             </div>
             <div>
                 <Label>Dirección</Label>
-                <Input value={currentItem?.direccion || ''} onChange={(e) => setCurrentItem({ ...currentItem, direccion: e.target.value })} />
+                <Input value={currentItem?.direccion || ''} onChange={(e) => setCurrentItem({ ...currentItem, direccion: toUpperCase(e) })} className="uppercase" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Edit, Trash2, Search, RefreshCw } from 'lucide-react';
+import { toUpperCase } from '@/lib/utils';
 
 export default function CatalogoProductos() {
     const [productos, setProductos] = useState([]);
@@ -64,7 +65,12 @@ export default function CatalogoProductos() {
 
     const handleSave = async (e) => {
         e.preventDefault();
-        
+
+        if (!currentItem.unidad_medida) {
+            alert('El campo "Unidad de Medida" es obligatorio. Selecciónelo antes de guardar.');
+            return;
+        }
+
         if (!isEditing) {
             const exists = productos.some(p => p.codigo === currentItem.codigo);
             if (exists) {
@@ -301,11 +307,11 @@ export default function CatalogoProductos() {
                     <DialogHeader><DialogTitle>{isEditing ? 'Editar' : 'Nuevo'} Producto</DialogTitle></DialogHeader>
                     <form onSubmit={handleSave} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); }} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Código Pcto. *</Label><Input value={currentItem?.codigo} onChange={e => setCurrentItem({...currentItem, codigo: e.target.value})} required disabled={isEditing}/></div>
-                            <div><Label>Nombre del Producto *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: e.target.value})} required/></div>
+                            <div><Label>Código Pcto. *</Label><Input value={currentItem?.codigo} onChange={e => setCurrentItem({...currentItem, codigo: toUpperCase(e)})} required disabled={isEditing} className="uppercase"/></div>
+                            <div><Label>Nombre del Producto *</Label><Input value={currentItem?.descripcion} onChange={e => setCurrentItem({...currentItem, descripcion: toUpperCase(e)})} required className="uppercase"/></div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div><Label>Observaciones Técnicas</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: e.target.value})}/></div>
+                            <div><Label>Observaciones Técnicas</Label><Input value={currentItem?.nombre_comercial || ''} onChange={e => setCurrentItem({...currentItem, nombre_comercial: toUpperCase(e)})} className="uppercase"/></div>
                             <div>
                                 <Label>Tipo de Producto</Label>
                                 <Select value={currentItem?.tipo_producto || ''} onValueChange={v => setCurrentItem({...currentItem, tipo_producto: v})}>
@@ -349,9 +355,9 @@ export default function CatalogoProductos() {
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div>
-                                <Label>Unidad de Medida</Label>
+                                <Label>Unidad de Medida *</Label>
                                 <Select value={currentItem?.unidad_medida} onValueChange={v => setCurrentItem({...currentItem, unidad_medida: v})}>
-                                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                    <SelectTrigger className={!currentItem?.unidad_medida ? 'border-red-400' : ''}><SelectValue placeholder="Seleccionar (obligatorio)" /></SelectTrigger>
                                     <SelectContent>
                                         {unidades.map(u => <SelectItem key={u.id} value={u.abreviatura}>{u.nombre}</SelectItem>)}
                                     </SelectContent>
