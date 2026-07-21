@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, PlacaPCP } from '@/entities/all';
-import { agruparPorCodigoProducto, calcularConsumoFIFO } from '@/lib/inventarioProceso';
+import { agruparPorCodigoProducto, calcularConsumoFIFOConReservas, disponibleReal } from '@/lib/inventarioProceso';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,11 +27,22 @@ const COLORES_BASE = ['NEGRO', 'CAFÉ', 'AZUL', 'MIEL', 'BLANCO', 'QUEBRACHO', '
 const newSublote = (idx, idPedido) => ({
   id_temp: `sub-${Date.now()}-${idx}`,
   codigo_sublote: idPedido ? `${idPedido}-S${String(idx + 1).padStart(2, '0')}` : `SUB-${String(idx + 1).padStart(2, '0')}`,
+  // Producto en Proceso de origen (trazabilidad obligatoria, solo informativo una vez elegido)
+  inv_proceso_id: '', codigo_inv_proceso: '', codigo_producto_proceso: '',
+  codigo_partida: '', codigo_lote_padre: '', color_base_origen: '',
   producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '',
   placa_id: '', placa_codigo: '', placa_nombre: '',
   tipo_acabado: '', color_final: '', cantidad_hojas: 0, pct_participacion: 0,
   observaciones: '', estado: 'pendiente', insumos: [], mano_obra: [],
   hojas_iniciales: 0, hojas_buenas: 0, hojas_defectuosas: 0, hojas_rechazadas: 0, obs_calidad: '',
+});
+
+// Genera un id temporal único para una línea de "Producto en Proceso a Consumir".
+const newLineaProducto = () => ({
+  id_temp: `linea-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  codigoProductoSel: '', cantidadDeseada: 0,
+  invId: '', hojasAConsumir: 0, hojasAConsumirPrevio: 0,
+  aviso: null,
 });
 
 // ── Estado badge helper ────────────────────────────────────────────────────
@@ -68,16 +79,18 @@ export default function Pintura() {
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
 
-  const [searchCuero, setSearchCuero] = useState('');
-  const [filtroCueroColor, setFiltroCueroColor] = useState('');
-  const [filtroCueroEtapa, setFiltroCueroEtapa] = useState('');
-  const [cueroSeleccionado, setCueroSeleccionado] = useState(null);
-  const [hojasAConsumir, setHojasAConsumir] = useState(0);
+  // Productos en Proceso a Consumir: un pedido puede reservar hojas de VARIOS
+  // productos en proceso (cada uno resuelto por FIFO a partir del Código Producto).
+  const [productosProcesoLineas, setProductosProcesoLineas] = useState([]);
   const [sublotes, setSublotes] = useState([]);
   const [subloteActivoIdx, setSubloteActivoIdx] = useState(0);
 
   const subloteActivo = sublotes[subloteActivoIdx] || null;
   const setSubloteActivo = (changes) => setSublotes(prev => prev.map((s, i) => i === subloteActivoIdx ? { ...s, ...changes } : s));
+
+  // Total agregado de hojas a consumir en todo el pedido (suma de todas las líneas)
+  const hojasAConsumir = productosProcesoLineas.reduce((s, l) => s + (parseFloat(l.hojasAConsumir) || 0), 0);
+  const getLinea = (invId) => productosProcesoLineas.find(l => l.invId === invId) || null;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -100,30 +113,42 @@ export default function Pintura() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Al editar un borrador, las hojas comprometidas por ESE documento se suman de vuelta
-  // para que el cuero aparezca como "disponible" y el usuario pueda seguir trabajando.
-  // Usamos hojasAConsumir (estado local) que refleja lo que ya estaba guardado al cargar.
   const esBorradorEdicion = isEditing && currentItem?.estado_pedido_pintura !== 'terminado';
-  const hojasComprometidasEdicion = esBorradorEdicion ? hojasAConsumir : 0;
 
+  // Etapas de origen válidas para consumir en Pintura.
   const cueroDisponible = inventarioEnProceso.filter(i => {
     const etapaOk = i.etapa_actual === 'recurtido' || i.etapa_actual === 'curtido' || i.etapa_actual === 'limpieza' || i.etapa_actual === 'pintura';
     if (!etapaOk) return false;
-    // Incluir el cuero seleccionado actual aunque tenga 0 hojas (ya comprometidas en este borrador)
-    if (cueroSeleccionado?.id === i.id) return true;
-    return (i.cantidad_hojas || 0) > 0;
-  });
-  const cueroFiltrado = cueroDisponible.filter(i => {
-    const matchSearch = !searchCuero || (i.codigo_lote || '').toLowerCase().includes(searchCuero.toLowerCase()) || (i.descripcion || '').toLowerCase().includes(searchCuero.toLowerCase()) || (i.color_base || '').toLowerCase().includes(searchCuero.toLowerCase());
-    const matchColor = !filtroCueroColor || (i.color_base || '').toUpperCase() === filtroCueroColor;
-    const matchEtapa = !filtroCueroEtapa || i.etapa_actual === filtroCueroEtapa;
-    return matchSearch && matchColor && matchEtapa;
+    if (productosProcesoLineas.some(l => l.invId === i.id)) return true; // ya elegido en este pedido
+    return disponibleReal(i) > 0;
   });
 
-  // Hojas reales disponibles del cuero seleccionado (sumando las comprometidas por este doc en edición)
-  const hojasRealesDisponibles = cueroSeleccionado
-    ? (cueroSeleccionado.cantidad_hojas || 0) + hojasComprometidasEdicion
-    : 0;
+  // Vista de inventario con reservas ajustadas para el FIFO: descuenta lo que
+  // OTRAS líneas de este mismo pedido (aún sin guardar) ya están tomando de esa
+  // partida, y devuelve la reserva propia previa de ESTA línea (al editar) para
+  // que no se bloquee a sí misma.
+  const vistaConReservas = (idTempExcluir) => {
+    const reservasPropias = {};
+    for (const l of productosProcesoLineas) {
+      if (l.id_temp === idTempExcluir || !l.invId) continue;
+      reservasPropias[l.invId] = (reservasPropias[l.invId] || 0) + (parseFloat(l.hojasAConsumir) || 0);
+    }
+    const propia = productosProcesoLineas.find(l => l.id_temp === idTempExcluir);
+    if (propia?.invId) {
+      reservasPropias[propia.invId] = (reservasPropias[propia.invId] || 0) - (parseFloat(propia.hojasAConsumirPrevio) || 0);
+    }
+    return cueroDisponible.map(it => ({
+      ...it,
+      hojas_reservadas: (parseFloat(it.hojas_reservadas) || 0) + (reservasPropias[it.id] || 0),
+    }));
+  };
+
+  // Hojas realmente disponibles para una línea específica (considerando su propia reserva previa)
+  const disponibleParaLinea = (linea) => {
+    const inv = inventarioEnProceso.find(i => i.id === linea.invId);
+    if (!inv) return 0;
+    return disponibleReal(inv, linea.hojasAConsumirPrevio || 0);
+  };
 
   const handleOpenModal = (item = null) => {
     if (item) {
@@ -145,58 +170,61 @@ export default function Pintura() {
       fecha_inicio_pintura: new Date().toISOString().split('T')[0],
       pintor_responsable: '', estado_pedido_pintura: 'pendiente', observaciones: '', finalizar_pintura: false,
     });
-    setCueroSeleccionado(null); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
-    setCodigoProductoFifo(''); setCantidadDeseadaFifo(0); setAvisoFifo(null);
-    setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
+    setProductosProcesoLineas([]); setSublotes([]); setSubloteActivoIdx(0);
     setMostrarSelectorContinuar(false); setContinuarBusqueda('');
     setBusquedaProducto(''); setBusquedaNombre('');
     setMostrarListaProducto(false); setMostrarListaNombre(false);
     setShowModal(true);
   };
 
-  const handleSeleccionarCuero = (id) => {
-    const inv = inventarioEnProceso.find(i => i.id === id);
-    if (!inv) return;
-    setCueroSeleccionado(inv); setHojasAConsumir(0); setSublotes([]); setSubloteActivoIdx(0);
-    setCurrentItem(prev => ({ ...prev, inv_proceso_id: inv.id, codigo_lote: inv.codigo_lote }));
-  };
-
-  // ─── SELECCIÓN POR CÓDIGO PRODUCTO CON CONSUMO FIFO AUTOMÁTICO ────────────
-  // El usuario solo elige el Código Producto y la cantidad; el sistema decide
-  // automáticamente cuál partida usar (siempre la más antigua disponible).
-  const [codigoProductoFifo, setCodigoProductoFifo] = useState('');
-  const [cantidadDeseadaFifo, setCantidadDeseadaFifo] = useState(0);
-  const [avisoFifo, setAvisoFifo] = useState(null);
-
+  // ─── PRODUCTOS EN PROCESO A CONSUMIR: multi-línea con FIFO + reservas ─────
+  // El usuario solo elige el Código Producto y la cantidad por línea; el
+  // sistema decide automáticamente cuál partida usar (la más antigua
+  // disponible, respetando las reservas de otros pedidos abiertos).
   const productosEnProcesoConsolidados = agruparPorCodigoProducto(cueroDisponible)
     .filter(p => p.stock_total > 0);
 
-  const aplicarSeleccionFifo = (codigo, cantidad) => {
-    setCodigoProductoFifo(codigo);
-    setCantidadDeseadaFifo(cantidad);
-    if (!codigo || !cantidad || cantidad <= 0) { setAvisoFifo(null); return; }
-    const { distribucion, faltante } = calcularConsumoFIFO(cueroDisponible, codigo, cantidad);
-    if (distribucion.length === 0) {
-      setAvisoFifo({ tipo: 'error', texto: 'No hay existencias disponibles para este Código Producto.' });
-      return;
-    }
-    const primera = distribucion[0];
-    const inv = inventarioEnProceso.find(i => i.id === primera.partidaId);
-    if (!inv) return;
-    setCueroSeleccionado(inv);
-    setHojasAConsumir(primera.cantidad);
-    setSublotes(prev => recalcPct(prev, primera.cantidad));
-    setCurrentItem(prev => ({ ...prev, inv_proceso_id: inv.id, codigo_lote: inv.codigo_lote }));
+  const handleAgregarLineaProducto = () => {
+    setProductosProcesoLineas(prev => [...prev, newLineaProducto()]);
+  };
 
-    if (distribucion.length > 1 || faltante > 0) {
-      setAvisoFifo({
-        tipo: 'aviso',
-        texto: `El sistema tomó automáticamente ${primera.cantidad} hojas de la partida más antigua (${primera.codigoPartida}, FIFO). ` +
-          `Para consumir el resto (${cantidad - primera.cantidad} hojas) de partidas más recientes, registre un segundo movimiento de Pintura con ese Código Producto una vez guarde este.`,
-      });
-    } else {
-      setAvisoFifo({ tipo: 'ok', texto: `Se consumirá automáticamente de la partida ${primera.codigoPartida} (la más antigua disponible), siguiendo FIFO.` });
+  const handleEliminarLineaProducto = (idTemp) => {
+    setProductosProcesoLineas(prev => prev.filter(l => l.id_temp !== idTemp));
+    // Si algún sublote apuntaba a esta línea, se desvincula (deberá reasignarse)
+    const linea = productosProcesoLineas.find(l => l.id_temp === idTemp);
+    if (linea?.invId) {
+      setSublotes(prev => prev.map(s => s.inv_proceso_id === linea.invId
+        ? { ...s, inv_proceso_id: '', codigo_inv_proceso: '', codigo_producto_proceso: '', codigo_partida: '', codigo_lote_padre: '', color_base_origen: '' }
+        : s));
     }
+  };
+
+  const aplicarSeleccionFifoLinea = (idTemp, codigo, cantidad) => {
+    const vista = vistaConReservas(idTemp);
+    setProductosProcesoLineas(prev => prev.map(l => {
+      if (l.id_temp !== idTemp) return l;
+      if (!codigo) return { ...l, codigoProductoSel: '', invId: '', hojasAConsumir: 0, aviso: null };
+      const { distribucion, faltante } = calcularConsumoFIFOConReservas(vista, codigo, cantidad || 1);
+      if (distribucion.length === 0) {
+        return { ...l, codigoProductoSel: codigo, invId: '', hojasAConsumir: 0, aviso: { tipo: 'error', texto: 'Sin existencias disponibles (puede estar reservado por otro pedido).' } };
+      }
+      const primera = distribucion[0];
+      let aviso = { tipo: 'ok', texto: `Partida ${primera.codigoPartida} (la más antigua disponible), siguiendo FIFO.` };
+      if (distribucion.length > 1 || faltante > 0) {
+        aviso = { tipo: 'aviso', texto: `Solo hay ${primera.cantidad} disponibles en la partida más antigua (${primera.codigoPartida}). Agregue otra línea con este mismo código para tomar el resto de otra partida.` };
+      }
+      return { ...l, codigoProductoSel: codigo, invId: primera.partidaId, hojasAConsumir: primera.cantidad, aviso };
+    }));
+  };
+
+  const actualizarCantidadLinea = (idTemp, cantidad) => {
+    setProductosProcesoLineas(prev => prev.map(l => {
+      if (l.id_temp !== idTemp || !l.invId) return l;
+      const vista = vistaConReservas(idTemp);
+      const inv = vista.find(i => i.id === l.invId);
+      const disponible = inv ? disponibleReal(inv, l.hojasAConsumirPrevio || 0) : 0;
+      return { ...l, hojasAConsumir: Math.max(0, Math.min(cantidad, disponible)) };
+    }));
   };
 
   const totalHojasAsignadas = sublotes.reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
@@ -279,8 +307,11 @@ export default function Pintura() {
   };
 
   const getCostosSublote = (sub) => {
-    const totalHojasLote = parseFloat(cueroSeleccionado?.cantidad_hojas) || 1;
-    const costoAcumLote = parseFloat(cueroSeleccionado?.costo_acumulado) || 0;
+    // El costo heredado se calcula desde el Producto en Proceso ESPECÍFICO
+    // del cual proviene este sublote (relación mantenida por inv_proceso_id).
+    const invOrigen = inventarioEnProceso.find(i => i.id === sub?.inv_proceso_id);
+    const totalHojasLote = parseFloat(invOrigen?.cantidad_hojas) || 1;
+    const costoAcumLote = parseFloat(invOrigen?.costo_acumulado) || ((parseFloat(invOrigen?.cantidad_hojas) || 0) * (parseFloat(invOrigen?.costo_promedio) || 0));
     const hojasSubl = parseFloat(sub?.cantidad_hojas) || 0;
     const costoHeredado = totalHojasLote > 0 ? (hojasSubl / totalHojasLote) * costoAcumLote : 0;
     const costoInsumos = (sub?.insumos || []).reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
@@ -308,6 +339,7 @@ export default function Pintura() {
     if (sublotes.length === 0) { errores.push('No existen sublotes registrados.'); return errores; }
     for (const sub of sublotes) {
       const ini = parseFloat(sub.cantidad_hojas) || 0;
+      if (!sub.inv_proceso_id) errores.push(`Sublote ${sub.codigo_sublote}: falta el Producto en Proceso de Origen.`);
       if (!sub.tipo_acabado) errores.push(`Sublote ${sub.codigo_sublote}: falta el Tipo de Acabado.`);
       if (!sub.color_final) errores.push(`Sublote ${sub.codigo_sublote}: falta el Color Final.`);
       if (!sub.placa_id) errores.push(`Sublote ${sub.codigo_sublote}: falta la Placa.`);
@@ -390,9 +422,12 @@ export default function Pintura() {
   const cargarPedidoCompleto = useCallback(async (data) => {
     if (!data) return;
 
-    // Asegurar que el inventario esté fresco antes de buscar el cuero
+    // Asegurar que el inventario esté fresco antes de reconstruir las líneas
     let invActual = inventarioEnProceso;
-    if (data.inv_proceso_id && !inventarioEnProceso.find(i => i.id === data.inv_proceso_id)) {
+    const idsNecesarios = Array.isArray(data.productos_proceso_consumo)
+      ? data.productos_proceso_consumo.map(l => l.inv_proceso_id).filter(Boolean)
+      : (data.inv_proceso_id ? [data.inv_proceso_id] : []);
+    if (idsNecesarios.some(id => !inventarioEnProceso.find(i => i.id === id))) {
       try {
         const freshInv = await InventarioEnProceso.list();
         invActual = Array.isArray(freshInv) ? freshInv : inventarioEnProceso;
@@ -400,20 +435,40 @@ export default function Pintura() {
       } catch (e) { /* usa el inventario actual */ }
     }
 
-    const inv = data.inv_proceso_id
-      ? invActual.find(i => i.id === data.inv_proceso_id) || null
-      : null;
+    // Reconstruir las líneas de "Productos en Proceso a Consumir": desde el
+    // nuevo formato multi-línea, o desde el formato antiguo (un solo producto)
+    // para que los pedidos ya guardados sigan abriendo correctamente.
+    let lineas = [];
+    if (Array.isArray(data.productos_proceso_consumo) && data.productos_proceso_consumo.length > 0) {
+      lineas = data.productos_proceso_consumo.map(l => ({
+        id_temp: `linea-${l.inv_proceso_id}`,
+        codigoProductoSel: l.codigo_producto_proceso || '',
+        cantidadDeseada: l.hojas_a_consumir || 0,
+        invId: l.inv_proceso_id,
+        hojasAConsumir: l.hojas_a_consumir || 0,
+        hojasAConsumirPrevio: l.hojas_a_consumir || 0,
+        aviso: null,
+      }));
+    } else if (data.inv_proceso_id) {
+      lineas = [{
+        id_temp: `linea-${data.inv_proceso_id}`,
+        codigoProductoSel: invActual.find(i => i.id === data.inv_proceso_id)?.codigo_producto_proceso || '',
+        cantidadDeseada: data.hojas_a_consumir || 0,
+        invId: data.inv_proceso_id,
+        hojasAConsumir: data.hojas_a_consumir || 0,
+        hojasAConsumirPrevio: data.hojas_a_consumir || 0,
+        aviso: null,
+      }];
+    }
 
     setCurrentItem({ ...data, finalizar_pintura: false });
     setIsEditing(true);
-    setCueroSeleccionado(inv);
-    setHojasAConsumir(data.hojas_a_consumir || 0);
+    setProductosProcesoLineas(lineas);
     const subs = Array.isArray(data.sublotes_pintura) ? data.sublotes_pintura : [];
     setSublotes(subs);
     setSubloteActivoIdx(0);
     setBusquedaProducto(''); setBusquedaNombre('');
     setMostrarListaProducto(false); setMostrarListaNombre(false);
-    setSearchCuero(''); setFiltroCueroColor(''); setFiltroCueroEtapa('');
     setMostrarSelectorContinuar(false); setContinuarBusqueda('');
     setShowModal(true);
   }, [inventarioEnProceso]);
@@ -512,8 +567,13 @@ export default function Pintura() {
   };
 
   const handleSaveBorrador = async () => {
-    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un producto en proceso.'); return; }
+    if (productosProcesoLineas.length === 0) { alert('⚠️ Agregue al menos un Producto en Proceso a Consumir.'); return; }
+    if (productosProcesoLineas.some(l => !l.invId)) { alert('⚠️ Hay líneas de Producto en Proceso sin una partida asignada. Elija un Código Producto válido o elimínelas.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
+    if (productosProcesoLineas.some(l => (parseFloat(l.hojasAConsumir) || 0) > disponibleParaLinea(l))) {
+      alert('❌ Alguna línea consume más hojas de las disponibles. Revise las cantidades.');
+      return;
+    }
     if (totalHojasAsignadas > hojasAConsumir) {
       alert(`❌ No se puede guardar: las hojas asignadas en sublotes (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).\n\nReduzca la cantidad de hojas en alguno de los sublotes antes de continuar.`);
       return;
@@ -523,14 +583,14 @@ export default function Pintura() {
       const sublotesSnapshot = JSON.parse(JSON.stringify(sublotes));
       const idConsecutivo = currentItem.id_consecutivo || '';
 
-      // Obtener sublotes previos (con sus inv_contabilizado) para calcular deltas
+      // Obtener sublotes y líneas previas para calcular deltas (idempotencia)
       let prevSublotes = [];
-      let prevHojasConsumir = 0;
+      let prevLineas = [];
       if (isEditing && currentItem.id) {
         try {
           const prevData = await ProcesoProduccion.get(currentItem.id);
           prevSublotes = Array.isArray(prevData?.sublotes_pintura) ? prevData.sublotes_pintura : [];
-          prevHojasConsumir = prevData?.hojas_a_consumir || 0;
+          prevLineas = Array.isArray(prevData?.productos_proceso_consumo) ? prevData.productos_proceso_consumo : [];
         } catch {}
       }
 
@@ -538,6 +598,20 @@ export default function Pintura() {
       const sublotesConContabilizado = await afectarInventarioPT(
         sublotesSnapshot, prevSublotes, idConsecutivo, 'Borrador'
       );
+
+      const productosProcesoConsumo = productosProcesoLineas.map(l => {
+        const inv = inventarioEnProceso.find(i => i.id === l.invId);
+        return {
+          inv_proceso_id: l.invId,
+          codigo_producto_proceso: inv?.codigo_producto_proceso || l.codigoProductoSel || '',
+          codigo_partida: inv?.codigo_lote || '',
+          codigo_lote_padre: inv?.codigo_lote_padre || '',
+          color_base: inv?.color_base || '',
+          calibre: inv?.calibre || '',
+          costo_promedio: inv?.costo_promedio || 0,
+          hojas_a_consumir: parseFloat(l.hojasAConsumir) || 0,
+        };
+      });
 
       const dataToSave = {
         tipo_proceso: 'pintura',
@@ -548,17 +622,10 @@ export default function Pintura() {
         fecha_inicio_pintura: currentItem.fecha_inicio_pintura || '',
         pintor_responsable: currentItem.pintor_responsable || '',
         observaciones: currentItem.observaciones || '',
-        inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
-        codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
-        // Trazabilidad del consumo FIFO: de qué partida y lote padre provino el cuero usado.
-        trazabilidad_consumo_fifo: cueroSeleccionado ? {
-          codigo_producto_proceso: cueroSeleccionado.codigo_producto_proceso || '',
-          codigo_partida: cueroSeleccionado.codigo_lote,
-          lote_padre: cueroSeleccionado.codigo_lote_padre || '',
-          cantidad_consumida: hojasAConsumir,
-          fecha: new Date().toISOString(),
-          costo_aplicado: cueroSeleccionado.costo_promedio || 0,
-        } : (currentItem.trazabilidad_consumo_fifo || null),
+        // Compatibilidad con reportes antiguos: se guarda la primera línea como resumen.
+        inv_proceso_id: productosProcesoConsumo[0]?.inv_proceso_id || '',
+        codigo_lote: productosProcesoConsumo[0]?.codigo_partida || '',
+        productos_proceso_consumo: productosProcesoConsumo,
         hojas_a_consumir: hojasAConsumir,
         total_hojas_enviadas_pintura: hojasAConsumir,
         sublotes_pintura: sublotesConContabilizado, // guardamos con inv_contabilizado
@@ -586,25 +653,35 @@ export default function Pintura() {
       // Actualizar sublotes locales con inv_contabilizado
       setSublotes(sublotesConContabilizado);
 
-      // ── AFECTACIÓN INVENTARIO EN PROCESO ──
-      const diffHojas = hojasAConsumir - prevHojasConsumir;
-      const invId = cueroSeleccionado?.id || currentItem.inv_proceso_id;
-      if (invId && diffHojas !== 0) {
+      // ── RESERVA DE INVENTARIO EN PROCESO (nunca se descuenta la existencia física en Borrador) ──
+      const prevPorId = new Map(prevLineas.map(l => [l.inv_proceso_id, parseFloat(l.hojas_a_consumir) || 0]));
+      const idsActuales = new Set(productosProcesoConsumo.map(l => l.inv_proceso_id));
+      const cambiosInventario = new Map(); // invId -> nuevo hojas_reservadas
+
+      for (const l of productosProcesoConsumo) {
+        const previo = prevPorId.get(l.inv_proceso_id) || 0;
+        const delta = l.hojas_a_consumir - previo;
+        if (delta === 0) continue;
+        const inv = inventarioEnProceso.find(i => i.id === l.inv_proceso_id);
+        const actual = cambiosInventario.get(l.inv_proceso_id) ?? (parseFloat(inv?.hojas_reservadas) || 0);
+        cambiosInventario.set(l.inv_proceso_id, Math.max(0, actual + delta));
+      }
+      // Líneas que existían antes y ya no están: liberar su reserva completa
+      for (const prevL of prevLineas) {
+        if (!idsActuales.has(prevL.inv_proceso_id)) {
+          const inv = inventarioEnProceso.find(i => i.id === prevL.inv_proceso_id);
+          const actual = cambiosInventario.get(prevL.inv_proceso_id) ?? (parseFloat(inv?.hojas_reservadas) || 0);
+          cambiosInventario.set(prevL.inv_proceso_id, Math.max(0, actual - (parseFloat(prevL.hojas_a_consumir) || 0)));
+        }
+      }
+      for (const [invId, hojasReservadas] of cambiosInventario) {
         try {
-          const invActual = inventarioEnProceso.find(i => i.id === invId);
-          if (invActual) {
-            const nuevoStock = Math.max(0, (invActual.cantidad_hojas || 0) - diffHojas);
-            await InventarioEnProceso.update(invId, { cantidad_hojas: nuevoStock });
-            setInventarioEnProceso(prev => prev.map(i => i.id === invId ? { ...i, cantidad_hojas: nuevoStock } : i));
-            if (cueroSeleccionado?.id === invId) {
-              setCueroSeleccionado(prev => ({ ...prev, cantidad_hojas: nuevoStock }));
-            }
-          }
-        } catch (e) { console.error('Error actualizando inventario en proceso:', e); }
+          await InventarioEnProceso.update(invId, { hojas_reservadas: hojasReservadas });
+        } catch (e) { console.error('Error actualizando reserva de inventario en proceso:', e); }
       }
 
       loadData();
-      alert('✅ Borrador guardado. Inventario de Productos Terminados actualizado.');
+      alert('✅ Borrador guardado. Hojas reservadas en Inventario en Proceso; la existencia física no se afecta hasta Finalizar.');
     } catch (error) {
       console.error('Error saving borrador:', error);
       alert('Error al guardar el borrador: ' + error.message);
@@ -613,9 +690,11 @@ export default function Pintura() {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!cueroSeleccionado && !currentItem?.inv_proceso_id) { alert('⚠️ Seleccione un producto en proceso.'); return; }
+    if (productosProcesoLineas.length === 0) { alert('⚠️ Agregue al menos un Producto en Proceso a Consumir.'); return; }
+    if (productosProcesoLineas.some(l => !l.invId)) { alert('⚠️ Hay líneas de Producto en Proceso sin una partida asignada.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
     if (sublotes.length === 0) { alert('⚠️ Agregue al menos un sublote de pintura.'); return; }
+    if (sublotes.some(s => !s.inv_proceso_id)) { alert('⚠️ Todos los sublotes deben tener asignado un Producto en Proceso de origen.'); return; }
     if (totalHojasAsignadas > hojasAConsumir) {
       alert(`❌ No se puede finalizar: las hojas asignadas en sublotes (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).\n\nReduzca la cantidad de hojas en alguno de los sublotes antes de continuar.`);
       return;
@@ -623,6 +702,16 @@ export default function Pintura() {
     if (hojasRestantesDistribucion !== 0) {
       alert(`❌ No es posible finalizar: quedan ${hojasRestantesDistribucion} hojas pendientes por distribuir en sublotes.`);
       return;
+    }
+    // La suma de hojas de los sublotes de CADA producto en proceso debe ser
+    // exactamente igual a las hojas consumidas de ese producto en proceso.
+    for (const linea of productosProcesoLineas) {
+      const sumaSublotes = sublotes.filter(s => s.inv_proceso_id === linea.invId).reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
+      if (Math.abs(sumaSublotes - (parseFloat(linea.hojasAConsumir) || 0)) > 0.001) {
+        const inv = inventarioEnProceso.find(i => i.id === linea.invId);
+        alert(`❌ No es posible finalizar: los sublotes de "${inv?.codigo_producto_proceso || inv?.codigo_lote}" suman ${sumaSublotes} hojas, pero se reservaron ${linea.hojasAConsumir}. Deben coincidir exactamente.`);
+        return;
+      }
     }
     const errores = validarParaFinalizar();
     if (errores.length > 0) {
@@ -632,19 +721,24 @@ export default function Pintura() {
 
     try {
       const res = getResumen();
+      const productosProcesoConsumo = productosProcesoLineas.map(l => {
+        const inv = inventarioEnProceso.find(i => i.id === l.invId);
+        return {
+          inv_proceso_id: l.invId,
+          codigo_producto_proceso: inv?.codigo_producto_proceso || l.codigoProductoSel || '',
+          codigo_partida: inv?.codigo_lote || '',
+          codigo_lote_padre: inv?.codigo_lote_padre || '',
+          color_base: inv?.color_base || '',
+          calibre: inv?.calibre || '',
+          costo_promedio: inv?.costo_promedio || 0,
+          hojas_a_consumir: parseFloat(l.hojasAConsumir) || 0,
+        };
+      });
       const dataToSave = {
         ...currentItem,
-        inv_proceso_id: cueroSeleccionado?.id || currentItem.inv_proceso_id || '',
-        codigo_lote: cueroSeleccionado?.codigo_lote || currentItem.codigo_lote || '',
-        // Trazabilidad del consumo FIFO: de qué partida y lote padre provino el cuero usado.
-        trazabilidad_consumo_fifo: cueroSeleccionado ? {
-          codigo_producto_proceso: cueroSeleccionado.codigo_producto_proceso || '',
-          codigo_partida: cueroSeleccionado.codigo_lote,
-          lote_padre: cueroSeleccionado.codigo_lote_padre || '',
-          cantidad_consumida: hojasAConsumir,
-          fecha: new Date().toISOString(),
-          costo_aplicado: cueroSeleccionado.costo_promedio || 0,
-        } : (currentItem.trazabilidad_consumo_fifo || null),
+        inv_proceso_id: productosProcesoConsumo[0]?.inv_proceso_id || '',
+        codigo_lote: productosProcesoConsumo[0]?.codigo_partida || '',
+        productos_proceso_consumo: productosProcesoConsumo,
         hojas_a_consumir: hojasAConsumir,
         total_hojas_enviadas_pintura: hojasAConsumir,
         sublotes_pintura: sublotes,
@@ -680,11 +774,19 @@ export default function Pintura() {
       // Guardar sublotes con inv_contabilizado actualizado + estado terminado
       await ProcesoProduccion.update(currentItem.id, { ...dataToSave, sublotes_pintura: sublotesConContabilizadoFin });
 
-      // Actualizar estado de InventarioEnProceso
-      if (cueroSeleccionado) {
-        const hojasActuales = cueroSeleccionado.cantidad_hojas || 0;
-        await InventarioEnProceso.update(cueroSeleccionado.id, {
-          estado_actual: hojasActuales <= 0 ? 'FINALIZADO' : 'EN_PROCESO',
+      // ── SALIDA DEFINITIVA DEL INVENTARIO EN PROCESO ──
+      // Al finalizar: se descuenta de verdad la existencia física de cada
+      // producto en proceso consumido y se libera su reserva.
+      for (const linea of productosProcesoLineas) {
+        const inv = inventarioEnProceso.find(i => i.id === linea.invId);
+        if (!inv) continue;
+        const consumido = parseFloat(linea.hojasAConsumir) || 0;
+        const nuevoStock = Math.max(0, (parseFloat(inv.cantidad_hojas) || 0) - consumido);
+        const nuevaReserva = Math.max(0, (parseFloat(inv.hojas_reservadas) || 0) - consumido);
+        await InventarioEnProceso.update(inv.id, {
+          cantidad_hojas: nuevoStock,
+          hojas_reservadas: nuevaReserva,
+          estado_actual: nuevoStock <= 0 ? 'FINALIZADO' : 'EN_PROCESO',
           etapa_actual: 'pintura',
           estado_proceso: 'en_proceso_pintura',
         });
@@ -730,11 +832,16 @@ export default function Pintura() {
       const movimientosReversion = [];
       const productosAActualizar = new Map();
 
-      // 1. Revertir hojas en InventarioEnProceso
-      if (proceso.inv_proceso_id && (proceso.hojas_a_consumir || 0) > 0) {
-        const inv = inventarioEnProceso.find(i => i.id === proceso.inv_proceso_id);
+      // 1. Liberar las reservas de todos los Productos en Proceso de este pedido
+      // (en Borrador nunca se toca la existencia física, solo la reserva).
+      const lineasProceso = Array.isArray(proceso.productos_proceso_consumo) && proceso.productos_proceso_consumo.length > 0
+        ? proceso.productos_proceso_consumo
+        : (proceso.inv_proceso_id ? [{ inv_proceso_id: proceso.inv_proceso_id, hojas_a_consumir: proceso.hojas_a_consumir || 0 }] : []);
+      for (const linea of lineasProceso) {
+        const inv = inventarioEnProceso.find(i => i.id === linea.inv_proceso_id);
         if (inv) {
-          await InventarioEnProceso.update(inv.id, { cantidad_hojas: (inv.cantidad_hojas || 0) + (proceso.hojas_a_consumir || 0) });
+          const nuevaReserva = Math.max(0, (parseFloat(inv.hojas_reservadas) || 0) - (parseFloat(linea.hojas_a_consumir) || 0));
+          await InventarioEnProceso.update(inv.id, { hojas_reservadas: nuevaReserva });
         }
       }
 
@@ -1018,7 +1125,7 @@ export default function Pintura() {
                     <div className={`mb-3 p-2 rounded-lg flex items-center gap-2 text-xs ${sublotes.length > 0 || hojasAConsumir > 0 ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
                       <FolderOpen className="w-4 h-4 flex-shrink-0" />
                       {sublotes.length > 0 || hojasAConsumir > 0
-                        ? <span>Pedido recuperado. <strong>{sublotes.length} sublote(s)</strong> · <strong>{hojasAConsumir} hojas</strong> a consumir · Producto: <strong>{cueroSeleccionado?.codigo_lote || currentItem?.codigo_lote || '—'}</strong></span>
+                        ? <span>Pedido recuperado. <strong>{sublotes.length} sublote(s)</strong> · <strong>{hojasAConsumir} hojas</strong> a consumir · <strong>{productosProcesoLineas.length} producto(s) en proceso</strong></span>
                         : <span>Pedido abierto en modo edición. Complete los datos del formulario y guarde el borrador.</span>
                       }
                     </div>
@@ -1045,87 +1152,95 @@ export default function Pintura() {
                 </div>
               </div>
 
-              {/* ═══ BLOQUE 1: SELECCIÓN CUEROS EN PROCESO ═══ */}
+              {/* ═══ BLOQUE 1: PRODUCTOS EN PROCESO A CONSUMIR (multi-línea + reservas) ═══ */}
               <div className="border-2 border-indigo-400 rounded-xl overflow-hidden">
-                <div className="bg-indigo-700 text-white px-5 py-3">
-                  <h3 className="font-bold text-base">① SELECCIÓN DE PRODUCTOS EN PROCESO</h3>
-                  <p className="text-xs text-indigo-200 mt-0.5">Busque y seleccione hojas disponibles desde el inventario de productos en proceso</p>
-                </div>
-                <div className="bg-white px-5 py-3">
-                  <div className="mb-4 p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
-                    <Label className="text-xs font-bold text-cyan-800">Código Producto (el sistema elige la partida automáticamente — FIFO) *</Label>
-                    <div className="mt-1 flex flex-col md:flex-row gap-2">
-                      <Select value={codigoProductoFifo} onValueChange={(v) => aplicarSeleccionFifo(v, cantidadDeseadaFifo)} disabled={esFinalizado}>
-                        <SelectTrigger className="md:w-72 text-xs"><SelectValue placeholder="Seleccionar Código Producto..." /></SelectTrigger>
-                        <SelectContent className="max-h-60 overflow-y-auto">
-                          {productosEnProcesoConsolidados.length === 0 && <SelectItem value="__e__" disabled>Sin productos disponibles</SelectItem>}
-                          {productosEnProcesoConsolidados.map(p => (
-                            <SelectItem key={p.codigo_producto_proceso} value={p.codigo_producto_proceso}>
-                              {p.codigo_producto_proceso} — {p.descripcion} (Stock: {p.stock_total})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input type="number" min="1" placeholder="Cantidad a consumir..." disabled={esFinalizado || !codigoProductoFifo}
-                        value={cantidadDeseadaFifo || ''}
-                        onChange={(e) => aplicarSeleccionFifo(codigoProductoFifo, parseFloat(e.target.value) || 0)}
-                        className="md:w-48 text-xs" />
-                    </div>
-                    {avisoFifo && (
-                      <p className={`text-xs mt-2 ${avisoFifo.tipo === 'error' ? 'text-red-700' : avisoFifo.tipo === 'aviso' ? 'text-amber-700' : 'text-green-700'}`}>
-                        {avisoFifo.tipo === 'ok' ? '✔ ' : avisoFifo.tipo === 'aviso' ? '⚠ ' : '❌ '}{avisoFifo.texto}
-                      </p>
-                    )}
+                <div className="bg-indigo-700 text-white px-5 py-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-base">① PRODUCTOS EN PROCESO A CONSUMIR</h3>
+                    <p className="text-xs text-indigo-200 mt-0.5">Cada línea reserva hojas de un Código Producto; el sistema elige la partida (FIFO) automáticamente</p>
                   </div>
-
-                  <details className="mb-2">
-                    <summary className="text-xs font-semibold text-slate-500 cursor-pointer select-none">Avanzado: elegir una partida específica manualmente</summary>
-                    <div className="mt-2">
-                  <Label className="text-xs font-bold text-indigo-700">Productos en Proceso (partida específica)</Label>
-                  <Select value={cueroSeleccionado?.id || ''} onValueChange={handleSeleccionarCuero} disabled={esFinalizado}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Seleccionar producto en proceso..." /></SelectTrigger>
-                    <SelectContent className="max-h-60 overflow-y-auto">
-                      {/* Si hay un cuero seleccionado (ej. recuperado de borrador) y no está en la lista filtrada, mostrarlo igual */}
-                      {cueroSeleccionado && !cueroFiltrado.find(i => i.id === cueroSeleccionado.id) && (
-                        <SelectItem key={cueroSeleccionado.id} value={cueroSeleccionado.id}>
-                          ★ {cueroSeleccionado.codigo_lote} — {cueroSeleccionado.descripcion || cueroSeleccionado.color_base} (Recuperado del borrador)
-                        </SelectItem>
-                      )}
-                      {cueroFiltrado.length === 0 && !cueroSeleccionado && <SelectItem value="__e__" disabled>Sin productos en proceso disponibles</SelectItem>}
-                      {cueroFiltrado.map(inv => (
-                        <SelectItem key={inv.id} value={inv.id}>
-                          {inv.codigo_lote} — {inv.descripcion || inv.color_base} ({inv.cantidad_hojas} hojas | {inv.peso_actual} kg) [{(inv.etapa_actual || '').toUpperCase()}]
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                    </div>
-                  </details>
-
-                  {cueroSeleccionado && (
-                    <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-indigo-50 border border-indigo-200 rounded p-3">
-                      <div><span className="font-semibold text-indigo-700">Cód. Inventario en Proceso:</span> <span className="font-mono font-bold text-indigo-900">{cueroSeleccionado.codigo_lote}</span></div>
-                      <div><span className="font-semibold text-indigo-700">Descripción/Nombre:</span> {cueroSeleccionado.descripcion || cueroSeleccionado.color_base || '—'}</div>
-                      <div><span className="font-semibold text-indigo-700">Color Base:</span> <strong>{cueroSeleccionado.color_base || '—'}</strong></div>
-                      <div><span className="font-semibold text-indigo-700">Cód. Lote Padre (trazabilidad):</span> <span className="font-mono">{cueroSeleccionado.codigo_lote_padre || '—'}</span></div>
-                      <div><span className="font-semibold text-indigo-700">Hojas Disponibles:</span> <strong className="text-green-700 text-base">{hojasRealesDisponibles}</strong>{hojasComprometidasEdicion > 0 && <span className="text-xs text-amber-600 ml-1">(incl. {hojasComprometidasEdicion} comprometidas)</span>}</div>
-                      <div><span className="font-semibold text-indigo-700">Área Disponible (m²):</span> {cueroSeleccionado.peso_actual ? `${cueroSeleccionado.peso_actual} kg` : '—'}</div>
-                      <div><span className="font-semibold text-indigo-700">Costo Promedio Unit.:</span> <strong className="text-amber-700">{formatCurrency(cueroSeleccionado.costo_promedio)}</strong></div>
-                      <div><span className="font-semibold text-indigo-700">Etapa Actual:</span> <span className="uppercase font-bold text-blue-700">{cueroSeleccionado.etapa_actual}</span></div>
-                    </div>
+                  {!esFinalizado && (
+                    <Button type="button" onClick={handleAgregarLineaProducto} className="bg-white text-indigo-700 hover:bg-indigo-50 text-xs h-8">
+                      <Plus className="w-3 h-3 mr-1" />Agregar Producto en Proceso
+                    </Button>
                   )}
-                  {cueroSeleccionado && (
-                    <div className="mt-3 flex items-end gap-4">
-                      <div className="w-56">
-                        <Label className="text-xs font-bold text-indigo-700">Hojas a Consumir *</Label>
-                        <Input type="number" min="1" max={hojasRealesDisponibles} value={hojasAConsumir || ''} disabled={esFinalizado}
-                          onChange={e => { const val = parseFloat(e.target.value) || 0; setHojasAConsumir(val); setSublotes(prev => recalcPct(prev, val)); }}
-                          className={`mt-1 text-xs ${hojasAConsumir > hojasRealesDisponibles ? 'border-red-500 bg-red-50' : ''}`} />
-                        <p className="text-xs text-slate-400 mt-0.5">Máx: <strong>{hojasRealesDisponibles}</strong></p>
-                      </div>
-                      <div className={`flex-1 p-3 rounded border text-xs font-medium ${hojasAConsumir > hojasRealesDisponibles ? 'bg-red-50 border-red-300 text-red-700' : hojasAConsumir > 0 ? 'bg-green-50 border-green-300 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                        {hojasAConsumir > hojasRealesDisponibles ? `❌ Excede el disponible en ${hojasAConsumir - hojasRealesDisponibles} hojas` : hojasAConsumir > 0 ? `✔ Consumirá ${hojasAConsumir} de ${hojasRealesDisponibles} hojas disponibles. Quedarán ${hojasRealesDisponibles - hojasAConsumir} en inventario.` : 'Ingrese la cantidad de hojas a consumir'}
-                      </div>
+                </div>
+                <div className="bg-white">
+                  {productosProcesoLineas.length === 0 ? (
+                    <div className="px-5 py-6 text-center text-slate-400 text-sm">Sin productos agregados. Use "Agregar Producto en Proceso".</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-indigo-50 border-b border-indigo-200">
+                          <tr>
+                            <th className="p-2 text-left">Código Producto</th>
+                            <th className="p-2 text-left">Nombre Producto</th>
+                            <th className="p-2 text-left">Partida</th>
+                            <th className="p-2 text-left">Lote Padre</th>
+                            <th className="p-2 text-left">Color Base</th>
+                            <th className="p-2 text-left">Etapa</th>
+                            <th className="p-2 text-right">Área (kg)</th>
+                            <th className="p-2 text-right">Hojas Disp.</th>
+                            <th className="p-2 text-right">Costo/Hoja</th>
+                            <th className="p-2 text-center">Estado</th>
+                            <th className="p-2 text-right">Hojas a Consumir</th>
+                            <th className="p-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {productosProcesoLineas.map((linea) => {
+                            const inv = inventarioEnProceso.find(i => i.id === linea.invId);
+                            const disponible = linea.invId ? disponibleParaLinea(linea) : 0;
+                            const excede = (parseFloat(linea.hojasAConsumir) || 0) > disponible;
+                            return (
+                              <tr key={linea.id_temp} className={`border-t ${excede ? 'bg-red-50' : ''}`}>
+                                <td className="p-2">
+                                  <Select value={linea.codigoProductoSel} onValueChange={(v) => aplicarSeleccionFifoLinea(linea.id_temp, v, linea.cantidadDeseada)} disabled={esFinalizado}>
+                                    <SelectTrigger className="h-8 text-xs w-36"><SelectValue placeholder="Código..." /></SelectTrigger>
+                                    <SelectContent className="max-h-60 overflow-y-auto">
+                                      {productosEnProcesoConsolidados.length === 0 && <SelectItem value="__e__" disabled>Sin productos disponibles</SelectItem>}
+                                      {productosEnProcesoConsolidados.map(p => (
+                                        <SelectItem key={p.codigo_producto_proceso} value={p.codigo_producto_proceso}>{p.codigo_producto_proceso}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                                <td className="p-2 max-w-[140px] truncate" title={inv?.descripcion}>{inv?.descripcion || inv?.color_base || '—'}</td>
+                                <td className="p-2 font-mono text-purple-700">{inv?.codigo_lote || '—'}</td>
+                                <td className="p-2 font-mono text-slate-500">{inv?.codigo_lote_padre || '—'}</td>
+                                <td className="p-2 font-semibold">{inv?.color_base || '—'}</td>
+                                <td className="p-2 uppercase text-blue-700">{inv?.etapa_actual || '—'}</td>
+                                <td className="p-2 text-right">{inv?.peso_actual || 0}</td>
+                                <td className="p-2 text-right font-bold text-green-700">{linea.invId ? disponible : '—'}</td>
+                                <td className="p-2 text-right text-amber-700">{formatCurrency(inv?.costo_promedio)}</td>
+                                <td className="p-2 text-center">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${disponible > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{disponible > 0 ? 'Disponible' : linea.invId ? 'Agotado' : '—'}</span>
+                                </td>
+                                <td className="p-2">
+                                  <Input type="number" min="0" max={disponible} disabled={esFinalizado || !linea.invId}
+                                    value={linea.hojasAConsumir || ''}
+                                    onChange={(e) => actualizarCantidadLinea(linea.id_temp, parseFloat(e.target.value) || 0)}
+                                    className={`h-8 text-xs text-right w-24 ${excede ? 'border-red-500 bg-red-50' : ''}`} />
+                                </td>
+                                <td className="p-2">
+                                  {!esFinalizado && (
+                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEliminarLineaProducto(linea.id_temp)}>
+                                      <X className="w-3.5 h-3.5 text-red-500" />
+                                    </Button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-indigo-100 font-bold border-t-2 border-indigo-300">
+                            <td colSpan={10} className="p-2 text-right text-indigo-800">Total Hojas a Consumir:</td>
+                            <td className="p-2 text-right text-indigo-900">{hojasAConsumir}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -1271,7 +1386,7 @@ export default function Pintura() {
                 </div>
                 <div className="bg-teal-50 border-b border-teal-200 px-5 py-3">
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
-                    <div className="bg-white border border-teal-200 rounded-lg p-2 text-center"><p className="text-teal-600 font-semibold">Hojas Disponibles</p><p className="font-extrabold text-teal-900 text-lg">{hojasRealesDisponibles}</p></div>
+                    <div className="bg-white border border-teal-200 rounded-lg p-2 text-center"><p className="text-teal-600 font-semibold">Hojas Disponibles</p><p className="font-extrabold text-teal-900 text-lg">{productosProcesoLineas.reduce((s, l) => s + disponibleParaLinea(l), 0)}</p></div>
                     <div className="bg-white border border-indigo-200 rounded-lg p-2 text-center"><p className="text-indigo-600 font-semibold">Hojas a Consumir</p><p className="font-extrabold text-indigo-900 text-lg">{hojasAConsumir}</p></div>
                     <div className="bg-white border border-blue-200 rounded-lg p-2 text-center"><p className="text-blue-600 font-semibold">Hojas Distribuidas</p><p className={`font-extrabold text-lg ${totalHojasAsignadas > hojasAConsumir ? 'text-red-700' : 'text-blue-800'}`}>{totalHojasAsignadas}</p></div>
                     <div className={`border rounded-lg p-2 text-center ${hojasRestantesDistribucion < 0 ? 'bg-red-50 border-red-300' : hojasRestantesDistribucion === 0 ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}><p className={`font-semibold ${hojasRestantesDistribucion < 0 ? 'text-red-600' : hojasRestantesDistribucion === 0 ? 'text-green-600' : 'text-amber-700'}`}>Hojas Pendientes</p><p className={`font-extrabold text-lg ${hojasRestantesDistribucion < 0 ? 'text-red-700' : hojasRestantesDistribucion === 0 ? 'text-green-700' : 'text-amber-800'}`}>{hojasRestantesDistribucion}</p></div>
@@ -1283,11 +1398,12 @@ export default function Pintura() {
                 {sublotes.length > 0 && (
                   <div className="overflow-x-auto bg-white">
                     <table className="w-full text-xs">
-                      <thead className="bg-teal-100 border-b border-teal-300"><tr><th className="p-2 text-left font-semibold">Código Sublote</th><th className="p-2 text-left font-semibold">Nombre Producto Terminado</th><th className="p-2 text-left font-semibold">Tipo Acabado</th><th className="p-2 text-left font-semibold">Color Final</th><th className="p-2 text-left font-semibold">Placa</th><th className="p-2 text-center font-semibold">Cant. Hojas</th><th className="p-2 text-center font-semibold">Estado</th><th className="p-2 text-center font-semibold">Acciones</th></tr></thead>
+                      <thead className="bg-teal-100 border-b border-teal-300"><tr><th className="p-2 text-left font-semibold">Código Sublote</th><th className="p-2 text-left font-semibold">Producto en Proceso</th><th className="p-2 text-left font-semibold">Nombre Producto Terminado</th><th className="p-2 text-left font-semibold">Tipo Acabado</th><th className="p-2 text-left font-semibold">Color Final</th><th className="p-2 text-left font-semibold">Placa</th><th className="p-2 text-center font-semibold">Cant. Hojas</th><th className="p-2 text-center font-semibold">Estado</th><th className="p-2 text-center font-semibold">Acciones</th></tr></thead>
                       <tbody>
                         {sublotes.map((sub, idx) => (
                           <tr key={idx} className={`border-t ${subloteActivoIdx === idx ? 'bg-teal-50 ring-1 ring-inset ring-teal-400' : 'hover:bg-teal-50'}`}>
                             <td className="p-2 font-mono font-bold text-teal-800">{sub.codigo_sublote}</td>
+                            <td className="p-2 font-mono text-xs text-cyan-700">{sub.codigo_producto_proceso || <span className="text-slate-400 italic">Sin asignar</span>}</td>
                             <td className="p-2 font-semibold text-slate-700">{sub.producto_terminado_nombre || <span className="text-slate-400 italic">Sin asignar</span>}</td>
                             <td className="p-2">{sub.tipo_acabado || <span className="text-slate-400">—</span>}</td>
                             <td className="p-2 font-semibold">{sub.color_final || <span className="text-slate-400">—</span>}</td>
@@ -1338,6 +1454,34 @@ export default function Pintura() {
                     <div className="bg-white px-5 py-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div><Label className="text-xs font-bold text-orange-800">Código Sublote</Label><Input value={subloteActivo.codigo_sublote || ''} readOnly className="bg-amber-50 font-mono text-xs font-bold cursor-not-allowed" /></div>
+                        <div className="col-span-2">
+                          <Label className="text-xs font-bold text-orange-800">Producto en Proceso de Origen *</Label>
+                          <Select value={subloteActivo.inv_proceso_id || ''} onValueChange={v => {
+                            const inv = inventarioEnProceso.find(i => i.id === v);
+                            setSubloteActivo({
+                              inv_proceso_id: v,
+                              codigo_inv_proceso: inv?.codigo_lote || '',
+                              codigo_producto_proceso: inv?.codigo_producto_proceso || '',
+                              codigo_partida: inv?.codigo_lote || '',
+                              codigo_lote_padre: inv?.codigo_lote_padre || '',
+                              color_base_origen: inv?.color_base || '',
+                            });
+                          }} disabled={esFinalizado}>
+                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Elegir de los productos agregados en el bloque ①..." /></SelectTrigger>
+                            <SelectContent>
+                              {productosProcesoLineas.length === 0 && <SelectItem value="__none__" disabled>Agregue primero un Producto en Proceso en el bloque ①</SelectItem>}
+                              {productosProcesoLineas.map(l => {
+                                const inv = inventarioEnProceso.find(i => i.id === l.invId);
+                                return <SelectItem key={l.id_temp} value={l.invId}>{inv?.codigo_producto_proceso || '—'} — {inv?.codigo_lote} ({l.hojasAConsumir} hojas)</SelectItem>;
+                              })}
+                            </SelectContent>
+                          </Select>
+                          {subloteActivo.inv_proceso_id && (
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Partida: <span className="font-mono">{subloteActivo.codigo_partida}</span> · Lote Padre: <span className="font-mono">{subloteActivo.codigo_lote_padre || '—'}</span> · Color: {subloteActivo.color_base_origen || '—'}
+                            </p>
+                          )}
+                        </div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
                           <div className="relative mt-1">
@@ -1582,8 +1726,9 @@ export default function Pintura() {
               ) : <div className="border-2 border-blue-200 rounded-xl p-4 text-center text-slate-400 text-sm">Agregue un sublote para gestionar ítems y mano de obra.</div>}
 
               {/* ═══ BLOQUE 5: CONTROL DE COSTOS ═══ */}
-              {subloteActivo && cueroSeleccionado ? (() => {
+              {subloteActivo && subloteActivo.inv_proceso_id ? (() => {
                 const c = getCostosSublote(subloteActivo);
+                const invOrigenCosto = inventarioEnProceso.find(i => i.id === subloteActivo.inv_proceso_id);
                 return (
                   <div className="border-2 border-violet-500 rounded-xl overflow-hidden shadow-md">
                     <div className="bg-violet-700 text-white px-5 py-3">
@@ -1594,7 +1739,7 @@ export default function Pintura() {
                       <div className="bg-white rounded border border-amber-200 p-2 text-center">
                         <p className="text-xs text-amber-600 font-semibold">Costo Heredado</p>
                         <p className="text-lg font-extrabold text-amber-800">{formatCurrency(c.costoHeredado)}</p>
-                        <p className="text-xs text-slate-400">= ({c.hojasSubl} ÷ {cueroSeleccionado.cantidad_hojas}) × {formatCurrency(cueroSeleccionado.costo_acumulado)}</p>
+                        <p className="text-xs text-slate-400">= ({c.hojasSubl} ÷ {invOrigenCosto?.cantidad_hojas || 0}) × {formatCurrency(invOrigenCosto?.costo_acumulado)}</p>
                       </div>
                       <div className="bg-white rounded border border-amber-200 p-2 text-center">
                         <p className="text-xs text-amber-600 font-semibold">Costo Insumos</p>

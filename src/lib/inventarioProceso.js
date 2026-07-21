@@ -92,6 +92,7 @@ export function agruparPorCodigoProducto(items = []) {
       (a, b) => new Date(a.fecha_ingreso_proceso || a.created_date || 0) - new Date(b.fecha_ingreso_proceso || b.created_date || 0)
     );
     const stockTotal = ordenadas.reduce((s, p) => s + (parseFloat(p.cantidad_hojas) || 0), 0);
+    const reservadoTotal = ordenadas.reduce((s, p) => s + (parseFloat(p.hojas_reservadas) || 0), 0);
     const valorTotal = ordenadas.reduce((s, p) => s + (parseFloat(p.cantidad_hojas) || 0) * (parseFloat(p.costo_promedio) || 0), 0);
     const costoPromedio = stockTotal > 0 ? valorTotal / stockTotal : 0;
     const base = ordenadas[ordenadas.length - 1] || ordenadas[0];
@@ -103,6 +104,8 @@ export function agruparPorCodigoProducto(items = []) {
       calibre: base?.calibre || '',
       unidad_medida: base?.unidad_medida || 'HOJA',
       stock_total: stockTotal,
+      reservado_total: reservadoTotal,
+      disponible_total: Math.max(0, stockTotal - reservadoTotal),
       costo_promedio: costoPromedio,
       valor_total: valorTotal,
       stock_minimo: Math.max(...ordenadas.map((p) => parseFloat(p.stock_minimo) || 0), 0),
@@ -147,6 +150,50 @@ export function calcularConsumoFIFO(items, codigoProducto, cantidadSolicitada) {
     if (restante <= 0) break;
     const disponible = parseFloat(p.cantidad_hojas) || 0;
     const tomar = Math.min(disponible, restante);
+    if (tomar > 0) {
+      distribucion.push({
+        partidaId: p.id,
+        codigoPartida: p.codigo_lote,
+        lotePadre: p.codigo_lote_padre || '—',
+        cantidad: tomar,
+        costoUnitario: parseFloat(p.costo_promedio) || 0,
+      });
+      restante -= tomar;
+    }
+  }
+  return { distribucion, faltante: Math.max(0, restante) };
+}
+
+// ── Reservas de inventario en proceso ──────────────────────────────────────
+// Un pedido de Pintura en Borrador RESERVA hojas (no las descuenta de verdad).
+// Así nunca dos pedidos abiertos pueden usar las mismas hojas, pero la
+// existencia física no se mueve hasta que el pedido se Finaliza.
+
+/** Hojas realmente disponibles para un NUEVO pedido: físico menos reservado. */
+export function disponibleReal(item, reservaPropiaAIncluir = 0) {
+  const stock = parseFloat(item?.cantidad_hojas) || 0;
+  const reservado = parseFloat(item?.hojas_reservadas) || 0;
+  return Math.max(0, stock - reservado + (parseFloat(reservaPropiaAIncluir) || 0));
+}
+
+/**
+ * Igual que calcularConsumoFIFO pero respetando las reservas de otros
+ * pedidos: nunca ofrece hojas que ya están reservadas por otro pedido.
+ * `reservasPropias` es un mapa { inventarioEnProcesoId: cantidadYaReservadaPorEstePedido }
+ * usado al editar un borrador, para no bloquearse a sí mismo con su propia reserva.
+ */
+export function calcularConsumoFIFOConReservas(items, codigoProducto, cantidadSolicitada, reservasPropias = {}) {
+  const partidas = items
+    .filter((it) => (it.codigo_producto_proceso || it.codigo) === codigoProducto && !tieneHijos(it, items))
+    .map((it) => ({ ...it, __disponibleReal: disponibleReal(it, reservasPropias[it.id] || 0) }))
+    .filter((it) => it.__disponibleReal > 0)
+    .sort((a, b) => new Date(a.fecha_ingreso_proceso || a.created_date || 0) - new Date(b.fecha_ingreso_proceso || b.created_date || 0));
+
+  let restante = parseFloat(cantidadSolicitada) || 0;
+  const distribucion = [];
+  for (const p of partidas) {
+    if (restante <= 0) break;
+    const tomar = Math.min(p.__disponibleReal, restante);
     if (tomar > 0) {
       distribucion.push({
         partidaId: p.id,

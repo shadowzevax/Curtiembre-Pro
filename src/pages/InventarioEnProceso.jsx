@@ -371,7 +371,7 @@ export default function InventarioEnProcesoPage() {
           </CardHeader>
           <CardContent>
             <DataTable
-              headers={['Código Producto', 'Descripción', 'Color Base', 'Calibre', 'Stock Total', 'Stock Mínimo', 'Estado Stock', 'U. Medida', 'Costo Promedio', 'Valor Total', 'N° Partidas', 'Acciones']}
+              headers={['Código Producto', 'Descripción', 'Color Base', 'Calibre', 'Stock Total', 'Reservado', 'Disponible', 'Stock Mínimo', 'Estado Stock', 'U. Medida', 'Costo Promedio', 'Valor Total', 'N° Partidas', 'Acciones']}
               data={filasConsolidadas}
               loading={loading}
               renderRow={(fila) => (
@@ -381,6 +381,8 @@ export default function InventarioEnProcesoPage() {
                   <td className="text-xs">{fila.color_base || '—'}</td>
                   <td className="text-xs">{fila.calibre || '—'}</td>
                   <td className={fila.stock_total <= fila.stock_minimo ? 'text-red-500 font-bold' : 'font-semibold'}>{fila.stock_total}</td>
+                  <td className="text-amber-600">{fila.reservado_total > 0 ? fila.reservado_total : '—'}</td>
+                  <td className="font-semibold text-emerald-700">{fila.disponible_total}</td>
                   <td>{fila.stock_minimo}</td>
                   <td><StockAlert stockActual={fila.stock_total} stockMinimo={fila.stock_minimo} /></td>
                   <td>{fila.unidad_medida}</td>

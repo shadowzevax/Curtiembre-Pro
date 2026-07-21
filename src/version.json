@@ -1,5 +1,5 @@
 {
-  "version": "3.1",
-  "fecha": "2026-07-20",
-  "descripcion": "Pintura fase 1: agrega campo obligatorio Placa por Producto Terminado/Sublote (catalogo PlacaPCP), visible en tabla resumen y en detalle de pedidos existentes. Sistema de sub-versiones v3.x habilitado para cambios grandes por fases"
+  "version": "3.2",
+  "fecha": "2026-07-21",
+  "descripcion": "Pintura: multi-producto en proceso, sistema de reservas de inventario (no descuenta stock hasta Finalizar), visibilidad Reservado/Disponible en Inventario en Proceso"
 }
