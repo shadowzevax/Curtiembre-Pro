@@ -1,5 +1,5 @@
 {
-  "version": "3.2",
+  "version": "4",
   "fecha": "2026-07-21",
-  "descripcion": "Pintura: multi-producto en proceso, sistema de reservas de inventario (no descuenta stock hasta Finalizar), visibilidad Reservado/Disponible en Inventario en Proceso"
+  "descripcion": "Pintura: estados Suspendido/Reanudar y Cancelar explícito, Otros Costos en control de costos, vista de trazabilidad completa (Lote Padre -> Partida -> Producto en Proceso -> Pedido -> Sublote -> Producto Terminado). Cierra el requerimiento completo de rediseño de Pintura."
 }

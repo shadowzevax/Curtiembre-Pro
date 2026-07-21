@@ -54,11 +54,13 @@ const estadoBadge = (estado) => {
     borrador: 'bg-gray-100 text-gray-700 border-gray-300',
     en_proceso: 'bg-purple-100 text-purple-800 border-purple-300',
     anulado: 'bg-red-100 text-red-700 border-red-300',
+    suspendido: 'bg-orange-100 text-orange-800 border-orange-300',
   };
   const label = {
     terminado: 'Finalizado', parcial: 'En Proceso',
     pendiente: 'Borrador', borrador: 'Borrador',
     en_proceso: 'En Proceso', anulado: 'Anulado',
+    suspendido: 'Suspendido',
   };
   const cls = map[estado] || 'bg-gray-100 text-gray-700 border-gray-300';
   return <span className={`px-2 py-0.5 rounded border text-xs font-semibold ${cls}`}>{label[estado] || (estado || 'Borrador').toUpperCase()}</span>;
@@ -316,21 +318,23 @@ export default function Pintura() {
     const costoHeredado = totalHojasLote > 0 ? (hojasSubl / totalHojasLote) * costoAcumLote : 0;
     const costoInsumos = (sub?.insumos || []).reduce((s, i) => s + (parseFloat(i.valor_total) || 0), 0);
     const costoManoObra = (sub?.mano_obra || []).reduce((s, m) => s + (parseFloat(m.total) || 0), 0);
-    const costoTotal = costoHeredado + costoInsumos + costoManoObra;
+    const otrosCostos = parseFloat(sub?.otros_costos) || 0;
+    const costoTotal = costoHeredado + costoInsumos + costoManoObra + otrosCostos;
     const hojasBuenas = parseFloat(sub?.hojas_buenas) || hojasSubl;
-    return { costoHeredado, costoInsumos, costoManoObra, costoTotal, costoPorHoja: hojasBuenas > 0 ? costoTotal / hojasBuenas : 0, hojasSubl, hojasBuenas };
+    return { costoHeredado, costoInsumos, costoManoObra, otrosCostos, costoTotal, costoPorHoja: hojasBuenas > 0 ? costoTotal / hojasBuenas : 0, hojasSubl, hojasBuenas };
   };
 
   const getResumen = () => {
     const costoHeredadoTotal = sublotes.reduce((s, sub) => s + getCostosSublote(sub).costoHeredado, 0);
     const costoInsumosTotal = sublotes.reduce((s, sub) => s + getCostosSublote(sub).costoInsumos, 0);
     const costoMOTotal = sublotes.reduce((s, sub) => s + getCostosSublote(sub).costoManoObra, 0);
-    const costoTotal = costoHeredadoTotal + costoInsumosTotal + costoMOTotal;
+    const otrosCostosTotal = sublotes.reduce((s, sub) => s + getCostosSublote(sub).otrosCostos, 0);
+    const costoTotal = costoHeredadoTotal + costoInsumosTotal + costoMOTotal + otrosCostosTotal;
     const hojasBuenasTotal = sublotes.reduce((s, sub) => s + (parseFloat(sub.hojas_buenas) || 0), 0);
     const hojasDef = sublotes.reduce((s, sub) => s + (parseFloat(sub.hojas_defectuosas) || 0), 0);
     const hojasRech = sublotes.reduce((s, sub) => s + (parseFloat(sub.hojas_rechazadas) || 0), 0);
     const costoPorHoja = hojasBuenasTotal > 0 ? costoTotal / hojasBuenasTotal : 0;
-    return { costoHeredadoTotal, costoInsumosTotal, costoMOTotal, costoTotal, hojasBuenasTotal, hojasDef, hojasRech, costoPorHoja };
+    return { costoHeredadoTotal, costoInsumosTotal, costoMOTotal, otrosCostosTotal, costoTotal, hojasBuenasTotal, hojasDef, hojasRech, costoPorHoja };
   };
 
   // ── Validación consolidada para "Finalizar" ────────────────────────────────
@@ -392,13 +396,15 @@ export default function Pintura() {
     p.estado_pedido_pintura === 'borrador' ||
     p.estado_pedido_pintura === 'pendiente' ||
     p.estado_pedido_pintura === 'en_proceso' ||
-    p.estado_pedido_pintura === 'parcial'
+    p.estado_pedido_pintura === 'parcial' ||
+    p.estado_pedido_pintura === 'suspendido'
   );
 
   // Solo borradores para el selector inline del modal
   const pedidosBorrador = procesos.filter(p =>
     p.estado_pedido_pintura === 'borrador' ||
-    p.estado_pedido_pintura === 'pendiente'
+    p.estado_pedido_pintura === 'pendiente' ||
+    p.estado_pedido_pintura === 'suspendido'
   );
 
   const pedidosBorradorFiltrados = pedidosBorrador.filter(p => {
@@ -889,6 +895,21 @@ export default function Pintura() {
     }
   };
 
+  // Suspender/Reanudar: pausa el pedido sin tocar reservas ni datos (punto 13).
+  const handleToggleSuspender = async (item) => {
+    const suspendiendo = item.estado_pedido_pintura !== 'suspendido';
+    try {
+      await ProcesoProduccion.update(item.id, {
+        estado_pedido_pintura: suspendiendo ? 'suspendido' : (item.estado_pedido_pintura_previo || 'borrador'),
+        ...(suspendiendo ? { estado_pedido_pintura_previo: item.estado_pedido_pintura } : {}),
+      });
+      await loadData();
+    } catch (e) {
+      console.error('Error al suspender/reanudar:', e);
+      alert('Error: ' + e.message);
+    }
+  };
+
   const esFinalizado = currentItem?.estado_pedido_pintura === 'terminado';
 
   // ── LISTADO PRINCIPAL ──────────────────────────────────────────────────────
@@ -938,13 +959,21 @@ export default function Pintura() {
                 <div className="flex gap-1 justify-center flex-wrap">
                   <Button variant="outline" size="sm" title="Ver Detalle" onClick={() => { setSelectedItem(item); setShowDetailModal(true); }}><Search className="w-3.5 h-3.5" /></Button>
                   <Button variant="outline" size="sm" title="Editar" onClick={async () => { try { const full = await ProcesoProduccion.get(item.id); handleOpenModal(full || item); } catch { handleOpenModal(item); } }}><Edit className="w-3.5 h-3.5" /></Button>
-                  {(item.estado_pedido_pintura === 'parcial' || item.estado_pedido_pintura === 'pendiente' || item.estado_pedido_pintura === 'borrador') && (
+                  {item.estado_pedido_pintura !== 'terminado' && (
+                    <Button variant="outline" size="sm"
+                      title={item.estado_pedido_pintura === 'suspendido' ? 'Reanudar Pedido' : 'Suspender Pedido (conserva reservas y datos)'}
+                      className={item.estado_pedido_pintura === 'suspendido' ? 'border-orange-500 text-orange-700 hover:bg-orange-50 text-xs px-2' : 'text-xs px-2'}
+                      onClick={() => handleToggleSuspender(item)}>
+                      {item.estado_pedido_pintura === 'suspendido' ? '▶ Reanudar' : '⏸ Suspender'}
+                    </Button>
+                  )}
+                  {(item.estado_pedido_pintura === 'parcial' || item.estado_pedido_pintura === 'pendiente' || item.estado_pedido_pintura === 'borrador' || item.estado_pedido_pintura === 'suspendido') && (
                     <Button size="sm" title="Finalizar Pintura" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-2"
                       onClick={async () => { try { const full = await ProcesoProduccion.get(item.id); handleOpenModal(full || item); } catch { handleOpenModal(item); } }}>
                       <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Finalizar
                     </Button>
                   )}
-                  <Button variant="destructive" size="sm" title="Eliminar" onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                  <Button variant="destructive" size="sm" title="Cancelar Pedido (elimina y libera reservas)" onClick={() => handleDelete(item.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                 </div>
               </td>
             </tr>
@@ -1735,7 +1764,7 @@ export default function Pintura() {
                       <p className="font-bold text-base">⑤ CONTROL DE COSTOS — PINTURA</p>
                       <p className="text-xs text-violet-200 mt-0.5">Sublote activo: <strong className="font-mono">{subloteActivo.color_final || `Sublote ${subloteActivoIdx + 1}`}</strong></p>
                     </div>
-                    <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 grid grid-cols-3 gap-3">
+                    <div className="bg-amber-50 border-b border-amber-200 px-5 py-3 grid grid-cols-4 gap-3">
                       <div className="bg-white rounded border border-amber-200 p-2 text-center">
                         <p className="text-xs text-amber-600 font-semibold">Costo Heredado</p>
                         <p className="text-lg font-extrabold text-amber-800">{formatCurrency(c.costoHeredado)}</p>
@@ -1749,6 +1778,12 @@ export default function Pintura() {
                         <p className="text-xs text-amber-600 font-semibold">Costo Mano de Obra</p>
                         <p className="text-base font-bold text-green-700">{formatCurrency(c.costoManoObra)}</p>
                       </div>
+                      <div className="bg-white rounded border border-amber-200 p-2 text-center">
+                        <p className="text-xs text-amber-600 font-semibold">Otros Costos</p>
+                        <Input type="number" disabled={esFinalizado} value={subloteActivo.otros_costos || ''} placeholder="0"
+                          onChange={e => setSubloteActivo({ otros_costos: e.target.value })}
+                          className="h-7 text-sm text-center font-bold text-orange-700 mt-1" />
+                      </div>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
@@ -1757,6 +1792,7 @@ export default function Pintura() {
                             <th className="p-2 text-right whitespace-nowrap">COSTO HEREDADO</th>
                             <th className="p-2 text-right whitespace-nowrap">+ INSUMOS</th>
                             <th className="p-2 text-right whitespace-nowrap">+ MANO OBRA</th>
+                            <th className="p-2 text-right whitespace-nowrap">+ OTROS</th>
                             <th className="p-2 text-right whitespace-nowrap font-extrabold">= COSTO TOTAL</th>
                             <th className="p-2 text-center whitespace-nowrap">HOJAS BUENAS</th>
                             <th className="p-2 text-right whitespace-nowrap">COSTO / HOJA</th>
@@ -1767,6 +1803,7 @@ export default function Pintura() {
                             <td className="p-2 text-right font-semibold text-amber-700">{formatCurrency(c.costoHeredado)}</td>
                             <td className="p-2 text-right font-semibold text-blue-700">{formatCurrency(c.costoInsumos)}</td>
                             <td className="p-2 text-right font-semibold text-green-700">{formatCurrency(c.costoManoObra)}</td>
+                            <td className="p-2 text-right font-semibold text-orange-700">{formatCurrency(c.otrosCostos)}</td>
                             <td className="p-2 text-right font-extrabold text-violet-800 text-sm">{formatCurrency(c.costoTotal)}</td>
                             <td className="p-2 text-center font-bold">{c.hojasBuenas || '—'}</td>
                             <td className="p-2 text-right font-bold text-emerald-700">{c.hojasBuenas > 0 ? formatCurrency(c.costoPorHoja) : '—'}</td>
@@ -1922,6 +1959,7 @@ export default function Pintura() {
                         { label: 'Heredado', value: formatCurrency(res.costoHeredadoTotal), cls: 'text-base text-amber-700' },
                         { label: 'Insumos', value: formatCurrency(res.costoInsumosTotal), cls: 'text-base text-blue-700' },
                         { label: 'Mano de Obra', value: formatCurrency(res.costoMOTotal), cls: 'text-base text-green-700' },
+                        { label: 'Otros Costos', value: formatCurrency(res.otrosCostosTotal), cls: 'text-base text-orange-700' },
                         { label: '% Merma Total', value: hojasAConsumir > 0 ? `${((1 - res.hojasBuenasTotal / hojasAConsumir) * 100).toFixed(1)}%` : '—', cls: 'text-xl text-red-700' },
                       ].map((item, i) => (
                         <div key={i} className="bg-white rounded-lg border border-emerald-200 p-3 text-center">
@@ -2171,6 +2209,39 @@ export default function Pintura() {
                     ))}
                   </div>
                 </div>
+
+                {/* ⑧ Trazabilidad completa: Lote Padre → Partida → Producto en Proceso → Pedido → Sublote → Producto Terminado */}
+                {(() => {
+                  const lineas = Array.isArray(selectedItem.productos_proceso_consumo) && selectedItem.productos_proceso_consumo.length > 0
+                    ? selectedItem.productos_proceso_consumo
+                    : (selectedItem.inv_proceso_id ? [{ inv_proceso_id: selectedItem.inv_proceso_id, codigo_producto_proceso: selectedItem.codigo_lote, codigo_partida: selectedItem.codigo_lote, codigo_lote_padre: '' }] : []);
+                  if (lineas.length === 0) return null;
+                  return (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-teal-700 text-white px-4 py-2 font-bold text-sm">⑧ TRAZABILIDAD COMPLETA</div>
+                      <div className="p-3 space-y-2">
+                        {lineas.map((l, i) => {
+                          const sublotesDeLinea = subs.filter(s => s.inv_proceso_id === l.inv_proceso_id);
+                          return (
+                            <div key={i} className="flex flex-wrap items-center gap-1 text-xs bg-teal-50 rounded p-2 border border-teal-200">
+                              <span className="font-mono bg-white border border-teal-300 rounded px-2 py-1">Lote Padre: <strong>{l.codigo_lote_padre || '—'}</strong></span>
+                              <span className="text-teal-400">→</span>
+                              <span className="font-mono bg-white border border-teal-300 rounded px-2 py-1">Partida: <strong>{l.codigo_partida || '—'}</strong></span>
+                              <span className="text-teal-400">→</span>
+                              <span className="font-mono bg-white border border-teal-300 rounded px-2 py-1">Prod. en Proceso: <strong>{l.codigo_producto_proceso || '—'}</strong></span>
+                              <span className="text-teal-400">→</span>
+                              <span className="font-mono bg-white border border-teal-300 rounded px-2 py-1">Pedido: <strong>{selectedItem.id_consecutivo}</strong></span>
+                              <span className="text-teal-400">→</span>
+                              {sublotesDeLinea.length > 0 ? sublotesDeLinea.map((s, si) => (
+                                <span key={si} className="font-mono bg-white border border-teal-300 rounded px-2 py-1">Sublote: <strong>{s.codigo_sublote}</strong>{s.producto_terminado_codigo ? <> → PT: <strong>{s.producto_terminado_codigo}</strong></> : ''}</span>
+                              )) : <span className="text-slate-400 italic">Sin sublotes aún</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Resumen sublotes */}
                 {subs.length > 0 && (
