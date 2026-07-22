@@ -1,5 +1,5 @@
 {
-  "version": "6",
+  "version": "7",
   "fecha": "2026-07-22",
-  "descripcion": "Bot de Telegram: notifica automaticamente cada version publicada (no sub-fases) y responde /start solo al chat autorizado del dueno"
+  "descripcion": "Bot Telegram: asistente de desarrollo de solo lectura (responde preguntas sobre el codigo del repo usando GitHub + modelos gratis de OpenRouter con fallback)"
 }

@@ -1,5 +1,9 @@
 import { runHandler } from './_lib/router.js';
 
+// El asistente de desarrollo (Telegram) llama a GitHub + OpenRouter, lo que
+// puede tardar más que una consulta normal a la API.
+export const config = { maxDuration: 30 };
+
 // Punto de entrada único de la API en Vercel.
 // vercel.json reescribe /api/* hacia esta función; el path real viene en req.url
 // o en el query param __path que agrega el rewrite.
