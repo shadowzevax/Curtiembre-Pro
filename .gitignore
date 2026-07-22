@@ -33,3 +33,5 @@ base44/.app.jsonc
 
 # Datos exportados de Base44 (privados, no subir)
 migration/export/
+.vercel
+.env*

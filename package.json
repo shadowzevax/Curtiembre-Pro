@@ -8,6 +8,7 @@
     "dev:web": "vite",
     "dev:api": "node server/dev-server.mjs",
     "build": "vite build",
+    "postbuild": "node scripts/notify-telegram.mjs",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",

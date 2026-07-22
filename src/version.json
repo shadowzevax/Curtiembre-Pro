@@ -1,5 +1,5 @@
 {
-  "version": "5",
+  "version": "6",
   "fecha": "2026-07-22",
-  "descripcion": "Pintura: al Finalizar recalcula el Costo Promedio Ponderado del Producto Terminado (mismo metodo que compras, no solo el stock) y muestra en pantalla el costo promedio vigente vs. el proyectado antes de finalizar."
+  "descripcion": "Bot de Telegram: notifica automaticamente cada version publicada (no sub-fases) y responde /start solo al chat autorizado del dueno"
 }

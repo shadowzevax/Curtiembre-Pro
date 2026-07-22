@@ -9,6 +9,7 @@ import {
   bulkCreateRecords, updateRecord, deleteRecord,
 } from './entities.js';
 import { uploadFile, serveFile } from './files.js';
+import { handleTelegramWebhook } from './telegram.js';
 
 function parseQueryFilter(q) {
   if (!q) return undefined;
@@ -41,6 +42,12 @@ export async function handleApi(req, res, segments) {
       return { ok: true };
     }
     throw new HttpError(404, 'Ruta no encontrada');
+  }
+
+  // ---- Webhook de Telegram (público; el filtro de seguridad es por chat_id) ----
+  if (root === 'telegram-webhook') {
+    if (method !== 'POST') throw new HttpError(404, 'Ruta no encontrada');
+    return handleTelegramWebhook(req.body);
   }
 
   // ---- Archivos ----
