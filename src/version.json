@@ -1,5 +1,5 @@
 {
-  "version": "7",
+  "version": "8",
   "fecha": "2026-07-22",
-  "descripcion": "Bot Telegram: asistente de desarrollo de solo lectura (responde preguntas sobre el codigo del repo usando GitHub + modelos gratis de OpenRouter con fallback)"
+  "descripcion": "Bot Telegram: cambia el asistente de desarrollo de OpenRouter (key invalida) a Groq (gratis, sin tarjeta, probado), con contexto y tokens de respuesta acotados para no gastar de mas"
 }

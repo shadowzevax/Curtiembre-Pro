@@ -2,20 +2,19 @@
 // propio repo (de dónde salen los datos de tal botón, sugerencias de mejora, etc).
 // Es de SOLO LECTURA: nunca escribe, nunca modifica nada del repo ni de la app.
 // Fuente de contexto: GitHub Code Search sobre el repo público (sin necesitar
-// tener el código descargado en el servidor). Respuesta: modelo gratuito de
-// OpenRouter, con lista de modelos de respaldo si el primero está saturado.
+// tener el código descargado en el servidor). Respuesta: Groq (gratis, sin
+// tarjeta), con un segundo modelo de Groq como respaldo si el primero falla.
+// El contexto y el límite de tokens de salida se mantienen bajos a propósito
+// para no gastar cuota de más en cada pregunta.
 
 const REPO = 'shadowzevax/Curtiembre-Pro';
 const BRANCH = 'main';
+const MAX_ARCHIVOS = 3;
+const MAX_CHARS_POR_ARCHIVO = 3500;
+const MAX_TOKENS_RESPUESTA = 500;
 
-// Modelos gratuitos de OpenRouter, en orden de preferencia. Si uno falla
-// (saturado / error), se intenta el siguiente automáticamente.
-const MODELOS_GRATIS = [
-  'deepseek/deepseek-chat-v3.1:free',
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-small-3.2-24b-instruct:free',
-];
+// Modelos gratuitos de Groq, en orden de preferencia.
+const MODELOS_GROQ = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
 
 async function buscarArchivosRelevantes(pregunta) {
   const terminos = pregunta
@@ -32,7 +31,7 @@ async function buscarArchivosRelevantes(pregunta) {
     const res = await fetch(url, { headers });
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.items || []).slice(0, 4).map((it) => it.path);
+    return (data.items || []).slice(0, MAX_ARCHIVOS).map((it) => it.path);
   } catch {
     return [];
   }
@@ -44,27 +43,22 @@ async function leerArchivo(path) {
     const res = await fetch(url);
     if (!res.ok) return null;
     const texto = await res.text();
-    return texto.length > 6000 ? texto.slice(0, 6000) + '\n... (truncado)' : texto;
+    return texto.length > MAX_CHARS_POR_ARCHIVO ? texto.slice(0, MAX_CHARS_POR_ARCHIVO) + '\n... (truncado)' : texto;
   } catch {
     return null;
   }
 }
 
-async function preguntarOpenRouter(mensajes) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return '⚠️ Falta configurar OPENROUTER_API_KEY.';
+async function preguntarGroq(mensajes) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return '⚠️ Falta configurar GROQ_API_KEY.';
 
-  for (const modelo of MODELOS_GRATIS) {
+  for (const modelo of MODELOS_GROQ) {
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://curtiembre-pro.vercel.app',
-          'X-Title': 'Curtiembre Pro - Dev Assistant',
-        },
-        body: JSON.stringify({ model: modelo, messages: mensajes, max_tokens: 900 }),
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: modelo, messages: mensajes, max_tokens: MAX_TOKENS_RESPUESTA }),
       });
       if (!res.ok) continue; // modelo saturado o con error: probar el siguiente
       const data = await res.json();
@@ -74,7 +68,7 @@ async function preguntarOpenRouter(mensajes) {
       continue;
     }
   }
-  return '⚠️ Todos los modelos gratuitos están saturados en este momento. Intenta de nuevo en unos minutos.';
+  return '⚠️ Los modelos gratuitos están saturados en este momento. Intenta de nuevo en unos minutos.';
 }
 
 export async function responderPreguntaDesarrollo(pregunta) {
@@ -91,7 +85,7 @@ export async function responderPreguntaDesarrollo(pregunta) {
       role: 'system',
       content:
         'Eres un asistente de desarrollo de SOLO LECTURA para el repositorio "Curtiembre Pro", un ERP de curtiembre (React + Vite + Postgres/Neon + Vercel serverless). ' +
-        'Respondes en español, de forma clara y concreta, citando archivo y función/línea cuando sea relevante. ' +
+        'Respondes en español, breve y concreto (máximo un par de párrafos), citando archivo y función/línea cuando sea relevante. ' +
         'Puedes explicar de dónde salen los datos de una pantalla/botón, sugerir mejoras de desarrollo, señalar riesgos o cosas por completar. ' +
         'NUNCA generas instrucciones para modificar, borrar o desplegar nada — solo explicas y sugieres. ' +
         'Si el contexto de código que te dan no alcanza para responder con certeza, dilo explícitamente en vez de inventar.',
@@ -99,5 +93,5 @@ export async function responderPreguntaDesarrollo(pregunta) {
     { role: 'user', content: `Contexto de archivos del repo relacionados con la pregunta:\n\n${contexto}\n\nPregunta: ${pregunta}` },
   ];
 
-  return preguntarOpenRouter(mensajes);
+  return preguntarGroq(mensajes);
 }
