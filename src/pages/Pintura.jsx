@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, PlacaPCP } from '@/entities/all';
 import { agruparPorCodigoProducto, calcularConsumoFIFOConReservas, disponibleReal } from '@/lib/inventarioProceso';
+import { calcularCostoPromedioCompra } from '@/lib/costoPromedio';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -505,8 +506,11 @@ export default function Pintura() {
   const afectarInventarioPT = async (sublotesNuevos, sublotesPrevios, idPedido, estadoDoc) => {
     const fechaHoy = new Date().toISOString().split('T')[0];
 
-    // Acumular cambios por producto para hacer una sola actualización por producto
-    const deltasPorProducto = new Map(); // key: producto_terminado_id, value: delta
+    // Acumular cambios por producto para hacer una sola actualización por producto.
+    // Se registra por separado la cantidad y el valor de las ENTRADAS (diff > 0) para
+    // poder recalcular el Costo Promedio Ponderado del Producto Terminado (mismo método
+    // que en compras: nuevoCostoPromedio = (stock×costoVigente + cantidad×costoUnitario) ÷ (stock+cantidad)).
+    const deltasPorProducto = new Map(); // key: producto_terminado_id, value: { delta, cantEntrada, valorEntrada }
 
     // 1. Para cada sublote actual: calcular cuánto hay que ajustar vs lo ya contabilizado
     for (const sub of sublotesNuevos) {
@@ -516,8 +520,14 @@ export default function Pintura() {
       const diff = cantActual - cantContabilizada;
       if (Math.abs(diff) < 0.001) continue; // Sin cambio
 
-      const anterior = deltasPorProducto.get(sub.producto_terminado_id) || 0;
-      deltasPorProducto.set(sub.producto_terminado_id, anterior + diff);
+      const anterior = deltasPorProducto.get(sub.producto_terminado_id) || { delta: 0, cantEntrada: 0, valorEntrada: 0 };
+      if (diff > 0) {
+        const costoUnitSublote = getCostosSublote(sub).costoPorHoja;
+        anterior.cantEntrada += diff;
+        anterior.valorEntrada += diff * costoUnitSublote;
+      }
+      anterior.delta += diff;
+      deltasPorProducto.set(sub.producto_terminado_id, anterior);
 
       if (diff !== 0) {
         await MovimientoInventario.create({
@@ -538,8 +548,9 @@ export default function Pintura() {
       if (!aun && subPrev.producto_terminado_id) {
         const cantContabilizada = parseFloat(subPrev.inv_contabilizado) || 0;
         if (cantContabilizada > 0) {
-          const anterior = deltasPorProducto.get(subPrev.producto_terminado_id) || 0;
-          deltasPorProducto.set(subPrev.producto_terminado_id, anterior - cantContabilizada);
+          const anterior = deltasPorProducto.get(subPrev.producto_terminado_id) || { delta: 0, cantEntrada: 0, valorEntrada: 0 };
+          anterior.delta -= cantContabilizada;
+          deltasPorProducto.set(subPrev.producto_terminado_id, anterior);
 
           await MovimientoInventario.create({
             tipo_movimiento: 'salida',
@@ -554,14 +565,22 @@ export default function Pintura() {
       }
     }
 
-    // 3. Aplicar deltas al stock de ProductoTerminado
-    for (const [ptId, delta] of deltasPorProducto) {
+    // 3. Aplicar deltas al stock de ProductoTerminado y, en las entradas, recalcular
+    // el Costo Promedio Ponderado (misma fórmula usada en compras): el stock existente
+    // se pondera con su costo vigente, nunca se recalcula desde el histórico completo.
+    for (const [ptId, { delta, cantEntrada, valorEntrada }] of deltasPorProducto) {
       if (Math.abs(delta) < 0.001) continue;
       const pt = productosTerminados.find(p => p.id === ptId);
       if (pt) {
-        const nuevoStock = Math.max(0, (pt.stock_actual || 0) + delta);
-        await ProductoTerminado.update(ptId, { stock_actual: nuevoStock });
-        setProductosTerminados(prev => prev.map(p => p.id === ptId ? { ...p, stock_actual: nuevoStock } : p));
+        const stockAntes = pt.stock_actual || 0;
+        const nuevoStock = Math.max(0, stockAntes + delta);
+        const updateData = { stock_actual: nuevoStock };
+        if (cantEntrada > 0) {
+          const costoUnitEntrada = valorEntrada / cantEntrada;
+          updateData.costo_promedio = calcularCostoPromedioCompra(stockAntes, pt.costo_promedio, cantEntrada, costoUnitEntrada);
+        }
+        await ProductoTerminado.update(ptId, updateData);
+        setProductosTerminados(prev => prev.map(p => p.id === ptId ? { ...p, ...updateData } : p));
       }
     }
 
@@ -1811,6 +1830,28 @@ export default function Pintura() {
                         </tbody>
                       </table>
                     </div>
+                    {subloteActivo.producto_terminado_id && (() => {
+                      const ptDestino = productosTerminados.find(p => p.id === subloteActivo.producto_terminado_id);
+                      const stockPT = parseFloat(ptDestino?.stock_actual) || 0;
+                      const costoVigentePT = parseFloat(ptDestino?.costo_promedio) || 0;
+                      const costoProyectado = c.hojasBuenas > 0
+                        ? calcularCostoPromedioCompra(stockPT, costoVigentePT, c.hojasBuenas, c.costoPorHoja)
+                        : costoVigentePT;
+                      return (
+                        <div className="bg-violet-50 border-t border-violet-200 px-5 py-3 grid grid-cols-2 gap-3">
+                          <div className="bg-white rounded border border-violet-200 p-2 text-center">
+                            <p className="text-xs text-violet-600 font-semibold">Costo Promedio Vigente (PT)</p>
+                            <p className="text-base font-bold text-slate-700">{formatCurrency(costoVigentePT)}</p>
+                            <p className="text-xs text-slate-400">Stock actual: {stockPT}</p>
+                          </div>
+                          <div className="bg-white rounded border border-violet-300 p-2 text-center">
+                            <p className="text-xs text-violet-600 font-semibold">Costo Promedio al Finalizar</p>
+                            <p className="text-base font-extrabold text-violet-800">{formatCurrency(costoProyectado)}</p>
+                            <p className="text-xs text-slate-400">Ponderado: stock vigente + {c.hojasBuenas || 0} hojas buenas</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })() : <div className="border-2 border-violet-200 rounded-xl p-4 text-center text-slate-400 text-sm">Seleccione un cuero en proceso y agregue un sublote para ver el control de costos.</div>}
