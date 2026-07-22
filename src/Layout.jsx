@@ -81,17 +81,6 @@ const menuItems = [
         ]
     },
     {
-        title: "Gestión de Pedidos",
-        icon: Package,
-        roles: ["admin", "contador", "operario"],
-        subItems: [
-            { title: "Nuevo Pedido", url: createPageUrl("PedidoNuevo"), icon: Package },
-            { title: "Pedidos Individuales", url: createPageUrl("PedidosIndividuales"), icon: Package },
-            { title: "Consolidar Pedidos", url: createPageUrl("ConsolidarPedidos"), icon: Package },
-            { title: "Consolidados Generales", url: createPageUrl("ConsolidadosGenerales"), icon: Package }
-        ]
-    },
-    {
         title: "Finanzas/Tesorería",
         icon: Users,
         roles: ["admin", "contador"],
@@ -420,7 +409,6 @@ export default function Layout({ children, currentPageName }) {
             'ProduccionReporteEtapas': 'Reporte de Etapas',
             'VentaProductos': 'Venta de Productos',
             'VentaServicios': 'Venta de Servicios',
-            'GestionPedidos': 'Gestión de Pedidos',
             'ReciboCaja': 'Recibo de Caja',
             'ComprobanteEgreso': 'Comprobante de Egreso',
             'InventarioProduccion': 'Inventario de Materias Primas',

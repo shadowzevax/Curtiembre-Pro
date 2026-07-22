@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Eye, Table, CheckCircle2, Lock, AlertCircle, Search, X, Edit2, Ban, History, ChevronDown } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 import RecurtidoFichaIntegral from '../components/produccion/RecurtidoFichaIntegral';
-import { deriveCodigoProducto, calcularRemanentePadre } from '@/lib/inventarioProceso';
+import { calcularRemanentePadre } from '@/lib/inventarioProceso';
 
 const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(v || 0);
 const fmt2 = (v) => (parseFloat(v) || 0).toFixed(2);
@@ -31,6 +31,16 @@ const calcSubtotalInsumos = (insumos) =>
 
 const genCodigoSublote = (lotePadre, consecutivo) => {
   return `${lotePadre}-PR-${String(consecutivo).padStart(3, '0')}`;
+};
+
+// Deriva el "Color Base" a partir de la Descripción del Catálogo Maestro de
+// Productos (ej. "CUERO CROSTA NEGRO" → "NEGRO"). Nunca se digita a mano.
+const derivarColorBase = (descripcion) => {
+  const desc = (descripcion || '').toUpperCase().trim();
+  const match = desc.match(/CROSTA\s+(.+)$/);
+  if (match) return match[1].trim();
+  const partes = desc.split(/\s+/);
+  return partes[partes.length - 1] || '';
 };
 
 const ESTADO_COLORS = {
@@ -54,6 +64,7 @@ export default function ProcesoRecurtido() {
   const [procesos, setProcesos] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [productos, setProductos] = useState([]);
+  const [catalogoProductos, setCatalogoProductos] = useState([]);
   const [inventarioEnProceso, setInventarioEnProceso] = useState([]);
   const [allInvProceso, setAllInvProceso] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,15 +93,17 @@ export default function ProcesoRecurtido() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [procesosData, insumosData, productosData, invEnProceso] = await Promise.all([
+      const [procesosData, insumosData, productosData, invEnProceso, catalogoData] = await Promise.all([
         ProcesoProduccion.filter({ tipo_proceso: 'recurtido' }),
         Insumo.list(),
         ProductoTerminado.list(),
         InventarioEnProceso.list(),
+        ProductoCatalogo.list(),
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumos(Array.isArray(insumosData) ? insumosData : []);
       setProductos(Array.isArray(productosData) ? productosData : []);
+      setCatalogoProductos(Array.isArray(catalogoData) ? catalogoData : []);
       const allInv = Array.isArray(invEnProceso) ? invEnProceso : [];
       setAllInvProceso(allInv);
       // Un lote padre ya distribuido al 100% nunca debe volver a aparecer como
@@ -291,13 +304,13 @@ export default function ProcesoRecurtido() {
           return calcInsumoTotales({ ...ins, cantidad: (newPeso * dos) / 100 });
         });
       }
-      // El Código Producto en Proceso NUNCA se digita: se deriva automáticamente
-      // del Color Base seleccionado, reutilizando el mismo código si ese color
-      // ya se ha usado antes (uniformidad en todos los procesos).
-      if (field === 'color_base') {
-        const { codigo, descripcion } = deriveCodigoProducto(value, allInvProceso);
-        updated.codigo_producto_proceso = codigo;
-        updated.descripcion_producto_proceso = descripcion;
+      // "Código Producto en Proceso" se selecciona del Catálogo Maestro de
+      // Productos; Descripción y Color Base se derivan automáticamente de ahí
+      // y NUNCA se digitan ni se seleccionan manualmente.
+      if (field === 'codigo_producto_proceso') {
+        const prod = catalogoProductos.find(p => p.codigo === value);
+        updated.descripcion_producto_proceso = prod?.descripcion || '';
+        updated.color_base = derivarColorBase(prod?.descripcion);
       }
       return updated;
     }));
@@ -438,6 +451,14 @@ export default function ProcesoRecurtido() {
     if (isSaving) return;
     if (!invSeleccionado && !isEditing) { alert('⚠️ Seleccione un código en proceso.'); return; }
     if (sublotesForm.length === 0) { alert('⚠️ Agregue al menos una Partida Recurtido.'); return; }
+
+    for (const sub of sublotesForm) {
+      const existeEnCatalogo = catalogoProductos.some(p => p.codigo === sub.codigo_producto_proceso && p.categoria === 'productos_en_proceso');
+      if (!sub.codigo_producto_proceso || !existeEnCatalogo) {
+        alert(`❌ El producto "${sub.codigo_producto_proceso || '(sin seleccionar)'}" no se encuentra registrado en el Catálogo Maestro de Productos. Regístrelo allí antes de continuar.`);
+        return;
+      }
+    }
 
     const codigoLote = invSeleccionado?.codigo_lote || sublotesForm[0]?.codigo_sublote?.split('-PR-')[0];
 
@@ -1104,22 +1125,25 @@ export default function ProcesoRecurtido() {
                             <p className="text-xs text-orange-500 mt-0.5">Automático</p>
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Base / Color Base *</Label>
-                            <Select value={subloteActivo.color_base || ''} onValueChange={v => handleSubloteFieldChange('color_base', v)}>
-                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar color..." /></SelectTrigger>
+                            <Label className="text-xs font-bold text-orange-800">Código Producto en Proceso *</Label>
+                            <Select value={subloteActivo.codigo_producto_proceso || ''} onValueChange={v => handleSubloteFieldChange('codigo_producto_proceso', v)}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar del Catálogo Maestro..." /></SelectTrigger>
                               <SelectContent>
-                                {['NEGRO','CAFÉ','AZUL','MIEL','BLANCO','QUEBRACHO','ROJO','VERDE'].map(c => (
-                                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                                {catalogoProductos.filter(p => p.categoria === 'productos_en_proceso').map(p => (
+                                  <SelectItem key={p.id} value={p.codigo}>{p.codigo} — {p.descripcion}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
+                            <p className="text-xs text-cyan-600 mt-0.5">Se toma del Catálogo Maestro de Productos</p>
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Cantidad Hojas *</Label>
-                            <Input type="number" min="0"
-                              value={subloteActivo.cantidad_hojas || ''}
-                              onChange={e => handleSubloteFieldChange('cantidad_hojas', parseFloat(e.target.value) || 0)}
-                              className={`text-xs ${hojasRestantes < 0 ? 'border-red-400 bg-red-50' : ''}`} />
+                            <Label className="text-xs font-bold text-orange-800">Descripción</Label>
+                            <Input value={subloteActivo.descripcion_producto_proceso || ''} readOnly className="bg-blue-50 text-xs font-bold text-blue-800 cursor-not-allowed" />
+                          </div>
+                          <div>
+                            <Label className="text-xs font-bold text-orange-800">Base / Color Base</Label>
+                            <Input value={subloteActivo.color_base || ''} readOnly className="bg-amber-50 text-xs font-bold text-amber-800 cursor-not-allowed" />
+                            <p className="text-xs text-amber-600 mt-0.5">Automático según la Descripción</p>
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Calibre *</Label>
@@ -1133,14 +1157,11 @@ export default function ProcesoRecurtido() {
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs font-bold text-orange-800">Código Producto en Proceso</Label>
-                            <Input value={subloteActivo.codigo_producto_proceso || ''} readOnly
-                              className="bg-cyan-50 font-mono text-xs font-bold text-cyan-800 cursor-not-allowed" />
-                            <p className="text-xs text-cyan-600 mt-0.5">Automático según Color Base</p>
-                          </div>
-                          <div>
-                            <Label className="text-xs font-bold text-orange-800">Descripción</Label>
-                            <Input value={subloteActivo.descripcion_producto_proceso || ''} readOnly className="bg-blue-50 text-xs font-bold text-blue-800 cursor-not-allowed" />
+                            <Label className="text-xs font-bold text-orange-800">Cantidad Hojas *</Label>
+                            <Input type="number" min="0"
+                              value={subloteActivo.cantidad_hojas || ''}
+                              onChange={e => handleSubloteFieldChange('cantidad_hojas', parseFloat(e.target.value) || 0)}
+                              className={`text-xs ${hojasRestantes < 0 ? 'border-red-400 bg-red-50' : ''}`} />
                           </div>
                           <div>
                             <Label className="text-xs font-bold text-orange-800">Peso Asignado (kg)</Label>

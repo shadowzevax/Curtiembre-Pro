@@ -1,5 +1,5 @@
 {
-  "version": "8",
+  "version": "9",
   "fecha": "2026-07-22",
-  "descripcion": "Bot Telegram: cambia el asistente de desarrollo de OpenRouter (key invalida) a Groq (gratis, sin tarjeta, probado), con contexto y tokens de respuesta acotados para no gastar de mas"
+  "descripcion": "Recurtido: Codigo Producto en Proceso y Descripcion se alimentan desde el Catalogo Maestro de Productos (solo lectura, bloquea guardar si no existe), Color Base se deriva automaticamente de la Descripcion, reordenados los campos del formulario. Catalogo Maestro: opciones de Categoria en mayusculas. Eliminado el modulo Gestion de Pedidos completo."
 }

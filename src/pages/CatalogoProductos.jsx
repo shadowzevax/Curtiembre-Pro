@@ -366,13 +366,13 @@ export default function CatalogoProductos() {
                             <div>
                                 <Label>Categoría *</Label>
                                 <Select value={currentItem?.categoria} onValueChange={v => setCurrentItem({...currentItem, categoria: v})}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="uppercase"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="materia_prima">Materia Prima</SelectItem>
-                                        <SelectItem value="insumos_quimicos">Insumos y Químicos</SelectItem>
-                                        <SelectItem value="productos_en_proceso">Productos en Proceso</SelectItem>
-                                        <SelectItem value="productos_terminados">Productos Terminados</SelectItem>
-                                        <SelectItem value="n_a">N/A – No Aplica (sin afectar inventarios)</SelectItem>
+                                        <SelectItem value="materia_prima" className="uppercase">Materia Prima</SelectItem>
+                                        <SelectItem value="insumos_quimicos" className="uppercase">Insumos y Químicos</SelectItem>
+                                        <SelectItem value="productos_en_proceso" className="uppercase">Productos en Proceso</SelectItem>
+                                        <SelectItem value="productos_terminados" className="uppercase">Productos Terminados</SelectItem>
+                                        <SelectItem value="n_a" className="uppercase">N/A – No Aplica (sin afectar inventarios)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

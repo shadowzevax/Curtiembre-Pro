@@ -67,8 +67,6 @@ import CatalogoTipoAcabado from './pages/CatalogoTipoAcabado';
 import CompraInsumos from './pages/CompraInsumos';
 import ComprobanteEgreso from './pages/ComprobanteEgreso';
 import ConciliacionBancaria from './pages/ConciliacionBancaria';
-import ConsolidadosGenerales from './pages/ConsolidadosGenerales';
-import ConsolidarPedidos from './pages/ConsolidarPedidos';
 import ContabilidadCobrar from './pages/ContabilidadCobrar';
 import ContabilidadGastos from './pages/ContabilidadGastos';
 import ContabilidadIngresos from './pages/ContabilidadIngresos';
@@ -83,7 +81,6 @@ import CuentasPorCobrar from './pages/CuentasPorCobrar';
 import CuentasPorPagar from './pages/CuentasPorPagar';
 import Dashboard from './pages/Dashboard';
 import EgresosBancarios from './pages/EgresosBancarios';
-import GestionPedidos from './pages/GestionPedidos';
 import InformeCaja from './pages/InformeCaja';
 import InformeCostos from './pages/InformeCostos';
 import IngresosBancarios from './pages/IngresosBancarios';
@@ -96,9 +93,7 @@ import LibroDiarioNuevo from './pages/LibroDiarioNuevo';
 import LibroMayor from './pages/LibroMayor';
 import LoteDetalladoConsolidado from './pages/LoteDetalladoConsolidado';
 import MovimientosBancarios from './pages/MovimientosBancarios';
-import PedidoNuevo from './pages/PedidoNuevo';
 import PlanificacionProduccion from './pages/PlanificacionProduccion';
-import PedidosIndividuales from './pages/PedidosIndividuales';
 import Pintura from './pages/Pintura';
 import PlanCuentas from './pages/PlanCuentas';
 import ProcesoAcabado from './pages/ProcesoAcabado';
@@ -157,8 +152,6 @@ export const PAGES = {
     "CompraInsumos": CompraInsumos,
     "ComprobanteEgreso": ComprobanteEgreso,
     "ConciliacionBancaria": ConciliacionBancaria,
-    "ConsolidadosGenerales": ConsolidadosGenerales,
-    "ConsolidarPedidos": ConsolidarPedidos,
     "ContabilidadCobrar": ContabilidadCobrar,
     "ContabilidadGastos": ContabilidadGastos,
     "ContabilidadIngresos": ContabilidadIngresos,
@@ -173,7 +166,6 @@ export const PAGES = {
     "CuentasPorPagar": CuentasPorPagar,
     "Dashboard": Dashboard,
     "EgresosBancarios": EgresosBancarios,
-    "GestionPedidos": GestionPedidos,
     "InformeCaja": InformeCaja,
     "InformeCostos": InformeCostos,
     "IngresosBancarios": IngresosBancarios,
@@ -186,9 +178,7 @@ export const PAGES = {
     "LibroMayor": LibroMayor,
     "LoteDetalladoConsolidado": LoteDetalladoConsolidado,
     "MovimientosBancarios": MovimientosBancarios,
-    "PedidoNuevo": PedidoNuevo,
     "PlanificacionProduccion": PlanificacionProduccion,
-    "PedidosIndividuales": PedidosIndividuales,
     "Pintura": Pintura,
     "PlanCuentas": PlanCuentas,
     "ProcesoAcabado": ProcesoAcabado,
