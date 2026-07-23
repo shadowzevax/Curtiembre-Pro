@@ -1,5 +1,5 @@
 {
-  "version": "9.1",
+  "version": "9.2",
   "fecha": "2026-07-23",
-  "descripcion": "Planificacion y Control de Produccion: renombrado de 'Cliente' a 'Solicitante' en toda la interfaz (etiquetas, columnas, filtros, formularios) sin afectar la base de datos ni la logica"
+  "descripcion": "PCP: nueva pestana Plan Maestro de Produccion (organiza automaticamente lo pendiente por prioridad), nueva pestana Control de Calidad (hojas rechazadas regresan a pendiente de produccion), semaforo (al dia/proximo a vencer/vencido) en Seguimiento, KPIs ampliados del dashboard (consolidadas, ordenes pendientes, hojas solicitadas/producidas, pedidos vencidos)"
 }

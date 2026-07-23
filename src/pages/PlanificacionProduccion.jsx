@@ -16,6 +16,15 @@ import {
 const fmtDate = (d) => { if (!d) return "—"; try { return new Date(d + "T00:00:00").toLocaleDateString("es-CO"); } catch { return d; } };
 const today = () => new Date().toISOString().split("T")[0];
 
+// Semáforo de cumplimiento: 🟢 al día · 🟡 próximo a vencer (≤3 días) · 🔴 vencido
+const semaforoPedido = (fechaCompromiso, estado) => {
+  if (!fechaCompromiso || ["entregada", "finalizada", "cancelada"].includes(estado)) return null;
+  const dias = Math.floor((new Date(fechaCompromiso + "T00:00:00") - new Date(today() + "T00:00:00")) / 86400000);
+  if (dias < 0) return { icon: "🔴", label: "Vencido", cls: "bg-red-100 text-red-800" };
+  if (dias <= 3) return { icon: "🟡", label: "Próximo a vencer", cls: "bg-amber-100 text-amber-800" };
+  return { icon: "🟢", label: "Al día", cls: "bg-green-100 text-green-800" };
+};
+
 const PRIORIDAD_BADGE = {
   normal: "bg-blue-100 text-blue-800",
   urgente: "bg-amber-100 text-amber-800",
@@ -43,6 +52,7 @@ export default function PlanificacionProduccion() {
   const [ordenes, setOrdenes] = useState([]);
   const [avances, setAvances] = useState([]);
   const [entregas, setEntregas] = useState([]);
+  const [calidadRegistros, setCalidadRegistros] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [colores, setColores] = useState([]);
   const [tiposCuero, setTiposCuero] = useState([]);
@@ -59,11 +69,12 @@ export default function PlanificacionProduccion() {
   const [avanceOrden, setAvanceOrden] = useState(null);
   const [showEntregaModal, setShowEntregaModal] = useState(false);
   const [showCatalogoModal, setShowCatalogoModal] = useState(false);
+  const [showCalidadModal, setShowCalidadModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sols, ords, avs, ents, terceros, cols, tipos, placs] = await Promise.all([
+      const [sols, ords, avs, ents, terceros, cols, tipos, placs, calidad] = await Promise.all([
         base44.entities.SolicitudProduccion.list("-created_date"),
         base44.entities.OrdenProduccionPCP.list("-created_date"),
         base44.entities.AvanceProduccionPCP.list("-created_date"),
@@ -72,6 +83,7 @@ export default function PlanificacionProduccion() {
         base44.entities.ColorPintura.list(),
         base44.entities.TipoCueroPCP.list(),
         base44.entities.PlacaPCP.filter({ activo: true }),
+        base44.entities.ControlCalidadPCP.list("-created_date"),
       ]);
       setSolicitudes(sols);
       setOrdenes(ords);
@@ -81,6 +93,7 @@ export default function PlanificacionProduccion() {
       setColores(cols);
       setTiposCuero(tipos.filter(t => t.activo));
       setPlacas(placs);
+      setCalidadRegistros(calidad);
     } catch (e) {
       console.error(e);
     } finally {
@@ -93,6 +106,8 @@ export default function PlanificacionProduccion() {
   // ── KPIs ──
   const solsPendientes = solicitudes.filter(s => s.estado === "pendiente").length;
   const solsUrgentes = solicitudes.filter(s => ["urgente", "muy_urgente"].includes(s.prioridad) && s.estado === "pendiente").length;
+  const solsConsolidadas = solicitudes.filter(s => s.estado === "consolidada").length;
+  const ordsPendientes = ordenes.filter(o => o.estado === "pendiente").length;
   const ordsEnProduccion = ordenes.filter(o => o.estado === "en_produccion").length;
   const ordsFinalizadas = ordenes.filter(o => o.estado === "finalizada").length;
   const totalHojasPendientes = ordenes.filter(o => o.estado !== "finalizada").reduce((s, o) => s + ((o.cantidad_total_hojas || 0) - (o.hojas_producidas || 0)), 0);
@@ -101,6 +116,26 @@ export default function PlanificacionProduccion() {
   const totalHojasOrdenadas = ordenes.reduce((s, o) => s + (o.cantidad_total_hojas || 0), 0);
   const totalHojasProducidas = ordenes.reduce((s, o) => s + (o.hojas_producidas || 0), 0);
   const pctCumplimiento = totalHojasOrdenadas > 0 ? ((totalHojasProducidas / totalHojasOrdenadas) * 100).toFixed(1) : 0;
+  const pedidosVencidos = solicitudes.filter(s => {
+    const sem = semaforoPedido(s.fecha_compromiso, s.estado);
+    return sem?.label === "Vencido";
+  }).length;
+
+  // ── PLAN MAESTRO DE PRODUCCIÓN ──
+  // Organiza automáticamente lo que falta producir: una fila por Orden activa,
+  // con la prioridad heredada de sus Solicitudes de origen (la más alta entre ellas).
+  const planMaestro = React.useMemo(() => {
+    const prioridadRank = { muy_urgente: 3, urgente: 2, normal: 1 };
+    return ordenes
+      .filter(o => ["pendiente", "en_produccion"].includes(o.estado))
+      .map(o => {
+        const solsOrigen = solicitudes.filter(s => (o.solicitudes_ids || []).includes(s.id));
+        const prioridad = solsOrigen.reduce((max, s) => (prioridadRank[s.prioridad] || 1) > (prioridadRank[max] || 1) ? s.prioridad : max, "normal");
+        const cantidadPendiente = Math.max(0, (o.cantidad_total_hojas || 0) - (o.hojas_producidas || 0));
+        return { ...o, prioridad, cantidadPendiente };
+      })
+      .sort((a, b) => (prioridadRank[b.prioridad] || 1) - (prioridadRank[a.prioridad] || 1) || new Date(a.fecha) - new Date(b.fecha));
+  }, [ordenes, solicitudes]);
 
   // ── CONSOLIDADO AUTOMÁTICO ──
   const consolidados = React.useMemo(() => {
@@ -132,12 +167,17 @@ export default function PlanificacionProduccion() {
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
         {[
           { l: "Sols. Pendientes", v: solsPendientes, c: "amber" },
+          { l: "Sols. Consolidadas", v: solsConsolidadas, c: "cyan" },
           { l: "Urgentes", v: solsUrgentes, c: "red" },
+          { l: "Órdenes Pendientes", v: ordsPendientes, c: "yellow" },
           { l: "Órdenes en Prod.", v: ordsEnProduccion, c: "purple" },
           { l: "Órdenes Finalizadas", v: ordsFinalizadas, c: "green" },
+          { l: "Hojas Solicitadas", v: totalHojasOrdenadas, c: "sky" },
+          { l: "Hojas Producidas", v: totalHojasProducidas, c: "teal" },
           { l: "Hojas Pendientes", v: totalHojasPendientes, c: "blue" },
           { l: "Hojas Hoy", v: hojasHoy, c: "emerald" },
           { l: "Hojas Entregadas", v: totalEntregadas, c: "indigo" },
+          { l: "Pedidos Vencidos", v: pedidosVencidos, c: "rose" },
           { l: "% Cumplimiento", v: `${pctCumplimiento}%`, c: "slate" },
         ].map(k => (
           <div key={k.l} className={`bg-${k.c}-50 border border-${k.c}-200 rounded-xl p-2 text-center`}>
@@ -153,8 +193,10 @@ export default function PlanificacionProduccion() {
           <TabsTrigger value="dashboard">📊 Seguimiento</TabsTrigger>
           <TabsTrigger value="solicitudes">📋 Solicitudes</TabsTrigger>
           <TabsTrigger value="consolidado">🔗 Consolidado</TabsTrigger>
+          <TabsTrigger value="planmaestro">🗓 Plan Maestro de Producción</TabsTrigger>
           <TabsTrigger value="ordenes">📦 Órdenes</TabsTrigger>
           <TabsTrigger value="avances">⚙ Producción en Curso</TabsTrigger>
+          <TabsTrigger value="calidad">🔍 Control de Calidad</TabsTrigger>
           <TabsTrigger value="entregas">🚚 Entregas</TabsTrigger>
           <TabsTrigger value="historial">📜 Historial</TabsTrigger>
         </TabsList>
@@ -180,15 +222,17 @@ export default function PlanificacionProduccion() {
                         <th className="p-2 text-right">Pendientes</th>
                         <th className="p-2 text-center">% Avance</th>
                         <th className="p-2 text-center">Estado</th>
+                        <th className="p-2 text-center">Semáforo</th>
                       </tr>
                     </thead>
                     <tbody>
                       {solicitudes.length === 0 ? (
-                        <tr><td colSpan={11} className="p-4 text-center text-slate-400">No hay solicitudes registradas.</td></tr>
+                        <tr><td colSpan={12} className="p-4 text-center text-slate-400">No hay solicitudes registradas.</td></tr>
                       ) : solicitudes.map(sol =>
                         (sol.items || []).map((item, idx) => {
                           const pct = item.cantidad_hojas > 0 ? Math.min(100, ((item.hojas_producidas || 0) / item.cantidad_hojas) * 100) : 0;
                           const pendiente = Math.max(0, (item.cantidad_hojas || 0) - (item.hojas_entregadas || 0));
+                          const sem = idx === 0 ? semaforoPedido(sol.fecha_compromiso, sol.estado) : null;
                           return (
                             <tr key={`${sol.id}-${idx}`} className="border-t hover:bg-slate-50">
                               <td className="p-2 font-mono text-purple-700 font-bold">{sol.numero_solicitud}</td>
@@ -209,6 +253,9 @@ export default function PlanificacionProduccion() {
                                 </div>
                               </td>
                               <td className="p-2 text-center"><Badge className={`text-xs ${ESTADO_BADGE[sol.estado]}`}>{ESTADO_LABEL[sol.estado]}</Badge></td>
+                              <td className="p-2 text-center">
+                                {sem ? <Badge className={`text-xs ${sem.cls}`} title={sem.label}>{sem.icon} {sem.label}</Badge> : "—"}
+                              </td>
                             </tr>
                           );
                         })
@@ -289,6 +336,48 @@ export default function PlanificacionProduccion() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ──────────── PLAN MAESTRO DE PRODUCCIÓN ──────────── */}
+        <TabsContent value="planmaestro">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Plan Maestro de Producción</CardTitle>
+              <p className="text-xs text-slate-500">Organiza automáticamente lo pendiente por producir, ordenado por prioridad</p>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-800 text-white">
+                    <tr>
+                      <th className="p-2 text-left">Fecha</th>
+                      <th className="p-2 text-left">Orden</th>
+                      <th className="p-2 text-left">Color</th>
+                      <th className="p-2 text-left">Tipo Cuero</th>
+                      <th className="p-2 text-left">Tipo de Acabado (Placa)</th>
+                      <th className="p-2 text-right">Cantidad Pendiente</th>
+                      <th className="p-2 text-center">Prioridad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planMaestro.length === 0 ? (
+                      <tr><td colSpan={7} className="p-4 text-center text-slate-400">No hay producción pendiente de planificar.</td></tr>
+                    ) : planMaestro.map(o => (
+                      <tr key={o.id} className="border-t hover:bg-slate-50">
+                        <td className="p-2">{fmtDate(o.fecha)}</td>
+                        <td className="p-2 font-mono font-bold text-blue-700">{o.numero_orden}</td>
+                        <td className="p-2">{o.nombre_color || "—"}</td>
+                        <td className="p-2">{o.tipo_cuero_nombre || "—"}</td>
+                        <td className="p-2">{o.placa_nombre || "—"}</td>
+                        <td className="p-2 text-right font-bold text-amber-700">{o.cantidadPendiente}</td>
+                        <td className="p-2 text-center"><Badge className={`text-xs ${PRIORIDAD_BADGE[o.prioridad]}`}>{PRIORIDAD_LABEL[o.prioridad]}</Badge></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -397,6 +486,51 @@ export default function PlanificacionProduccion() {
           </Card>
         </TabsContent>
 
+        {/* ──────────── CONTROL DE CALIDAD ──────────── */}
+        <TabsContent value="calidad">
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Control de Calidad</CardTitle>
+                <p className="text-xs text-slate-500">Las hojas rechazadas regresan automáticamente a producción pendiente</p>
+              </div>
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setShowCalidadModal(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Registrar Control de Calidad
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-800 text-white">
+                    <tr>
+                      <th className="p-2 text-left">Orden</th>
+                      <th className="p-2 text-left">Fecha</th>
+                      <th className="p-2 text-right">Hojas Aprobadas</th>
+                      <th className="p-2 text-right">Hojas Rechazadas</th>
+                      <th className="p-2 text-left">Motivo del Rechazo</th>
+                      <th className="p-2 text-left">Responsable</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {calidadRegistros.length === 0 ? (
+                      <tr><td colSpan={6} className="p-4 text-center text-slate-400">No hay registros de control de calidad.</td></tr>
+                    ) : calidadRegistros.map(c => (
+                      <tr key={c.id} className="border-t hover:bg-slate-50">
+                        <td className="p-2 font-mono font-bold text-blue-700">{c.orden_numero}</td>
+                        <td className="p-2">{fmtDate(c.fecha)}</td>
+                        <td className="p-2 text-right font-bold text-emerald-700">{c.hojas_aprobadas || 0}</td>
+                        <td className="p-2 text-right font-bold text-red-700">{c.hojas_rechazadas || 0}</td>
+                        <td className="p-2 text-slate-600">{c.motivo_rechazo || "—"}</td>
+                        <td className="p-2">{c.responsable || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ──────────── ENTREGAS ──────────── */}
         <TabsContent value="entregas">
           <Card>
@@ -494,6 +628,16 @@ export default function PlanificacionProduccion() {
           ordenes={ordenes}
           solicitudes={solicitudes}
           clientes={clientes}
+          onSave={loadData}
+        />
+      )}
+
+      {/* ══ MODAL CONTROL DE CALIDAD ══ */}
+      {showCalidadModal && (
+        <CalidadModal
+          open={showCalidadModal}
+          onClose={() => setShowCalidadModal(false)}
+          ordenes={ordenes}
           onSave={loadData}
         />
       )}
@@ -796,6 +940,73 @@ function AvanceModal({ open, onClose, orden, onSave }) {
           <div><Label>Fecha</Label><Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} /></div>
           <div><Label>Cantidad Producida (máx: {pendiente})</Label><Input type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} max={pendiente} /></div>
           <div><Label>Observaciones</Label><Textarea value={obs} onChange={e => setObs(e.target.value)} rows={2} /></div>
+        </div>
+        <div className="flex justify-end gap-2 pt-4 border-t">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleSave}><Save className="w-4 h-4 mr-1" /> Registrar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── CalidadModal ───
+// Registra el control de calidad de una Orden. Las hojas rechazadas se restan
+// de "hojas_producidas" de la Orden, devolviéndolas automáticamente al estado
+// "Pendiente de Producción" (nunca se pierden ni se eliminan, quedan pendientes).
+function CalidadModal({ open, onClose, ordenes, onSave }) {
+  const [ordenId, setOrdenId] = useState("");
+  const [fecha, setFecha] = useState(today());
+  const [aprobadas, setAprobadas] = useState(0);
+  const [rechazadas, setRechazadas] = useState(0);
+  const [motivo, setMotivo] = useState("");
+  const [responsable, setResponsable] = useState("");
+
+  const ordenSel = ordenes.find(o => o.id === ordenId);
+  const ordenesElegibles = ordenes.filter(o => ["en_produccion", "finalizada"].includes(o.estado) && (o.hojas_producidas || 0) > 0);
+
+  const handleSave = async () => {
+    if (!ordenSel) { alert("Seleccione una Orden."); return; }
+    const totalRevisado = (parseFloat(aprobadas) || 0) + (parseFloat(rechazadas) || 0);
+    if (totalRevisado <= 0) { alert("Registre al menos una hoja aprobada o rechazada."); return; }
+    if (totalRevisado > (ordenSel.hojas_producidas || 0)) {
+      alert(`El total revisado (${totalRevisado}) no puede superar las hojas producidas de la orden (${ordenSel.hojas_producidas || 0}).`);
+      return;
+    }
+    await base44.entities.ControlCalidadPCP.create({
+      orden_id: ordenSel.id, orden_numero: ordenSel.numero_orden, fecha,
+      hojas_aprobadas: parseFloat(aprobadas) || 0, hojas_rechazadas: parseFloat(rechazadas) || 0,
+      motivo_rechazo: motivo, responsable,
+    });
+    const cantRechazada = parseFloat(rechazadas) || 0;
+    if (cantRechazada > 0) {
+      const nuevasProducidas = Math.max(0, (ordenSel.hojas_producidas || 0) - cantRechazada);
+      const nuevoEstado = nuevasProducidas < (ordenSel.cantidad_total_hojas || 0) ? "en_produccion" : ordenSel.estado;
+      await base44.entities.OrdenProduccionPCP.update(ordenSel.id, { hojas_producidas: nuevasProducidas, estado: nuevoEstado });
+    }
+    onSave();
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Registrar Control de Calidad</DialogTitle></DialogHeader>
+        <div className="space-y-3 text-sm">
+          <div>
+            <Label>Orden *</Label>
+            <Select value={ordenId} onValueChange={setOrdenId}>
+              <SelectTrigger><SelectValue placeholder="Seleccionar orden..." /></SelectTrigger>
+              <SelectContent>{ordenesElegibles.map(o => <SelectItem key={o.id} value={o.id}>{o.numero_orden} — {o.nombre_color} ({o.hojas_producidas || 0} producidas)</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div><Label>Fecha</Label><Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Hojas Aprobadas</Label><Input type="number" value={aprobadas} onChange={e => setAprobadas(e.target.value)} /></div>
+            <div><Label>Hojas Rechazadas</Label><Input type="number" value={rechazadas} onChange={e => setRechazadas(e.target.value)} /></div>
+          </div>
+          <div><Label>Motivo del Rechazo</Label><Textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2} placeholder="Solo si hay hojas rechazadas..." /></div>
+          <div><Label>Responsable</Label><Input value={responsable} onChange={e => setResponsable(e.target.value)} /></div>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
