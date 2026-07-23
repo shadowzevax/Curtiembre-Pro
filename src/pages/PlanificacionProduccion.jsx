@@ -170,7 +170,7 @@ export default function PlanificacionProduccion() {
                     <thead className="bg-slate-800 text-white">
                       <tr>
                         <th className="p-2 text-left">Solicitud</th>
-                        <th className="p-2 text-left">Cliente</th>
+                        <th className="p-2 text-left">Solicitante</th>
                         <th className="p-2 text-left">Color</th>
                         <th className="p-2 text-left">Tipo Cuero</th>
                         <th className="p-2 text-left">Placa</th>
@@ -237,7 +237,7 @@ export default function PlanificacionProduccion() {
                     <tr>
                       <th className="p-2 text-left">No. Solicitud</th>
                       <th className="p-2 text-left">Fecha</th>
-                      <th className="p-2 text-left">Cliente</th>
+                      <th className="p-2 text-left">Solicitante</th>
                       <th className="p-2 text-center">Prioridad</th>
                       <th className="p-2 text-center">F. Compromiso</th>
                       <th className="p-2 text-right">Total Hojas</th>
@@ -412,7 +412,7 @@ export default function PlanificacionProduccion() {
                   <thead className="bg-slate-800 text-white">
                     <tr>
                       <th className="p-2 text-left">Fecha</th>
-                      <th className="p-2 text-left">Cliente</th>
+                      <th className="p-2 text-left">Solicitante</th>
                       <th className="p-2 text-left">Orden</th>
                       <th className="p-2 text-left">Solicitud</th>
                       <th className="p-2 text-right">Cantidad Entregada</th>
@@ -518,7 +518,7 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
       <div className="flex items-center justify-between">
         <div className="flex gap-4 text-sm">
           <span className="font-bold text-blue-800">{grupo.tipo_cuero_nombre} — {grupo.nombre_color} — {grupo.placa_nombre}</span>
-          <span className="text-slate-600">{grupo.total_hojas} hojas · {grupo.clientes.length} cliente(s)</span>
+          <span className="text-slate-600">{grupo.total_hojas} hojas · {grupo.clientes.length} solicitante(s)</span>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpanded(!expanded)}>
@@ -581,7 +581,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
               <Input type="date" value={form.fecha} onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))} />
             </div>
             <div>
-              <Label>Cliente *</Label>
+              <Label>Solicitante *</Label>
               <Select value={form.cliente_id} onValueChange={v => { const c = clientes.find(x => x.id === v); setForm(p => ({ ...p, cliente_id: v, cliente_nombre: c?.nombre || v })); }}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                 <SelectContent>{clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
@@ -831,7 +831,7 @@ function EntregaModal({ open, onClose, ordenes, solicitudes, clientes, onSave })
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Fecha</Label><Input type="date" value={form.fecha} onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))} /></div>
             <div>
-              <Label>Cliente</Label>
+              <Label>Solicitante</Label>
               <Select value={form.cliente_id} onValueChange={v => { const c = clientes.find(x => x.id === v); setForm(p => ({ ...p, cliente_id: v, cliente_nombre: c?.nombre || "" })); }}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                 <SelectContent>{clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
@@ -1142,7 +1142,7 @@ function HistorialTab({ solicitudes, ordenes, avances, entregas, clientes, color
       <CardHeader className="pb-2"><CardTitle className="text-base">Historial de Producción</CardTitle></CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-          <Input placeholder="Cliente..." value={filtros.cliente} onChange={e => setFiltros(p => ({ ...p, cliente: e.target.value }))} className="text-xs h-8" />
+          <Input placeholder="Solicitante..." value={filtros.cliente} onChange={e => setFiltros(p => ({ ...p, cliente: e.target.value }))} className="text-xs h-8" />
           <Input placeholder="No. Solicitud..." value={filtros.solicitud} onChange={e => setFiltros(p => ({ ...p, solicitud: e.target.value }))} className="text-xs h-8" />
           <Input placeholder="No. Orden..." value={filtros.orden} onChange={e => setFiltros(p => ({ ...p, orden: e.target.value }))} className="text-xs h-8" />
           <Input placeholder="Color..." value={filtros.color} onChange={e => setFiltros(p => ({ ...p, color: e.target.value }))} className="text-xs h-8" />
@@ -1152,7 +1152,7 @@ function HistorialTab({ solicitudes, ordenes, avances, entregas, clientes, color
             <thead className="bg-slate-800 text-white">
               <tr>
                 <th className="p-2 text-left">Solicitud</th>
-                <th className="p-2 text-left">Cliente</th>
+                <th className="p-2 text-left">Solicitante</th>
                 <th className="p-2 text-left">Prioridad</th>
                 <th className="p-2 text-left">Fecha</th>
                 <th className="p-2 text-right">Total Hojas</th>

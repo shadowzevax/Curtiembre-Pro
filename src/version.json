@@ -1,5 +1,5 @@
 {
-  "version": "9",
-  "fecha": "2026-07-22",
-  "descripcion": "Recurtido: Codigo Producto en Proceso y Descripcion se alimentan desde el Catalogo Maestro de Productos (solo lectura, bloquea guardar si no existe), Color Base se deriva automaticamente de la Descripcion, reordenados los campos del formulario. Catalogo Maestro: opciones de Categoria en mayusculas. Eliminado el modulo Gestion de Pedidos completo."
+  "version": "9.1",
+  "fecha": "2026-07-23",
+  "descripcion": "Planificacion y Control de Produccion: renombrado de 'Cliente' a 'Solicitante' en toda la interfaz (etiquetas, columnas, filtros, formularios) sin afectar la base de datos ni la logica"
 }
