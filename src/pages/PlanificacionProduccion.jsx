@@ -81,7 +81,7 @@ export default function PlanificacionProduccion() {
         base44.entities.OrdenProduccionPCP.list("-created_date"),
         base44.entities.AvanceProduccionPCP.list("-created_date"),
         base44.entities.EntregaParcialPCP.list("-created_date"),
-        base44.entities.Tercero.filter({ es_cliente: true }),
+        base44.entities.SolicitantePCP.filter({ activo: true }),
         base44.entities.ColorPintura.list(),
         base44.entities.TipoCueroPCP.list(),
         base44.entities.PlacaPCP.filter({ activo: true }),
@@ -1298,8 +1298,16 @@ function EntregaModal({ open, onClose, ordenes, solicitudes, clientes, onSave })
 }
 
 // ─── CatalogoModal ───
+const TIPO_SOLICITANTE_LABEL = { marroquinero: "Marroquinero", cliente_externo: "Cliente Externo" };
+
 function CatalogoModal({ open, onClose, onSave }) {
-  const [catalogoTab, setCatalogoTab] = useState("tipos");
+  const [catalogoTab, setCatalogoTab] = useState("solicitantes");
+  // Solicitantes
+  const [allSolicitantes, setAllSolicitantes] = useState([]);
+  const [searchSolicitante, setSearchSolicitante] = useState("");
+  const [nuevoSolicitante, setNuevoSolicitante] = useState({ nombre: "", tipo_solicitante: "marroquinero", telefono: "", correo: "", observaciones: "" });
+  const [editingSolicitante, setEditingSolicitante] = useState(null);
+  const [errorSolicitante, setErrorSolicitante] = useState("");
   // Tipos de Acabado
   const [allTipos, setAllTipos] = useState([]);
   const [searchTipo, setSearchTipo] = useState("");
@@ -1317,15 +1325,63 @@ function CatalogoModal({ open, onClose, onSave }) {
   const fmtDT = (d) => { if (!d) return "—"; try { return new Date(d).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }); } catch { return d; } };
 
   const loadCatalogos = async () => {
-    const [tipos, placas] = await Promise.all([
+    const [solicitantes, tipos, placas] = await Promise.all([
+      base44.entities.SolicitantePCP.list(),
       base44.entities.TipoCueroPCP.list(),
       base44.entities.PlacaPCP.list(),
     ]);
+    setAllSolicitantes(solicitantes);
     setAllTipos(tipos);
     setAllPlacas(placas);
   };
 
   useEffect(() => { if (open) loadCatalogos(); }, [open]);
+
+  // ── Solicitantes ──
+  const solicitantesFiltrados = allSolicitantes
+    .filter(s => {
+      const q = searchSolicitante.toLowerCase();
+      return !q || s.nombre?.toLowerCase().includes(q) || s.codigo?.toLowerCase().includes(q);
+    })
+    .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
+
+  const siguienteCodigoSolicitante = () => {
+    const nums = allSolicitantes.map(s => parseInt((s.codigo || "").replace(/\D/g, ""), 10)).filter(n => !isNaN(n));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `SOL-${String(next).padStart(4, "0")}`;
+  };
+
+  const agregarSolicitante = async () => {
+    const nombre = nuevoSolicitante.nombre.trim();
+    if (!nombre) return;
+    const dup = allSolicitantes.find(s => s.nombre?.toLowerCase() === nombre.toLowerCase());
+    if (dup) { setErrorSolicitante(`Ya existe un solicitante con el nombre "${nombre}".`); return; }
+    setErrorSolicitante("");
+    await base44.entities.SolicitantePCP.create({ ...nuevoSolicitante, nombre, codigo: siguienteCodigoSolicitante(), activo: true });
+    setNuevoSolicitante({ nombre: "", tipo_solicitante: "marroquinero", telefono: "", correo: "", observaciones: "" });
+    await loadCatalogos();
+    onSave();
+  };
+
+  const guardarEditSolicitante = async () => {
+    if (!editingSolicitante) return;
+    const nombre = editingSolicitante.nombre.trim();
+    if (!nombre) return;
+    const dup = allSolicitantes.find(s => s.nombre?.toLowerCase() === nombre.toLowerCase() && s.id !== editingSolicitante.id);
+    if (dup) { setErrorSolicitante(`Ya existe un solicitante con el nombre "${nombre}".`); return; }
+    setErrorSolicitante("");
+    const { id, ...data } = editingSolicitante;
+    await base44.entities.SolicitantePCP.update(id, { ...data, nombre });
+    setEditingSolicitante(null);
+    await loadCatalogos();
+    onSave();
+  };
+
+  const toggleActivoSolicitante = async (s) => {
+    await base44.entities.SolicitantePCP.update(s.id, { activo: !s.activo });
+    await loadCatalogos();
+    onSave();
+  };
 
   // ── Tipos de Acabado ──
   const tiposFiltrados = allTipos
@@ -1415,11 +1471,100 @@ function CatalogoModal({ open, onClose, onSave }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>⚙ Catálogos PCP</DialogTitle></DialogHeader>
-        <Tabs value={catalogoTab} onValueChange={v => { setCatalogoTab(v); setErrorTipo(""); setErrorPlaca(""); setEditingTipo(null); setEditingPlaca(null); }}>
+        <Tabs value={catalogoTab} onValueChange={v => { setCatalogoTab(v); setErrorSolicitante(""); setErrorTipo(""); setErrorPlaca(""); setEditingSolicitante(null); setEditingTipo(null); setEditingPlaca(null); }}>
           <TabsList>
+            <TabsTrigger value="solicitantes">Solicitante</TabsTrigger>
             <TabsTrigger value="tipos">Tipos de Acabado</TabsTrigger>
             <TabsTrigger value="placas">Placas</TabsTrigger>
           </TabsList>
+
+          {/* ── SOLICITANTES ── */}
+          <TabsContent value="solicitantes" className="space-y-3 mt-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Input value={nuevoSolicitante.nombre} onChange={e => { setNuevoSolicitante(p => ({ ...p, nombre: e.target.value })); setErrorSolicitante(""); }} placeholder="Nombre del solicitante..." />
+              <Select value={nuevoSolicitante.tipo_solicitante} onValueChange={v => setNuevoSolicitante(p => ({ ...p, tipo_solicitante: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="marroquinero">Marroquinero</SelectItem>
+                  <SelectItem value="cliente_externo">Cliente Externo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input value={nuevoSolicitante.telefono} onChange={e => setNuevoSolicitante(p => ({ ...p, telefono: e.target.value }))} placeholder="Teléfono (opcional)..." />
+              <Input value={nuevoSolicitante.correo} onChange={e => setNuevoSolicitante(p => ({ ...p, correo: e.target.value }))} placeholder="Correo electrónico (opcional)..." />
+              <Textarea className="col-span-2" rows={2} value={nuevoSolicitante.observaciones} onChange={e => setNuevoSolicitante(p => ({ ...p, observaciones: e.target.value }))} placeholder="Observaciones (opcional)..." />
+            </div>
+            <Button onClick={agregarSolicitante} className="bg-emerald-600 hover:bg-emerald-700"><Plus className="w-4 h-4 mr-1" /> Agregar Solicitante</Button>
+            {errorSolicitante && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-1.5">⚠ {errorSolicitante}</p>}
+            <Input value={searchSolicitante} onChange={e => setSearchSolicitante(e.target.value)} placeholder="🔍 Buscar por código o nombre..." className="text-xs h-8" />
+            <div className="border rounded overflow-hidden overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="p-2 text-left w-24">Código</th>
+                    <th className="p-2 text-left">Nombre</th>
+                    <th className="p-2 text-left">Tipo</th>
+                    <th className="p-2 text-left">Teléfono</th>
+                    <th className="p-2 text-left">Correo</th>
+                    <th className="p-2 text-center w-24">Estado</th>
+                    <th className="p-2 text-center w-36">Fecha de Creación</th>
+                    <th className="p-2 text-center w-24">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {solicitantesFiltrados.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-slate-400">Sin registros.</td></tr>}
+                  {solicitantesFiltrados.map(s => (
+                    <tr key={s.id} className={`border-t ${!s.activo ? "bg-gray-50 opacity-70" : "hover:bg-slate-50"}`}>
+                      <td className="p-2 font-mono">{s.codigo}</td>
+                      <td className="p-2">
+                        {editingSolicitante?.id === s.id
+                          ? <Input autoFocus value={editingSolicitante.nombre} onChange={e => setEditingSolicitante(p => ({ ...p, nombre: e.target.value }))} className="h-7 text-xs" onKeyDown={e => e.key === "Enter" && guardarEditSolicitante()} />
+                          : <span className={!s.activo ? "line-through text-slate-400" : ""}>{s.nombre}</span>}
+                      </td>
+                      <td className="p-2">
+                        {editingSolicitante?.id === s.id
+                          ? <Select value={editingSolicitante.tipo_solicitante} onValueChange={v => setEditingSolicitante(p => ({ ...p, tipo_solicitante: v }))}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="marroquinero">Marroquinero</SelectItem><SelectItem value="cliente_externo">Cliente Externo</SelectItem></SelectContent>
+                            </Select>
+                          : TIPO_SOLICITANTE_LABEL[s.tipo_solicitante] || "—"}
+                      </td>
+                      <td className="p-2">
+                        {editingSolicitante?.id === s.id
+                          ? <Input value={editingSolicitante.telefono || ""} onChange={e => setEditingSolicitante(p => ({ ...p, telefono: e.target.value }))} className="h-7 text-xs" />
+                          : (s.telefono || "—")}
+                      </td>
+                      <td className="p-2">
+                        {editingSolicitante?.id === s.id
+                          ? <Input value={editingSolicitante.correo || ""} onChange={e => setEditingSolicitante(p => ({ ...p, correo: e.target.value }))} className="h-7 text-xs" />
+                          : (s.correo || "—")}
+                      </td>
+                      <td className="p-2 text-center">
+                        <Badge className={`text-xs ${s.activo ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{s.activo ? "Activo" : "Inactivo"}</Badge>
+                      </td>
+                      <td className="p-2 text-center text-slate-500">{fmtDT(s.created_date)}</td>
+                      <td className="p-2 text-center">
+                        <div className="flex justify-center gap-1">
+                          {editingSolicitante?.id === s.id ? (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" onClick={guardarEditSolicitante} title="Guardar"><Save className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-slate-400" onClick={() => { setEditingSolicitante(null); setErrorSolicitante(""); }} title="Cancelar"><X className="w-3 h-3" /></Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-600" onClick={() => { setEditingSolicitante({ ...s }); setErrorSolicitante(""); }} title="Editar"><Edit2 className="w-3 h-3" /></Button>
+                              <Button size="icon" variant="ghost" className={`h-6 w-6 ${s.activo ? "text-amber-600" : "text-emerald-600"}`} onClick={() => toggleActivoSolicitante(s)} title={s.activo ? "Inactivar" : "Activar"}>
+                                {s.activo ? <X className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
 
           {/* ── TIPOS DE ACABADO ── */}
           <TabsContent value="tipos" className="space-y-3 mt-3">

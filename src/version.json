@@ -1,5 +1,5 @@
 {
-  "version": "10",
+  "version": "11",
   "fecha": "2026-07-23",
-  "descripcion": "PCP: renombrado Cliente->Solicitante, Plan Maestro de Produccion, Control de Calidad, semaforo, KPIs ampliados, Alertas Automaticas y Estadisticas (colores/acabados/solicitantes top, produccion y entregas semanales, produccion y cumplimiento mensual, tiempos promedio de produccion y entrega). Cierra el requerimiento completo de mejoras del submodulo Planificacion y Control de Produccion."
+  "descripcion": "Pintura: corregido crash al agregar un 2do Producto en Proceso a un pedido recuperado en Borrador (SelectItem con value vacio en Radix). PCP: nueva pestana Solicitante en Catalogos PCP (CRUD completo: codigo automatico, tipo Marroquinero/Cliente Externo, telefono, correo, observaciones, activar/inactivar), el campo Solicitante de Nueva Solicitud ahora se alimenta de este catalogo (antes usaba Terceros)."
 }

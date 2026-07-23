@@ -1517,8 +1517,8 @@ export default function Pintura() {
                           }} disabled={esFinalizado}>
                             <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Elegir de los productos agregados en el bloque ①..." /></SelectTrigger>
                             <SelectContent>
-                              {productosProcesoLineas.length === 0 && <SelectItem value="__none__" disabled>Agregue primero un Producto en Proceso en el bloque ①</SelectItem>}
-                              {productosProcesoLineas.map(l => {
+                              {productosProcesoLineas.filter(l => l.invId).length === 0 && <SelectItem value="__none__" disabled>Agregue primero un Producto en Proceso en el bloque ①</SelectItem>}
+                              {productosProcesoLineas.filter(l => l.invId).map(l => {
                                 const inv = inventarioEnProceso.find(i => i.id === l.invId);
                                 return <SelectItem key={l.id_temp} value={l.invId}>{inv?.codigo_producto_proceso || '—'} — {inv?.codigo_lote} ({l.hojasAConsumir} hojas)</SelectItem>;
                               })}
