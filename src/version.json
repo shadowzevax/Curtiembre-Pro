@@ -1,5 +1,5 @@
 {
-  "version": "9.3",
+  "version": "10",
   "fecha": "2026-07-23",
-  "descripcion": "PCP: Alertas Automaticas (pedidos vencidos/proximos a vencer, urgentes sin iniciar, ordenes detenidas, faltan hojas, entrega parcial, insuficiencia de inventario) visibles en el panel de Seguimiento"
+  "descripcion": "PCP: renombrado Cliente->Solicitante, Plan Maestro de Produccion, Control de Calidad, semaforo, KPIs ampliados, Alertas Automaticas y Estadisticas (colores/acabados/solicitantes top, produccion y entregas semanales, produccion y cumplimiento mensual, tiempos promedio de produccion y entrega). Cierra el requerimiento completo de mejoras del submodulo Planificacion y Control de Produccion."
 }

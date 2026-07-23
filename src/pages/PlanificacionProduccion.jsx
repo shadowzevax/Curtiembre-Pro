@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Plus, Eye, Edit2, Trash2, CheckCircle2, Package, TrendingUp, Users, Clock, Layers, ChevronDown, ChevronUp, X, Save
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const fmtDate = (d) => { if (!d) return "—"; try { return new Date(d + "T00:00:00").toLocaleDateString("es-CO"); } catch { return d; } };
 const today = () => new Date().toISOString().split("T")[0];
@@ -180,6 +181,74 @@ export default function PlanificacionProduccion() {
     return lista;
   }, [solicitudes, ordenes, avances, entregas, inventarioProceso]);
 
+  // ── ESTADÍSTICAS ──
+  const semanaISO = (fechaStr) => {
+    const d = new Date(fechaStr + "T00:00:00");
+    const target = new Date(d.valueOf());
+    const dayNr = (d.getDay() + 6) % 7;
+    target.setDate(target.getDate() - dayNr + 3);
+    const firstThursday = new Date(target.getFullYear(), 0, 4);
+    const week = 1 + Math.round(((target - firstThursday) / 86400000 - 3 + ((firstThursday.getDay() + 6) % 7)) / 7);
+    return `${target.getFullYear()}-S${String(week).padStart(2, "0")}`;
+  };
+  const mesLabel = (fechaStr) => {
+    const d = new Date(fechaStr + "T00:00:00");
+    return d.toLocaleDateString("es-CO", { month: "short", year: "2-digit" });
+  };
+
+  const estadisticas = React.useMemo(() => {
+    const porColor = {}, porAcabado = {}, porSolicitante = {};
+    solicitudes.forEach(s => {
+      porSolicitante[s.cliente_nombre] = (porSolicitante[s.cliente_nombre] || 0) + 1;
+      (s.items || []).forEach(it => {
+        if (it.nombre_color) porColor[it.nombre_color] = (porColor[it.nombre_color] || 0) + (it.cantidad_hojas || 0);
+        if (it.placa_nombre) porAcabado[it.placa_nombre] = (porAcabado[it.placa_nombre] || 0) + (it.cantidad_hojas || 0);
+      });
+    });
+    const topN = (obj, n = 6) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, value]) => ({ name, value }));
+
+    const porSemanaProd = {}, porSemanaEnt = {};
+    avances.forEach(a => { const w = semanaISO(a.fecha); porSemanaProd[w] = (porSemanaProd[w] || 0) + (a.cantidad_producida || 0); });
+    entregas.forEach(e => { const w = semanaISO(e.fecha); porSemanaEnt[w] = (porSemanaEnt[w] || 0) + (e.cantidad_entregada || 0); });
+    const aSerieSemanal = (obj) => Object.entries(obj).sort((a, b) => a[0].localeCompare(b[0])).slice(-8).map(([name, value]) => ({ name, value }));
+
+    const porMesProd = {}, porMesOrd = {};
+    avances.forEach(a => { const m = mesLabel(a.fecha); porMesProd[m] = (porMesProd[m] || 0) + (a.cantidad_producida || 0); });
+    ordenes.forEach(o => { const m = mesLabel(o.fecha); porMesOrd[m] = (porMesOrd[m] || 0) + (o.cantidad_total_hojas || 0); });
+    const mesesOrdenados = [...new Set([...Object.keys(porMesProd), ...Object.keys(porMesOrd)])].slice(-6);
+    const produccionMensual = mesesOrdenados.map(m => ({ name: m, value: porMesProd[m] || 0 }));
+    const cumplimientoMensual = mesesOrdenados.map(m => ({ name: m, value: porMesOrd[m] > 0 ? Math.round(((porMesProd[m] || 0) / porMesOrd[m]) * 100) : 0 }));
+
+    const finalizadas = ordenes.filter(o => o.estado === "finalizada");
+    const tiemposProduccion = finalizadas.map(o => {
+      const avsOrden = avances.filter(a => a.orden_id === o.id).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+      const fin = avsOrden[0]?.fecha;
+      if (!fin) return null;
+      return Math.max(0, (new Date(fin) - new Date(o.fecha)) / 86400000);
+    }).filter(v => v !== null);
+    const tiempoPromedioProduccion = tiemposProduccion.length ? (tiemposProduccion.reduce((s, v) => s + v, 0) / tiemposProduccion.length).toFixed(1) : "—";
+
+    const tiemposEntrega = finalizadas.map(o => {
+      const entsOrden = entregas.filter(e => e.orden_id === o.id).sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+      const primeraEntrega = entsOrden[0]?.fecha;
+      if (!primeraEntrega) return null;
+      return Math.max(0, (new Date(primeraEntrega) - new Date(o.fecha)) / 86400000);
+    }).filter(v => v !== null);
+    const tiempoPromedioEntrega = tiemposEntrega.length ? (tiemposEntrega.reduce((s, v) => s + v, 0) / tiemposEntrega.length).toFixed(1) : "—";
+
+    return {
+      coloresMasSolicitados: topN(porColor),
+      acabadosMasSolicitados: topN(porAcabado),
+      solicitantesTop: topN(porSolicitante),
+      hojasProducidasPorSemana: aSerieSemanal(porSemanaProd),
+      hojasEntregadasPorSemana: aSerieSemanal(porSemanaEnt),
+      produccionMensual,
+      cumplimientoMensual,
+      tiempoPromedioProduccion,
+      tiempoPromedioEntrega,
+    };
+  }, [solicitudes, ordenes, avances, entregas]);
+
   // ── CONSOLIDADO AUTOMÁTICO ──
   const consolidados = React.useMemo(() => {
     const groups = {};
@@ -241,6 +310,7 @@ export default function PlanificacionProduccion() {
           <TabsTrigger value="avances">⚙ Producción en Curso</TabsTrigger>
           <TabsTrigger value="calidad">🔍 Control de Calidad</TabsTrigger>
           <TabsTrigger value="entregas">🚚 Entregas</TabsTrigger>
+          <TabsTrigger value="estadisticas">📈 Estadísticas</TabsTrigger>
           <TabsTrigger value="historial">📜 Historial</TabsTrigger>
         </TabsList>
 
@@ -631,6 +701,99 @@ export default function PlanificacionProduccion() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ──────────── ESTADÍSTICAS ──────────── */}
+        <TabsContent value="estadisticas" className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white border rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-500">Tiempo Promedio de Producción</p>
+              <p className="text-2xl font-extrabold text-blue-700">{estadisticas.tiempoPromedioProduccion} <span className="text-sm font-normal text-slate-400">días</span></p>
+            </div>
+            <div className="bg-white border rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-500">Tiempo Promedio de Entrega</p>
+              <p className="text-2xl font-extrabold text-emerald-700">{estadisticas.tiempoPromedioEntrega} <span className="text-sm font-normal text-slate-400">días</span></p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Colores Más Solicitados</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.coloresMasSolicitados}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Bar dataKey="value" fill="#7c3aed" name="Hojas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Tipos de Acabado Más Solicitados</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.acabadosMasSolicitados}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Bar dataKey="value" fill="#0891b2" name="Hojas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Solicitantes con Más Solicitudes</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.solicitantesTop}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Bar dataKey="value" fill="#059669" name="N° Solicitudes" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Hojas Producidas por Semana</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.hojasProducidasPorSemana}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Bar dataKey="value" fill="#2563eb" name="Hojas Producidas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Hojas Entregadas por Semana</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.hojasEntregadasPorSemana}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Bar dataKey="value" fill="#d97706" name="Hojas Entregadas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Producción Mensual</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.produccionMensual}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip />
+                    <Bar dataKey="value" fill="#16a34a" name="Hojas Producidas" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-2"><CardTitle className="text-sm">% Cumplimiento Mensual</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={estadisticas.cumplimientoMensual}>
+                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} unit="%" /><Tooltip formatter={(v) => `${v}%`} />
+                    <Bar dataKey="value" fill="#dc2626" name="% Cumplimiento" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ──────────── HISTORIAL ──────────── */}
