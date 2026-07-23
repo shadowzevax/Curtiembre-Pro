@@ -53,6 +53,7 @@ export default function PlanificacionProduccion() {
   const [avances, setAvances] = useState([]);
   const [entregas, setEntregas] = useState([]);
   const [calidadRegistros, setCalidadRegistros] = useState([]);
+  const [inventarioProceso, setInventarioProceso] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [colores, setColores] = useState([]);
   const [tiposCuero, setTiposCuero] = useState([]);
@@ -74,7 +75,7 @@ export default function PlanificacionProduccion() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [sols, ords, avs, ents, terceros, cols, tipos, placs, calidad] = await Promise.all([
+      const [sols, ords, avs, ents, terceros, cols, tipos, placs, calidad, invProceso] = await Promise.all([
         base44.entities.SolicitudProduccion.list("-created_date"),
         base44.entities.OrdenProduccionPCP.list("-created_date"),
         base44.entities.AvanceProduccionPCP.list("-created_date"),
@@ -84,6 +85,7 @@ export default function PlanificacionProduccion() {
         base44.entities.TipoCueroPCP.list(),
         base44.entities.PlacaPCP.filter({ activo: true }),
         base44.entities.ControlCalidadPCP.list("-created_date"),
+        base44.entities.InventarioEnProceso.list(),
       ]);
       setSolicitudes(sols);
       setOrdenes(ords);
@@ -94,6 +96,7 @@ export default function PlanificacionProduccion() {
       setTiposCuero(tipos.filter(t => t.activo));
       setPlacas(placs);
       setCalidadRegistros(calidad);
+      setInventarioProceso(Array.isArray(invProceso) ? invProceso : []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -136,6 +139,46 @@ export default function PlanificacionProduccion() {
       })
       .sort((a, b) => (prioridadRank[b.prioridad] || 1) - (prioridadRank[a.prioridad] || 1) || new Date(a.fecha) - new Date(b.fecha));
   }, [ordenes, solicitudes]);
+
+  // ── ALERTAS AUTOMÁTICAS ──
+  const alertas = React.useMemo(() => {
+    const lista = [];
+    solicitudes.forEach(s => {
+      const sem = semaforoPedido(s.fecha_compromiso, s.estado);
+      if (sem?.label === "Vencido") lista.push({ tipo: "🔴 Pedido vencido", detalle: `${s.numero_solicitud} — ${s.cliente_nombre} (venció ${fmtDate(s.fecha_compromiso)})` });
+      else if (sem?.label === "Próximo a vencer") lista.push({ tipo: "🟡 Pedido próximo a vencer", detalle: `${s.numero_solicitud} — ${s.cliente_nombre} (vence ${fmtDate(s.fecha_compromiso)})` });
+      if (["urgente", "muy_urgente"].includes(s.prioridad) && s.estado === "pendiente") {
+        lista.push({ tipo: "⚡ Pedido urgente sin iniciar", detalle: `${s.numero_solicitud} — ${s.cliente_nombre}` });
+      }
+    });
+    ordenes.forEach(o => {
+      const pend = Math.max(0, (o.cantidad_total_hojas || 0) - (o.hojas_producidas || 0));
+      if (o.estado !== "finalizada" && o.estado !== "cancelada" && pend > 0) {
+        lista.push({ tipo: "📋 Faltan hojas por producir", detalle: `${o.numero_orden} — faltan ${pend} hojas` });
+      }
+      if (o.estado === "en_produccion") {
+        const avancesOrden = avances.filter(a => a.orden_id === o.id).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        const ultimoAvance = avancesOrden[0]?.fecha || o.fecha;
+        const diasSinAvance = Math.floor((new Date(today() + "T00:00:00") - new Date(ultimoAvance + "T00:00:00")) / 86400000);
+        if (diasSinAvance >= 5) lista.push({ tipo: "⏸ Orden detenida", detalle: `${o.numero_orden} — sin avances hace ${diasSinAvance} días` });
+      }
+      if (["entregada", "finalizada"].includes(o.estado)) {
+        const entregadoOrden = entregas.filter(e => e.orden_id === o.id).reduce((s, e) => s + (e.cantidad_entregada || 0), 0);
+        if (entregadoOrden > 0 && entregadoOrden < (o.cantidad_total_hojas || 0)) {
+          lista.push({ tipo: "📉 Entrega parcial (menos de lo solicitado)", detalle: `${o.numero_orden} — entregado ${entregadoOrden} de ${o.cantidad_total_hojas}` });
+        }
+      }
+      if (["pendiente", "en_produccion"].includes(o.estado) && o.nombre_color) {
+        const stockColor = inventarioProceso
+          .filter(i => (i.color_base || "").toUpperCase() === o.nombre_color.toUpperCase())
+          .reduce((s, i) => s + (parseFloat(i.cantidad_hojas) || 0), 0);
+        if (pend > stockColor) {
+          lista.push({ tipo: "⚠️ Insuficiencia de inventario", detalle: `${o.numero_orden} — necesita ${pend} hojas de ${o.nombre_color}, hay ${stockColor} disponibles en proceso` });
+        }
+      }
+    });
+    return lista;
+  }, [solicitudes, ordenes, avances, entregas, inventarioProceso]);
 
   // ── CONSOLIDADO AUTOMÁTICO ──
   const consolidados = React.useMemo(() => {
@@ -202,7 +245,22 @@ export default function PlanificacionProduccion() {
         </TabsList>
 
         {/* ──────────── SEGUIMIENTO ──────────── */}
-        <TabsContent value="dashboard">
+        <TabsContent value="dashboard" className="space-y-4">
+          {alertas.length > 0 && (
+            <Card className="border-2 border-amber-300">
+              <CardHeader className="pb-2"><CardTitle className="text-base">🔔 Alertas Automáticas ({alertas.length})</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-1 max-h-56 overflow-y-auto">
+                  {alertas.map((a, i) => (
+                    <div key={i} className="text-xs p-2 bg-amber-50 border border-amber-200 rounded flex gap-2">
+                      <span className="font-bold whitespace-nowrap">{a.tipo}:</span>
+                      <span className="text-slate-600">{a.detalle}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Seguimiento de Pedidos en Tiempo Real</CardTitle></CardHeader>
             <CardContent>

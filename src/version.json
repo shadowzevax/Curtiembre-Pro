@@ -1,5 +1,5 @@
 {
-  "version": "9.2",
+  "version": "9.3",
   "fecha": "2026-07-23",
-  "descripcion": "PCP: nueva pestana Plan Maestro de Produccion (organiza automaticamente lo pendiente por prioridad), nueva pestana Control de Calidad (hojas rechazadas regresan a pendiente de produccion), semaforo (al dia/proximo a vencer/vencido) en Seguimiento, KPIs ampliados del dashboard (consolidadas, ordenes pendientes, hojas solicitadas/producidas, pedidos vencidos)"
+  "descripcion": "PCP: Alertas Automaticas (pedidos vencidos/proximos a vencer, urgentes sin iniciar, ordenes detenidas, faltan hojas, entrega parcial, insuficiencia de inventario) visibles en el panel de Seguimiento"
 }
