@@ -253,12 +253,20 @@ export default function PlanificacionProduccion() {
   }, [solicitudes, ordenes, avances, entregas]);
 
   // ── CONSOLIDADO AUTOMÁTICO ──
+  // Agrupa por Código Tipo de Acabado + Código Color + Código Placa + Calibre,
+  // para que la Orden generada desde aquí herede TODA la información exacta
+  // (códigos y nombres) sin tener que volver a seleccionarla manualmente.
   const consolidados = React.useMemo(() => {
     const groups = {};
     solicitudes.filter(s => s.estado === "pendiente").forEach(sol => {
       (sol.items || []).forEach(item => {
-        const key = `${item.tipo_cuero_nombre}|${item.nombre_color}|${item.placa_nombre}`;
-        if (!groups[key]) groups[key] = { tipo_cuero_nombre: item.tipo_cuero_nombre, nombre_color: item.nombre_color, placa_nombre: item.placa_nombre, total_hojas: 0, clientes: new Set(), solicitudes: [] };
+        const key = `${item.codigo_tipo_acabado || item.tipo_cuero_nombre}|${item.codigo_color || item.nombre_color}|${item.codigo_placa || item.placa_nombre}|${item.calibre || ""}`;
+        if (!groups[key]) groups[key] = {
+          tipo_cuero_id: item.tipo_cuero_id || "", codigo_tipo_acabado: item.codigo_tipo_acabado || "", tipo_cuero_nombre: item.tipo_cuero_nombre,
+          color_id: item.color_id || "", codigo_color: item.codigo_color || "", nombre_color: item.nombre_color,
+          placa_id: item.placa_id || "", codigo_placa: item.codigo_placa || "", placa_nombre: item.placa_nombre,
+          calibre: item.calibre || "", total_hojas: 0, clientes: new Set(), solicitudes: [],
+        };
         groups[key].total_hojas += (item.cantidad_hojas || 0);
         groups[key].clientes.add(sol.cliente_nombre);
         if (!groups[key].solicitudes.find(s2 => s2.id === sol.id)) groups[key].solicitudes.push(sol);
@@ -463,7 +471,19 @@ export default function PlanificacionProduccion() {
               ) : (
                 <div className="space-y-3">
                   {consolidados.map((g, i) => (
-                    <ConsolidadoCard key={i} grupo={g} onGenerarOrden={() => { setEditingOrden({ tipo_cuero_nombre: g.tipo_cuero_nombre, nombre_color: g.nombre_color, placa_nombre: g.placa_nombre, cantidad_total_hojas: g.total_hojas, solicitudes_ids: g.solicitudes.map(s => s.id) }); setShowOrdenModal(true); }} />
+                    <ConsolidadoCard key={i} grupo={g} onGenerarOrden={() => {
+                      setEditingOrden({
+                        tipo_cuero_id: g.tipo_cuero_id, codigo_tipo_acabado: g.codigo_tipo_acabado, tipo_cuero_nombre: g.tipo_cuero_nombre,
+                        color_id: g.color_id, codigo_color: g.codigo_color, nombre_color: g.nombre_color,
+                        placa_id: g.placa_id, codigo_placa: g.codigo_placa, placa_nombre: g.placa_nombre,
+                        calibre: g.calibre, cantidad_total_hojas: g.total_hojas,
+                        solicitudes_ids: g.solicitudes.map(s => s.id),
+                        clientes_incluidos: g.clientes,
+                        estado: "pendiente",
+                        origenConsolidado: true,
+                      });
+                      setShowOrdenModal(true);
+                    }} />
                   ))}
                 </div>
               )}
@@ -884,9 +904,11 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
   return (
     <div className="border border-blue-200 rounded-xl bg-blue-50 p-3">
       <div className="flex items-center justify-between">
-        <div className="flex gap-4 text-sm">
-          <span className="font-bold text-blue-800">{grupo.tipo_cuero_nombre} — {grupo.nombre_color} — {grupo.placa_nombre}</span>
-          <span className="text-slate-600">{grupo.total_hojas} hojas · {grupo.clientes.length} solicitante(s)</span>
+        <div className="flex flex-col gap-0.5 text-sm">
+          <span className="font-bold text-blue-800">
+            {grupo.codigo_tipo_acabado ? `${grupo.codigo_tipo_acabado} — ` : ""}{grupo.tipo_cuero_nombre} · {grupo.codigo_color ? `${grupo.codigo_color} — ` : ""}{grupo.nombre_color} · {grupo.codigo_placa ? `${grupo.codigo_placa} — ` : ""}{grupo.placa_nombre}{grupo.calibre ? ` · Calibre ${grupo.calibre}` : ""}
+          </span>
+          <span className="text-slate-600 text-xs">{grupo.solicitudes.length} solicitud(es) · {grupo.total_hojas} hojas totales · {grupo.clientes.length} solicitante(s) · <Badge className="text-xs bg-amber-100 text-amber-800">Pendiente de generar orden</Badge></span>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpanded(!expanded)}>
@@ -897,13 +919,17 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
       </div>
       {expanded && (
         <div className="mt-2 text-xs space-y-1">
-          {grupo.solicitudes.map(s => (
-            <div key={s.id} className="flex items-center gap-2 bg-white rounded p-1.5 border">
-              <span className="font-mono text-purple-700 font-bold">{s.numero_solicitud}</span>
-              <span>{s.cliente_nombre}</span>
-              <Badge className={`text-xs ${PRIORIDAD_BADGE[s.prioridad]}`}>{PRIORIDAD_LABEL[s.prioridad]}</Badge>
-            </div>
-          ))}
+          {grupo.solicitudes.map(s => {
+            const totalH = (s.items || []).filter(i => (i.codigo_tipo_acabado || i.tipo_cuero_nombre) === (grupo.codigo_tipo_acabado || grupo.tipo_cuero_nombre)).reduce((sum, i) => sum + (i.cantidad_hojas || 0), 0);
+            return (
+              <div key={s.id} className="flex items-center gap-2 bg-white rounded p-1.5 border">
+                <span className="font-mono text-purple-700 font-bold">{s.numero_solicitud}</span>
+                <span>{s.cliente_nombre}</span>
+                <span className="text-slate-500">{totalH || "—"} hojas</span>
+                <Badge className={`text-xs ${PRIORIDAD_BADGE[s.prioridad]}`}>{PRIORIDAD_LABEL[s.prioridad]}</Badge>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -1071,6 +1097,11 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
 function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes, onSave }) {
   const [form, setForm] = useState({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", observaciones: "" });
 
+  // Una Orden que proviene del Consolidado (tiene solicitudes de origen) hereda
+  // TODA su información técnica de ahí: esos campos quedan bloqueados y solo se
+  // puede editar la fecha programada, el responsable y las observaciones.
+  const bloqueadaPorConsolidado = (form.solicitudes_ids || []).length > 0;
+
   useEffect(() => {
     if (orden) setForm({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", observaciones: "", ...orden });
     else setForm({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", observaciones: "" });
@@ -1084,7 +1115,8 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
       const maxNum = existentes.reduce((max, o) => { const n = parseInt(o.numero_orden?.split("-").pop() || "0"); return n > max ? n : max; }, 0);
       numero_orden = `OP-${year}-${String(maxNum + 1).padStart(4, "0")}`;
     }
-    const data = { ...form, numero_orden };
+    const { clientes_incluidos, origenConsolidado, ...rest } = form;
+    const data = { ...rest, numero_orden };
     if (orden?.id) await base44.entities.OrdenProduccionPCP.update(orden.id, data);
     else await base44.entities.OrdenProduccionPCP.create(data);
     onSave();
@@ -1096,8 +1128,24 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
       <DialogContent className="max-w-xl">
         <DialogHeader><DialogTitle>{orden?.id ? "Editar" : "Nueva"} Orden de Producción</DialogTitle></DialogHeader>
         <div className="space-y-3 text-sm">
+          {bloqueadaPorConsolidado && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 space-y-1">
+              <p className="font-semibold">📋 Orden generada automáticamente desde el Consolidado — información heredada (no editable):</p>
+              <div className="grid grid-cols-2 gap-x-4">
+                <p><span className="text-blue-500">Código Tipo de Acabado:</span> <strong>{form.codigo_tipo_acabado || "—"}</strong></p>
+                <p><span className="text-blue-500">Tipo de Acabado:</span> <strong>{form.tipo_cuero_nombre || "—"}</strong></p>
+                <p><span className="text-blue-500">Código Color:</span> <strong>{form.codigo_color || "—"}</strong></p>
+                <p><span className="text-blue-500">Color:</span> <strong>{form.nombre_color || "—"}</strong></p>
+                <p><span className="text-blue-500">Código Placa:</span> <strong>{form.codigo_placa || "—"}</strong></p>
+                <p><span className="text-blue-500">Placa:</span> <strong>{form.placa_nombre || "—"}</strong></p>
+                <p><span className="text-blue-500">Calibre:</span> <strong>{form.calibre || "—"}</strong></p>
+                <p><span className="text-blue-500">Total Hojas:</span> <strong>{form.cantidad_total_hojas}</strong></p>
+              </div>
+              <p><span className="text-blue-500">Solicitudes incluidas:</span> {(form.solicitudes_ids || []).length} · <span className="text-blue-500">Solicitantes:</span> {(form.clientes_incluidos || []).join(", ") || "—"}</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Fecha *</Label><Input type="date" value={form.fecha} onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))} /></div>
+            <div><Label>Fecha Programada de Producción *</Label><Input type="date" value={form.fecha} onChange={e => setForm(p => ({ ...p, fecha: e.target.value }))} /></div>
             <div>
               <Label>Estado</Label>
               <Select value={form.estado} onValueChange={v => setForm(p => ({ ...p, estado: v }))}>
@@ -1110,29 +1158,33 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Tipo de Acabado</Label>
-              <Select value={form.tipo_cuero_id} onValueChange={v => { const t = tiposCuero.find(x => x.id === v); setForm(p => ({ ...p, tipo_cuero_id: v, tipo_cuero_nombre: t?.nombre || "" })); }}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Color</Label>
-              <Select value={form.codigo_color} onValueChange={v => { const c = colores.find(x => x.id === v); setForm(p => ({ ...p, codigo_color: c?.codigo_color || v, nombre_color: c?.nombre_color || "" })); }}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo_color} — {c.nombre_color}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Placa</Label>
-              <Select value={form.placa_id} onValueChange={v => { const p = placas.find(x => x.id === v); setForm(p2 => ({ ...p2, placa_id: v, placa_nombre: p?.nombre || "" })); }}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>{placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label>Total Hojas *</Label><Input type="number" value={form.cantidad_total_hojas} onChange={e => setForm(p => ({ ...p, cantidad_total_hojas: parseFloat(e.target.value) || 0 }))} /></div>
-            <div className="col-span-2"><Label>Pintor Responsable</Label><Input value={form.pintor_nombre} onChange={e => setForm(p => ({ ...p, pintor_nombre: e.target.value }))} placeholder="Nombre del pintor..." /></div>
+            {!bloqueadaPorConsolidado && (
+              <>
+                <div>
+                  <Label>Tipo de Acabado</Label>
+                  <Select value={form.tipo_cuero_id} onValueChange={v => { const t = tiposCuero.find(x => x.id === v); setForm(p => ({ ...p, tipo_cuero_id: v, codigo_tipo_acabado: t?.codigo || "", tipo_cuero_nombre: t?.nombre || "" })); }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Color</Label>
+                  <Select value={form.codigo_color} onValueChange={v => { const c = colores.find(x => x.id === v); setForm(p => ({ ...p, codigo_color: c?.codigo_color || v, nombre_color: c?.nombre_color || "" })); }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo_color} — {c.nombre_color}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Placa</Label>
+                  <Select value={form.placa_id} onValueChange={v => { const p = placas.find(x => x.id === v); setForm(p2 => ({ ...p2, placa_id: v, codigo_placa: p?.codigo || "", placa_nombre: p?.nombre || "" })); }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                    <SelectContent>{placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Total Hojas *</Label><Input type="number" value={form.cantidad_total_hojas} onChange={e => setForm(p => ({ ...p, cantidad_total_hojas: parseFloat(e.target.value) || 0 }))} /></div>
+              </>
+            )}
+            <div className="col-span-2"><Label>Responsable de Producción</Label><Input value={form.pintor_nombre} onChange={e => setForm(p => ({ ...p, pintor_nombre: e.target.value }))} placeholder="Nombre del responsable..." /></div>
           </div>
           <div><Label>Observaciones</Label><Textarea value={form.observaciones} onChange={e => setForm(p => ({ ...p, observaciones: e.target.value }))} rows={2} /></div>
         </div>

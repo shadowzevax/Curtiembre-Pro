@@ -1,5 +1,5 @@
 {
-  "version": "11.1",
+  "version": "11.2",
   "fecha": "2026-07-24",
-  "descripcion": "Pintura: Seguimiento General del Pedido y Resumen de Distribucion ahora se actualizan en tiempo real al agregar productos/sublotes sin necesidad de guardar (usaban el ultimo valor guardado en vez del total en vivo). PCP: nuevo Catalogo de Placas en Inventarios (igual patron que Catalogo Tipo de Acabado), Tipos de Acabado y Placas ahora se administran ahi en vez de en Catalogos PCP (se eliminaron esas 2 pestanas), Nueva Solicitud agrega columnas Codigo Tipo de Acabado y Codigo Placa con autocompletado independiente por linea"
+  "descripcion": "PCP: la Orden de Produccion generada desde el Consolidado ya no vuelve a pedir Tipo de Acabado/Color/Placa/Total (se heredan bloqueados); solo quedan editables Fecha Programada, Estado, Responsable y Observaciones. Consolidado ahora agrupa tambien por codigo y calibre, y muestra numero de solicitudes/hojas por solicitud."
 }
