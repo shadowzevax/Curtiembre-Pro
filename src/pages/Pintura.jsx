@@ -1298,7 +1298,10 @@ export default function Pintura() {
               {isEditing && currentItem?.id && (() => {
                 // Usar sublotes del estado local (en edición activa) para que refleje cambios no guardados
                 const subsHist = sublotes.length > 0 ? sublotes : (Array.isArray(currentItem?.sublotes_pintura) ? currentItem.sublotes_pintura : []);
-                const totalSolicitado = currentItem?.hojas_a_consumir || hojasAConsumir || 0;
+                // Prioriza el total EN VIVO (líneas/sublotes en memoria) sobre el último valor
+                // guardado, para que este bloque se actualice en tiempo real mientras el
+                // usuario sigue registrando productos/sublotes sin haber guardado aún.
+                const totalSolicitado = hojasAConsumir || currentItem?.hojas_a_consumir || 0;
                 const totalRegistrado = subsHist.reduce((s, sub) => s + (parseFloat(sub.cantidad_hojas) || 0), 0);
                 const totalPendiente = Math.max(0, totalSolicitado - totalRegistrado);
                 const pctAvance = totalSolicitado > 0 ? Math.min(100, (totalRegistrado / totalSolicitado * 100)).toFixed(1) : 0;

@@ -115,6 +115,7 @@ const menuItems = [
             { title: "Catálogo Maestro de Productos", url: createPageUrl("CatalogoProductos"), icon: Package },
             { title: "Catálogo de Colores", url: createPageUrl("CatalogoColores"), icon: Package },
             { title: "Catálogo Tipo de Acabado de Cuero", url: createPageUrl("CatalogoTipoAcabado"), icon: Package },
+            { title: "Catálogo de Placas", url: createPageUrl("CatalogoPlacas"), icon: Package },
             { title: "Inventario de Materias Primas", url: createPageUrl("InventarioProduccion"), icon: Package },
             { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
             { title: "Inventario Productos en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },

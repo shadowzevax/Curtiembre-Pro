@@ -64,6 +64,7 @@ import CatalogoMateriaPrima from './pages/CatalogoMateriaPrima';
 import CatalogoProductos from './pages/CatalogoProductos';
 import CatalogoProductosTerminados from './pages/CatalogoProductosTerminados';
 import CatalogoTipoAcabado from './pages/CatalogoTipoAcabado';
+import CatalogoPlacas from './pages/CatalogoPlacas';
 import CompraInsumos from './pages/CompraInsumos';
 import ComprobanteEgreso from './pages/ComprobanteEgreso';
 import ConciliacionBancaria from './pages/ConciliacionBancaria';
@@ -149,6 +150,7 @@ export const PAGES = {
     "CatalogoProductos": CatalogoProductos,
     "CatalogoProductosTerminados": CatalogoProductosTerminados,
     "CatalogoTipoAcabado": CatalogoTipoAcabado,
+    "CatalogoPlacas": CatalogoPlacas,
     "CompraInsumos": CompraInsumos,
     "ComprobanteEgreso": ComprobanteEgreso,
     "ConciliacionBancaria": ConciliacionBancaria,
