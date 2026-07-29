@@ -46,22 +46,26 @@ export function deriveCodigoProducto(colorBase, allInvProceso = []) {
 const tieneHijos = (item, todos) => todos.some((x) => x.codigo_lote_padre === item.codigo_lote);
 
 /**
+ * Total ORIGINAL de un lote padre (con el que nació), nunca el saldo pendiente.
+ * `cantidad_hojas` del padre se sobrescribe con el remanente cada vez que se
+ * guarda una partida (ver calcularRemanentePadre) — por eso cualquier cálculo
+ * que necesite "cuánto tenía el lote al recibirse" debe usar SIEMPRE esta
+ * función y jamás leer `cantidad_hojas` directamente del padre.
+ */
+export function totalOriginalLote(padre) {
+  const original = padre?.cantidad_hojas_original;
+  return (original ?? null) !== null ? (parseFloat(original) || 0) : (parseFloat(padre?.cantidad_hojas) || 0);
+}
+
+/**
  * Recalcula el stock real de un lote padre: total original menos la suma de
  * lo ya distribuido en sus partidas activas. Nunca deja el padre con stock
  * "fantasma" que se sume al de sus partidas (la causa de la duplicidad).
  */
 export function calcularRemanentePadre(padre, todos) {
-  const original = (padre.cantidad_hojas_original ?? null) !== null
-    ? parseFloat(padre.cantidad_hojas_original) || 0
-    : null;
+  const totalOriginal = totalOriginalLote(padre);
   const hijos = todos.filter((x) => x.codigo_lote_padre === padre.codigo_lote);
   const sumaHijos = hijos.reduce((s, h) => s + (parseFloat(h.cantidad_hojas) || 0), 0);
-
-  // Si aún no se ha capturado el total original, se toma el stock del padre
-  // tal como está guardado: en datos existentes (aún no corregidos) ese valor
-  // sigue siendo el total original real, porque nunca se había descontado
-  // automáticamente al crear partidas (la causa de la duplicidad reportada).
-  const totalOriginal = original !== null ? original : (parseFloat(padre.cantidad_hojas) || 0);
   const remanente = Math.max(0, totalOriginal - sumaHijos);
   return { totalOriginal, sumaHijos, remanente };
 }

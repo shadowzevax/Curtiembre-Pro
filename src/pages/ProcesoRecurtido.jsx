@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Eye, Table, CheckCircle2, Lock, AlertCircle, Search, X, Edit2, Ban, History, ChevronDown } from 'lucide-react';
 import LoteDetalleConsolidado from '../components/produccion/LoteDetalleConsolidado';
 import RecurtidoFichaIntegral from '../components/produccion/RecurtidoFichaIntegral';
-import { calcularRemanentePadre } from '@/lib/inventarioProceso';
+import { calcularRemanentePadre, totalOriginalLote } from '@/lib/inventarioProceso';
 
 const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(v || 0);
 const fmt2 = (v) => (parseFloat(v) || 0).toFixed(2);
@@ -318,7 +318,7 @@ export default function ProcesoRecurtido() {
 
   const calcPesoProporcional = (idx) => {
     if (!invSeleccionado) return 0;
-    const totalHojas = parseFloat(invSeleccionado.cantidad_hojas) || 1;
+    const totalHojas = totalOriginalLote(invSeleccionado) || 1;
     const pesoTotal  = parseFloat(invSeleccionado.peso_actual) || 0;
     const s = sublotesForm[idx];
     const hojas = parseFloat(s?.cantidad_hojas) || 0;
@@ -347,7 +347,10 @@ export default function ProcesoRecurtido() {
   };
 
   // ─── VALIDACIONES DISTRIBUCIÓN ────────────────────────────────────────────
-  const totalHojasLote   = parseFloat(invSeleccionado?.cantidad_hojas) || 0;
+  // IMPORTANTE: el total del lote SIEMPRE es el original con el que nació,
+  // nunca el saldo pendiente (`cantidad_hojas` del padre se sobrescribe con el
+  // remanente cada vez que se guarda una partida — ver totalOriginalLote()).
+  const totalHojasLote   = totalOriginalLote(invSeleccionado);
   const totalPesoLote    = parseFloat(invSeleccionado?.peso_actual) || 0;
   const hojasYaUsadas    = invSeleccionado && !isEditing
     ? getSublotesLote(invSeleccionado.codigo_lote).filter(p => p.estado !== 'anulado').reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0)
@@ -363,7 +366,7 @@ export default function ProcesoRecurtido() {
     const codigo = dataToSave.numero_proceso;
     const codigoLote = dataToSave.codigo_lote;
     const invPadre = allInvProceso.find(i => i.codigo_lote === codigoLote);
-    const totalHojasPadre = parseFloat(invPadre?.cantidad_hojas) || 0;
+    const totalHojasPadre = totalOriginalLote(invPadre);
     const costoPadreLote  = parseFloat(invPadre?.costo_acumulado) || 0;
     const hojasSub = parseFloat(dataToSave.cantidad_pieles) || 0;
     const costoHeredado = totalHojasPadre > 0 ? (hojasSub / totalHojasPadre) * costoPadreLote : 0;
@@ -466,7 +469,7 @@ export default function ProcesoRecurtido() {
       alert('❌ El Recurtido General de este lote ya fue finalizado.'); return;
     }
     if (!isEditing && hojasAsignadas > hojasDisponibles) {
-      alert(`❌ Las hojas asignadas (${hojasAsignadas}) superan las disponibles (${hojasDisponibles}).`); return;
+      alert(`❌ La cantidad ingresada supera las hojas disponibles del lote. Hojas disponibles: ${hojasDisponibles}.`); return;
     }
 
     setIsSaving(true);
@@ -576,7 +579,7 @@ export default function ProcesoRecurtido() {
   const handleFinalizarRecurtidoGeneral = async (codigoLote) => {
     const sublotes = getSublotesLote(codigoLote).filter(p => p.estado !== 'anulado');
     const inv = allInvProceso.find(i => i.codigo_lote === codigoLote);
-    const totalHojas = inv?.cantidad_hojas || 0;
+    const totalHojas = totalOriginalLote(inv);
     const totalRecurtido = sublotes.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
     const pendientes = sublotes.filter(p => p.estado !== 'completado');
 
@@ -631,7 +634,7 @@ export default function ProcesoRecurtido() {
   // Lote padre seleccionado para resumen
   const sublotesPadreSeleccionado = lotePadreControl ? procesos.filter(p => p.codigo_lote === lotePadreControl && p.estado !== 'anulado') : [];
   const invPadreSeleccionado = allInvProceso.find(i => i.codigo_lote === lotePadreControl);
-  const totalHojasPadre = parseFloat(invPadreSeleccionado?.cantidad_hojas) || 0;
+  const totalHojasPadre = totalOriginalLote(invPadreSeleccionado);
   const hojasProcesadas = sublotesPadreSeleccionado.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
   const hojasPendientes = Math.max(0, totalHojasPadre - hojasProcesadas);
   const pctAvance = totalHojasPadre > 0 ? Math.min(100, (hojasProcesadas / totalHojasPadre) * 100) : 0;
@@ -649,7 +652,7 @@ export default function ProcesoRecurtido() {
 
   const getCostosControl = (proc) => {
     const invP = allInvProceso.find(i => i.codigo_lote === proc.codigo_lote);
-    const totalH = parseFloat(invP?.cantidad_hojas) || 0;
+    const totalH = totalOriginalLote(invP);
     const costoL = parseFloat(invP?.costo_acumulado) || 0;
     const h = parseFloat(proc.cantidad_pieles) || 0;
     const costoHeredado = totalH > 0 ? (h / totalH) * costoL : 0;
@@ -666,7 +669,7 @@ export default function ProcesoRecurtido() {
   // ─── COSTOS FORM ─────────────────────────────────────────────────────────
   const getCostosSublotr = (sub) => {
     const inv = invSeleccionado;
-    const totalHojasLoteInv = parseFloat(inv?.cantidad_hojas) || 0;
+    const totalHojasLoteInv = totalOriginalLote(inv);
     const costoAcumLote = parseFloat(inv?.costo_acumulado) || 0;
     const hojasSubl = parseFloat(sub?.cantidad_hojas) || 0;
     const pesoSubl = parseFloat(sub?.peso_asignado) || 0;
@@ -907,7 +910,7 @@ export default function ProcesoRecurtido() {
                   // % Avance del lote padre
                   const siblingsPadre = procesos.filter(p => p.codigo_lote === proc.codigo_lote && p.estado !== 'anulado');
                   const invPadre = allInvProceso.find(i => i.codigo_lote === proc.codigo_lote);
-                  const totalHPadre = parseFloat(invPadre?.cantidad_hojas) || 0;
+                  const totalHPadre = totalOriginalLote(invPadre);
                   const hojasUsadasPadre = siblingsPadre.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
                   const hojasPendPadre = Math.max(0, totalHPadre - hojasUsadasPadre);
                   const pctPadre = totalHPadre > 0 ? Math.min(100, (hojasUsadasPadre / totalHPadre) * 100) : 0;
@@ -1048,17 +1051,21 @@ export default function ProcesoRecurtido() {
                   <SelectTrigger><SelectValue placeholder="Seleccionar lote curtido en proceso..." /></SelectTrigger>
                   <SelectContent>
                     {invFiltrados.length === 0 && <SelectItem value="__e__" disabled>No hay lotes disponibles</SelectItem>}
-                    {invFiltrados.map(inv => (
-                      <SelectItem key={inv.id} value={inv.id}>
-                        {inv.codigo_lote} — {inv.descripcion} ({inv.cantidad_hojas || 0} hojas | {inv.peso_actual || 0} kg)
-                      </SelectItem>
-                    ))}
+                    {invFiltrados.map(inv => {
+                      const { totalOriginal, remanente } = calcularRemanentePadre(inv, allInvProceso);
+                      return (
+                        <SelectItem key={inv.id} value={inv.id}>
+                          {inv.codigo_lote} — {inv.descripcion} ({totalOriginal} hojas totales · {remanente} disponibles | {inv.peso_actual || 0} kg)
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 {invSeleccionado && (
                   <div className="mt-3 grid grid-cols-4 gap-2 text-xs bg-white border border-indigo-200 rounded p-3">
                     <div><span className="font-semibold text-indigo-700">Lote Padre:</span> <span className="font-mono font-bold">{invSeleccionado.codigo_lote}</span></div>
-                    <div><span className="font-semibold text-indigo-700">Total Hojas:</span> {invSeleccionado.cantidad_hojas}</div>
+                    <div><span className="font-semibold text-indigo-700">Total Original del Lote:</span> {totalHojasLote} hojas</div>
+                    <div><span className="font-semibold text-indigo-700">Hojas ya Asignadas:</span> {hojasYaUsadas} hojas</div>
                     <div><span className="font-semibold text-indigo-700">Disponibles:</span> <strong className={hojasDisponibles === 0 ? 'text-red-600' : 'text-green-700'}>{hojasDisponibles} hojas</strong></div>
                     <div><span className="font-semibold text-indigo-700">Costo Acumulado:</span> {formatCurrency(invSeleccionado.costo_acumulado)}</div>
                   </div>
@@ -1091,7 +1098,7 @@ export default function ProcesoRecurtido() {
                   <div className={`px-5 py-2 text-xs flex items-center gap-4 border-b ${hojasRestantes < 0 ? 'bg-red-50 border-red-200' : hojasRestantes === 0 && sublotesForm.length > 0 ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
                     <span>Total lote: <strong>{totalHojasLote}</strong> hojas</span>|
                     <span>Asignadas: <strong className={hojasRestantes < 0 ? 'text-red-700' : 'text-orange-800'}>{hojasAsignadas}</strong></span>|
-                    <span>Restantes: <strong className={hojasRestantes < 0 ? 'text-red-700' : hojasRestantes === 0 ? 'text-green-700' : 'text-orange-700'}>{hojasRestantes}</strong></span>
+                    <span>Restantes: <strong className={hojasRestantes < 0 ? 'text-red-700' : hojasRestantes === 0 ? 'text-green-700' : 'text-orange-700'}>{Math.max(0, hojasRestantes)}</strong></span>
                     {hojasRestantes < 0 && <span className="text-red-700 font-bold">✖ Excede el total</span>}
                     {hojasRestantes === 0 && sublotesForm.length > 0 && <span className="text-green-700 font-bold">✔ Distribución completa</span>}
                   </div>

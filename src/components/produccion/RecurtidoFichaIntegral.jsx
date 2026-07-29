@@ -2,6 +2,7 @@ import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { totalOriginalLote } from '@/lib/inventarioProceso';
 
 const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(v || 0);
 const fmt2 = (v) => (parseFloat(v) || 0).toFixed(2);
@@ -26,7 +27,7 @@ export default function RecurtidoFichaIntegral({ open, onClose, selectedItem, al
   const { costoTotal } = getCostosControl(selectedItem);
   const costoHoja = (parseFloat(selectedItem.cantidad_pieles) || 0) > 0 ? costoTotal / parseFloat(selectedItem.cantidad_pieles) : 0;
   const invPadreD = allInvProceso.find(i => i.codigo_lote === selectedItem.codigo_lote);
-  const totalHPadreD = parseFloat(invPadreD?.cantidad_hojas) || 0;
+  const totalHPadreD = totalOriginalLote(invPadreD);
   const siblingsD = (procesos || []).filter(p => p.codigo_lote === selectedItem.codigo_lote && p.estado !== 'anulado');
   const hojasUsadasD = siblingsD.reduce((s, p) => s + (parseFloat(p.cantidad_pieles) || 0), 0);
   const pctPadreD = totalHPadreD > 0 ? Math.min(100, (hojasUsadasD / totalHPadreD) * 100) : 0;

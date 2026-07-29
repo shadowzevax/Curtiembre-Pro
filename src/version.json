@@ -1,5 +1,5 @@
 {
-  "version": "11.2",
-  "fecha": "2026-07-24",
-  "descripcion": "PCP: la Orden de Produccion generada desde el Consolidado ya no vuelve a pedir Tipo de Acabado/Color/Placa/Total (se heredan bloqueados); solo quedan editables Fecha Programada, Estado, Responsable y Observaciones. Consolidado ahora agrupa tambien por codigo y calibre, y muestra numero de solicitudes/hojas por solicitud."
+  "version": "12",
+  "fecha": "2026-07-29",
+  "descripcion": "Recurtido: corregido el calculo de hojas del lote padre. El sistema tomaba el saldo pendiente (cantidad_hojas, que se sobrescribe con el remanente al guardar cada partida) como si fuera el total original del lote, causando 'Restantes: -94 Excede el total' al crear la 2da partida. Ahora todo calculo de total de lote usa cantidad_hojas_original (nunca se reemplaza) en: validacion de guardado, panel de seleccion, resumen por lote, listado principal, Ficha Integral, calculo de costo heredado y peso proporcional. Restantes nunca muestra negativos. Verificado con el caso real L-2026-025 (194 originales, PR-001=100, PR-002=94, resultado 100% sin duplicar inventario)."
 }
