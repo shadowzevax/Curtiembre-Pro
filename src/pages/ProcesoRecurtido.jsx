@@ -89,6 +89,8 @@ export default function ProcesoRecurtido() {
   const [lotePadreControl, setLotePadreControl] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
+  const [procesandoFinalizarId, setProcesandoFinalizarId] = useState(null);
+  const [procesandoFinalizarGeneral, setProcesandoFinalizarGeneral] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -564,19 +566,30 @@ export default function ProcesoRecurtido() {
 
   // ─── FINALIZAR SUBLOTE ────────────────────────────────────────────────────
   const handleFinalizarSublote = async (proc) => {
+    if (procesandoFinalizarId) return; // evita doble ejecución por doble clic
+    if (proc.estado === 'completado') return; // ya finalizado, ignora reintentos
     if (!window.confirm(`¿Finalizar Partida Recurtido "${proc.nombre_color || proc.numero_proceso}"?`)) return;
+    setProcesandoFinalizarId(proc.id);
     try {
+      // Re-verifica contra la base de datos (no solo el estado local) antes de aplicar el cambio.
+      const actual = await ProcesoProduccion.get(proc.id);
+      if (actual?.estado === 'completado') {
+        alert('⚠️ Esta partida ya fue finalizada (posiblemente por un clic anterior).');
+        await loadData();
+        return;
+      }
       const dataUpd = { estado: 'completado', finalizar_recurtido: true, fecha_fin: new Date().toISOString().split('T')[0] };
       await ProcesoProduccion.update(proc.id, dataUpd);
       // Actualizar inventario
       const existentes = await InventarioEnProceso.filter({ proceso_origen_id: proc.id });
       for (const r of existentes) await InventarioEnProceso.update(r.id, { estado_proceso: 'piel_recurtida', estado_actual: 'EN_PROCESO' });
       await loadData();
-    } catch (err) { alert('Error: ' + err.message); }
+    } catch (err) { alert('Error: ' + err.message); } finally { setProcesandoFinalizarId(null); }
   };
 
   // ─── FINALIZAR RECURTIDO GENERAL ─────────────────────────────────────────
   const handleFinalizarRecurtidoGeneral = async (codigoLote) => {
+    if (procesandoFinalizarGeneral) return; // evita doble ejecución por doble clic
     const sublotes = getSublotesLote(codigoLote).filter(p => p.estado !== 'anulado');
     const inv = allInvProceso.find(i => i.codigo_lote === codigoLote);
     const totalHojas = totalOriginalLote(inv);
@@ -589,9 +602,23 @@ export default function ProcesoRecurtido() {
     if (totalHojas > 0 && totalRecurtido < totalHojas) {
       alert(`❌ Faltan ${totalHojas - totalRecurtido} hojas por registrar.`); return;
     }
+    if (inv?.estado_actual === 'DIVIDIDO') {
+      alert('⚠️ Este lote ya fue finalizado (posiblemente por un clic anterior).');
+      return;
+    }
     if (!window.confirm(`¿Finalizar el Recurtido General del lote ${codigoLote}?`)) return;
 
+    setProcesandoFinalizarGeneral(true);
     try {
+      // Re-verifica contra la base de datos antes de aplicar el cambio.
+      if (inv) {
+        const invActual = await InventarioEnProceso.get(inv.id);
+        if (invActual?.estado_actual === 'DIVIDIDO') {
+          alert('⚠️ Este lote ya fue finalizado (posiblemente por un clic anterior).');
+          await loadData();
+          return;
+        }
+      }
       for (const p of sublotes) {
         await ProcesoProduccion.update(p.id, { finalizar_recurtido_general: true });
       }
@@ -602,6 +629,8 @@ export default function ProcesoRecurtido() {
       alert(`✅ Recurtido General del lote ${codigoLote} finalizado.`);
     } catch (err) {
       alert('Error: ' + err.message);
+    } finally {
+      setProcesandoFinalizarGeneral(false);
     }
   };
 
@@ -992,7 +1021,7 @@ export default function ProcesoRecurtido() {
                             </Button>
                           )}
                           {!bloqueado && (
-                            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 px-1.5" onClick={(e) => { e.stopPropagation(); handleFinalizarSublote(proc); }} title="Finalizar">
+                            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 px-1.5" disabled={procesandoFinalizarId === proc.id} onClick={(e) => { e.stopPropagation(); handleFinalizarSublote(proc); }} title="Finalizar">
                               <CheckCircle2 className="w-3 h-3" />
                             </Button>
                           )}
@@ -1024,10 +1053,10 @@ export default function ProcesoRecurtido() {
                   </span>
                 )}
               </div>
-              <Button disabled={!puedeFinalizarGeneral}
+              <Button disabled={!puedeFinalizarGeneral || procesandoFinalizarGeneral}
                 onClick={() => handleFinalizarRecurtidoGeneral(lotePadreControl)}
                 className="bg-purple-700 hover:bg-purple-800 disabled:opacity-40">
-                <CheckCircle2 className="w-4 h-4 mr-2" />Finalizar Recurtido General
+                <CheckCircle2 className="w-4 h-4 mr-2" />{procesandoFinalizarGeneral ? 'Procesando...' : 'Finalizar Recurtido General'}
               </Button>
             </div>
           )}

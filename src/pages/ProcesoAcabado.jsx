@@ -21,6 +21,7 @@ export default function ProcesoAcabado() {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
@@ -85,6 +86,8 @@ export default function ProcesoAcabado() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSaving) return; // evita duplicar el registro si se hace doble clic o el botón se presiona de nuevo antes de la confirmación visual
+    setIsSaving(true);
     try {
         // Calcular costos
         const costoPlanchado = parseFloat(currentItem.planchado_costo) || 0;
@@ -110,6 +113,8 @@ export default function ProcesoAcabado() {
     } catch (error) {
         console.error('Error saving:', error);
         alert('Error al guardar el proceso.');
+    } finally {
+        setIsSaving(false);
     }
   };
 
@@ -240,7 +245,7 @@ export default function ProcesoAcabado() {
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button type="submit">Guardar</Button>
+              <Button type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : 'Guardar'}</Button>
             </div>
           </form>
         </DialogContent>

@@ -81,6 +81,8 @@ export default function Pintura() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [isProcesandoFinalizar, setIsProcesandoFinalizar] = useState(false);
+  const [isGuardandoBorrador, setIsGuardandoBorrador] = useState(false);
 
   // Productos en Proceso a Consumir: un pedido puede reservar hojas de VARIOS
   // productos en proceso (cada uno resuelto por FIFO a partir del Código Producto).
@@ -592,6 +594,7 @@ export default function Pintura() {
   };
 
   const handleSaveBorrador = async () => {
+    if (isGuardandoBorrador || isProcesandoFinalizar) return; // evita doble ejecución por doble clic o clic mientras ya está procesando
     if (productosProcesoLineas.length === 0) { alert('⚠️ Agregue al menos un Producto en Proceso a Consumir.'); return; }
     if (productosProcesoLineas.some(l => !l.invId)) { alert('⚠️ Hay líneas de Producto en Proceso sin una partida asignada. Elija un Código Producto válido o elimínelas.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
@@ -603,6 +606,7 @@ export default function Pintura() {
       alert(`❌ No se puede guardar: las hojas asignadas en sublotes (${totalHojasAsignadas}) superan las hojas a consumir (${hojasAConsumir}).\n\nReduzca la cantidad de hojas en alguno de los sublotes antes de continuar.`);
       return;
     }
+    setIsGuardandoBorrador(true);
     try {
       const res = getResumen();
       const sublotesSnapshot = JSON.parse(JSON.stringify(sublotes));
@@ -710,11 +714,20 @@ export default function Pintura() {
     } catch (error) {
       console.error('Error saving borrador:', error);
       alert('Error al guardar el borrador: ' + error.message);
+    } finally {
+      setIsGuardandoBorrador(false);
     }
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    // Idempotencia: si ya se está procesando esta finalización, o el proceso ya
+    // quedó finalizado (p.ej. se refrescó el estado tras el primer clic pero el
+    // usuario alcanzó a hacer un segundo submit antes de que se cerrara el modal),
+    // se ignora el submit para evitar registrar dos veces el mismo movimiento
+    // de inventario de Productos Terminados.
+    if (isProcesandoFinalizar || isGuardandoBorrador) return;
+    if (currentItem?.estado_pedido_pintura === 'terminado') return;
     if (productosProcesoLineas.length === 0) { alert('⚠️ Agregue al menos un Producto en Proceso a Consumir.'); return; }
     if (productosProcesoLineas.some(l => !l.invId)) { alert('⚠️ Hay líneas de Producto en Proceso sin una partida asignada.'); return; }
     if (hojasAConsumir <= 0) { alert('⚠️ Ingrese la cantidad de hojas a consumir.'); return; }
@@ -744,7 +757,23 @@ export default function Pintura() {
       return;
     }
 
+    setIsProcesandoFinalizar(true);
     try {
+      // Re-verifica contra la base de datos (no solo el estado local) que el
+      // proceso no haya sido finalizado ya por un clic/submit anterior que
+      // esté en vuelo: esto cubre el caso de doble clic real, no solo el
+      // bloqueo visual del botón.
+      if (isEditing && currentItem?.id) {
+        try {
+          const actual = await ProcesoProduccion.get(currentItem.id);
+          if (actual?.estado_pedido_pintura === 'terminado') {
+            alert('⚠️ Este proceso ya fue finalizado (posiblemente por un clic anterior). No se generará un movimiento de inventario duplicado.');
+            setShowModal(false);
+            loadData();
+            return;
+          }
+        } catch {}
+      }
       const res = getResumen();
       const productosProcesoConsumo = productosProcesoLineas.map(l => {
         const inv = inventarioEnProceso.find(i => i.id === l.invId);
@@ -834,6 +863,8 @@ export default function Pintura() {
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar el proceso: ' + error.message);
+    } finally {
+      setIsProcesandoFinalizar(false);
     }
   };
 
@@ -1534,6 +1565,15 @@ export default function Pintura() {
                           )}
                         </div>
                         <div>
+                          <Label className="text-xs font-bold text-orange-800">Nombre del Producto</Label>
+                          <Input
+                            value={inventarioEnProceso.find(i => i.id === subloteActivo.inv_proceso_id)?.descripcion_producto_proceso || ''}
+                            readOnly
+                            placeholder="—"
+                            className="text-xs h-9 bg-slate-50 cursor-not-allowed mt-1"
+                          />
+                        </div>
+                        <div>
                           <Label className="text-xs font-bold text-orange-800">Código Producto Terminado</Label>
                           <div className="relative mt-1">
                             <Input
@@ -2027,14 +2067,14 @@ export default function Pintura() {
                   <div className="flex gap-3">
                     <Button type="button" variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50"
                       onClick={handleSaveBorrador}
-                      disabled={hojasRestantesDistribucion < 0}>
-                      💾 Guardar Borrador
+                      disabled={hojasRestantesDistribucion < 0 || isGuardandoBorrador || isProcesandoFinalizar}>
+                      {isGuardandoBorrador ? '⏳ Guardando...' : '💾 Guardar Borrador'}
                     </Button>
                     <Button type="submit"
-                      disabled={!todosSublotesValidados || hojasRestantesDistribucion !== 0}
+                      disabled={!todosSublotesValidados || hojasRestantesDistribucion !== 0 || isProcesandoFinalizar || isGuardandoBorrador}
                       title={!todosSublotesValidados ? 'Valide todos los sublotes antes de finalizar' : hojasRestantesDistribucion !== 0 ? `Quedan ${hojasRestantesDistribucion} hojas pendientes` : ''}
-                      className={`${todosSublotesValidados && hojasRestantesDistribucion === 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />Finalizar Proceso
+                      className={`${todosSublotesValidados && hojasRestantesDistribucion === 0 && !isProcesandoFinalizar ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 text-slate-500 cursor-not-allowed'}`}>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />{isProcesandoFinalizar ? 'Procesando...' : 'Finalizar Proceso'}
                     </Button>
                   </div>
                 )}

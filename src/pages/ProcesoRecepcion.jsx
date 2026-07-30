@@ -26,6 +26,7 @@ export default function ProcesoRecepcion() {
   const [showSublotesModal, setShowSublotesModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -147,6 +148,7 @@ export default function ProcesoRecepcion() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSaving) return; // evita duplicar el registro/movimiento si se hace doble clic o el botón se presiona de nuevo antes de la confirmación visual
 
     // Validar sublotes: suma debe ser igual al total del lote
     if (currentItem.dividir_lote && sublotes.length > 0) {
@@ -183,6 +185,7 @@ export default function ProcesoRecepcion() {
       }
     }
 
+    setIsSaving(true);
     try {
       const dataToSave = {
         ...currentItem,
@@ -274,6 +277,8 @@ export default function ProcesoRecepcion() {
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar la recepción: ' + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -745,7 +750,7 @@ export default function ProcesoRecepcion() {
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button type="submit">Guardar</Button>
+              <Button type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : 'Guardar'}</Button>
             </div>
           </form>
         </DialogContent>

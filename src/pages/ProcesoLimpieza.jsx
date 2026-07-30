@@ -25,6 +25,7 @@ export default function ProcesoLimpieza() {
   const [showModal, setShowModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showConsolidadoModal, setShowConsolidadoModal] = useState(false);
@@ -205,6 +206,7 @@ export default function ProcesoLimpieza() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (isSaving) return; // evita duplicar el registro/movimiento si se hace doble clic o el botón se presiona de nuevo antes de la confirmación visual
     if (!currentItem.inv_proceso_id && !isEditing) {
       alert('⚠️ Debe seleccionar un "Código en Proceso" de la tabla central.');
       return;
@@ -263,6 +265,7 @@ export default function ProcesoLimpieza() {
       costo_pelambre: costoPelambreTotal,
     };
 
+    setIsSaving(true);
     try {
       if (isEditing) {
         await ProcesoProduccion.update(currentItem.id, dataToSave);
@@ -345,6 +348,8 @@ export default function ProcesoLimpieza() {
     } catch (error) {
       console.error('Error saving:', error);
       alert('Error al guardar el proceso: ' + error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -905,8 +910,8 @@ export default function ProcesoLimpieza() {
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button type="submit" className={currentItem?.finalizar_limpieza ? 'bg-emerald-600 hover:bg-emerald-700' : ''}>
-                {currentItem?.finalizar_limpieza ? '✅ Finalizar Limpieza y Guardar' : 'Guardar'}
+              <Button type="submit" disabled={isSaving} className={currentItem?.finalizar_limpieza ? 'bg-emerald-600 hover:bg-emerald-700' : ''}>
+                {isSaving ? 'Guardando...' : currentItem?.finalizar_limpieza ? '✅ Finalizar Limpieza y Guardar' : 'Guardar'}
               </Button>
             </div>
           </form>

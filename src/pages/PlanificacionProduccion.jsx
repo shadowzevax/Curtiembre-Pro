@@ -920,7 +920,17 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
       {expanded && (
         <div className="mt-2 text-xs space-y-1">
           {grupo.solicitudes.map(s => {
-            const totalH = (s.items || []).filter(i => (i.codigo_tipo_acabado || i.tipo_cuero_nombre) === (grupo.codigo_tipo_acabado || grupo.tipo_cuero_nombre)).reduce((sum, i) => sum + (i.cantidad_hojas || 0), 0);
+            // Debe sumar únicamente las hojas del detalle de ESTA solicitud que
+            // coincide exactamente con las características que formaron el grupo
+            // (tipo de acabado + color + placa + calibre), nunca el total de la
+            // solicitud completa — de lo contrario un solicitante con varias
+            // líneas distintas infla el total mostrado en cada grupo.
+            const totalH = (s.items || []).filter(i =>
+              (i.codigo_tipo_acabado || i.tipo_cuero_nombre) === (grupo.codigo_tipo_acabado || grupo.tipo_cuero_nombre) &&
+              (i.codigo_color || i.nombre_color) === (grupo.codigo_color || grupo.nombre_color) &&
+              (i.codigo_placa || i.placa_nombre) === (grupo.codigo_placa || grupo.placa_nombre) &&
+              (i.calibre || "") === (grupo.calibre || "")
+            ).reduce((sum, i) => sum + (i.cantidad_hojas || 0), 0);
             return (
               <div key={s.id} className="flex items-center gap-2 bg-white rounded p-1.5 border">
                 <span className="font-mono text-purple-700 font-bold">{s.numero_solicitud}</span>
