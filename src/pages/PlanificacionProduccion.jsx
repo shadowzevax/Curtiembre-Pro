@@ -13,6 +13,118 @@ import {
   Plus, Eye, Edit2, Trash2, CheckCircle2, Package, TrendingUp, Users, Clock, Layers, ChevronDown, ChevronUp, X, Save
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import jsPDF from "jspdf";
+
+// Genera un PDF real (.pdf) dibujando la matriz Color x Placa directamente con
+// jsPDF (sin capturar pantalla), por eso puede dispararse con un solo clic
+// desde la fila de la tabla sin necesidad de abrir el modal de vista previa.
+function exportarMatrizPDF({ titulo, campos, colores, placas, celdas, totalesPorColor, totalesPorPlaca, totalGeneral, observacionesLineas, pie, filename }) {
+  const doc = new jsPDF({ unit: "mm", format: "letter" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 12;
+  let y = 15;
+
+  const checkPageBreak = (needed) => {
+    if (y + needed > pageHeight - 15) { doc.addPage(); y = 15; return true; }
+    return false;
+  };
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.text(titulo, pageWidth / 2, y, { align: "center" });
+  y += 8;
+
+  doc.setFontSize(8.5);
+  campos.forEach(([label, value]) => {
+    doc.setFont("helvetica", "bold"); doc.text(`${label}:`, marginX, y);
+    doc.setFont("helvetica", "normal"); doc.text(String(value ?? "—"), marginX + 42, y);
+    y += 5;
+  });
+  y += 3;
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+  doc.text("MATRIZ DE PRODUCCIÓN (Color x Placa)", marginX, y);
+  y += 5;
+
+  if (colores.length === 0 || placas.length === 0) {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    doc.text("No hay datos suficientes para construir la matriz.", marginX, y);
+    y += 6;
+  } else {
+    const colWidthFirst = 32;
+    const availableWidth = pageWidth - marginX * 2 - colWidthFirst;
+    const numCols = placas.length + 1;
+    const colWidth = Math.max(14, availableWidth / numCols);
+    const rowHeight = 6;
+    const xTotal = marginX + colWidthFirst + placas.length * colWidth;
+
+    doc.setFillColor(30, 41, 59); doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7);
+    doc.rect(marginX, y, colWidthFirst, rowHeight, "F");
+    doc.text("COLOR", marginX + 1, y + 4);
+    placas.forEach((p, i) => {
+      const x = marginX + colWidthFirst + i * colWidth;
+      doc.rect(x, y, colWidth, rowHeight, "F");
+      doc.text(String(p).slice(0, 14), x + 1, y + 4);
+    });
+    doc.rect(xTotal, y, colWidth, rowHeight, "F");
+    doc.text("TOTAL", xTotal + 1, y + 4);
+    y += rowHeight;
+    doc.setTextColor(0, 0, 0);
+
+    colores.forEach(c => {
+      checkPageBreak(rowHeight);
+      doc.setFont("helvetica", "normal");
+      doc.rect(marginX, y, colWidthFirst, rowHeight);
+      doc.text(String(c).slice(0, 18), marginX + 1, y + 4);
+      placas.forEach((p, i) => {
+        const x = marginX + colWidthFirst + i * colWidth;
+        doc.rect(x, y, colWidth, rowHeight);
+        doc.text(String(celdas[c]?.[p] || 0), x + colWidth / 2, y + 4, { align: "center" });
+      });
+      doc.rect(xTotal, y, colWidth, rowHeight);
+      doc.setFont("helvetica", "bold");
+      doc.text(String(totalesPorColor[c]), xTotal + colWidth / 2, y + 4, { align: "center" });
+      y += rowHeight;
+    });
+
+    checkPageBreak(rowHeight);
+    doc.setFont("helvetica", "bold");
+    doc.rect(marginX, y, colWidthFirst, rowHeight);
+    doc.text("TOTAL PLACA", marginX + 1, y + 4);
+    placas.forEach((p, i) => {
+      const x = marginX + colWidthFirst + i * colWidth;
+      doc.rect(x, y, colWidth, rowHeight);
+      doc.text(String(totalesPorPlaca[p]), x + colWidth / 2, y + 4, { align: "center" });
+    });
+    doc.rect(xTotal, y, colWidth, rowHeight);
+    doc.text(String(totalGeneral), xTotal + colWidth / 2, y + 4, { align: "center" });
+    y += rowHeight + 6;
+  }
+
+  checkPageBreak(10);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+  doc.text("OBSERVACIONES", marginX, y); y += 5;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+  if (!observacionesLineas.length) {
+    doc.text("Sin observaciones registradas.", marginX, y); y += 4.5;
+  } else {
+    observacionesLineas.forEach(linea => {
+      const wrapped = doc.splitTextToSize(linea, pageWidth - marginX * 2);
+      wrapped.forEach(wl => { checkPageBreak(4.5); doc.text(wl, marginX, y); y += 4.5; });
+    });
+  }
+  y += 4;
+
+  checkPageBreak(6 * (pie.length + 1));
+  doc.setDrawColor(0);
+  doc.line(marginX, y, pageWidth - marginX, y); y += 6;
+  doc.setFontSize(8);
+  pie.forEach(linea => { doc.text(linea, marginX, y); y += 6; });
+
+  doc.save(filename);
+}
 
 const fmtDate = (d) => { if (!d) return "—"; try { return new Date(d + "T00:00:00").toLocaleDateString("es-CO"); } catch { return d; } };
 const today = () => new Date().toISOString().split("T")[0];
@@ -351,6 +463,99 @@ export default function PlanificacionProduccion() {
     return { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, tiposAcabado };
   };
 
+  const descargarCSV = (filas, filename) => {
+    const csv = filas.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ── Exportación directa desde la fila de la tabla (sin abrir el modal) ──
+  const handleExportExcelOrden = (ord) => {
+    const m = construirMatrizPintor(ord);
+    const filas = [
+      ["FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR"],
+      ["N. Orden", ord.numero_orden],
+      ["Código Pedido Consolidado", (m.solicitudesNumeros || []).join(", ")],
+      ["Fecha", fmtDate(ord.fecha)],
+      ["Pintor", ord.pintor_nombre || ""],
+      ["Tipo de Acabado", ord.tipo_cuero_nombre || ""],
+      ["Calibre", ord.calibre || ""],
+      ["Total Hojas", m.totalGeneral],
+      ["Fecha de impresión", new Date().toLocaleString("es-CO")],
+      [],
+      ["COLOR", ...m.placas, "TOTAL COLOR"],
+      ...m.colores.map(c => [c, ...m.placas.map(p => m.celdas[c]?.[p] || 0), m.totalesPorColor[c]]),
+      ["TOTAL PLACA", ...m.placas.map(p => m.totalesPorPlaca[p]), m.totalGeneral],
+      [],
+      ["OBSERVACIONES"],
+      ...m.observaciones.map(o => [`${o.numero} — ${o.solicitante}${!o.general ? ` (${o.color}/${o.placa})` : ""}: ${o.obs}`]),
+    ];
+    descargarCSV(filas, `formato_pintor_${ord.numero_orden}.csv`);
+  };
+
+  const handleExportPdfOrden = (ord) => {
+    const m = construirMatrizPintor(ord);
+    exportarMatrizPDF({
+      titulo: "FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR",
+      campos: [
+        ["N.º Orden", ord.numero_orden],
+        ["Código Pedido Consolidado", (m.solicitudesNumeros || []).join(", ")],
+        ["Fecha", fmtDate(ord.fecha)],
+        ["Pintor", ord.pintor_nombre || ""],
+        ["Tipo de Acabado", ord.tipo_cuero_nombre || ""],
+        ["Calibre", ord.calibre || ""],
+        ["Fecha de Impresión", new Date().toLocaleString("es-CO")],
+      ],
+      colores: m.colores, placas: m.placas, celdas: m.celdas,
+      totalesPorColor: m.totalesPorColor, totalesPorPlaca: m.totalesPorPlaca, totalGeneral: m.totalGeneral,
+      observacionesLineas: m.observaciones.map(o => `${o.numero} — ${o.solicitante}${!o.general ? ` (${o.color}/${o.placa})` : ""}: ${o.obs}`),
+      pie: ["Pintor: ______________________________     Fecha de recibido: ______________", "Observaciones del pintor: ____________________________________________", "Firma: ______________________________"],
+      filename: `formato_pintor_${ord.numero_orden}.pdf`,
+    });
+  };
+
+  const handleExportExcelSolicitud = (sol) => {
+    const m = construirMatrizSolicitud(sol);
+    const filas = [
+      ["MATRIZ INDIVIDUAL — ENTREGA A SOLICITANTE"],
+      ["N. Solicitud", sol.numero_solicitud],
+      ["Solicitante", sol.cliente_nombre || ""],
+      ["Tipo de Acabado", m.tiposAcabado.join(", ")],
+      ["Total Hojas", m.totalGeneral],
+      ["Fecha de impresión", new Date().toLocaleString("es-CO")],
+      [],
+      ["COLOR", ...m.placas, "TOTAL COLOR"],
+      ...m.colores.map(c => [c, ...m.placas.map(p => m.celdas[c]?.[p] || 0), m.totalesPorColor[c]]),
+      ["TOTAL PLACA", ...m.placas.map(p => m.totalesPorPlaca[p]), m.totalGeneral],
+      [],
+      ["OBSERVACIONES", sol.observaciones || ""],
+    ];
+    descargarCSV(filas, `matriz_individual_${sol.numero_solicitud}.csv`);
+  };
+
+  const handleExportPdfSolicitud = (sol) => {
+    const m = construirMatrizSolicitud(sol);
+    exportarMatrizPDF({
+      titulo: "MATRIZ INDIVIDUAL — ENTREGA A SOLICITANTE",
+      campos: [
+        ["N.º Solicitud", sol.numero_solicitud],
+        ["Solicitante", sol.cliente_nombre || ""],
+        ["Tipo de Acabado", m.tiposAcabado.join(", ")],
+        ["Fecha de Impresión", new Date().toLocaleString("es-CO")],
+      ],
+      colores: m.colores, placas: m.placas, celdas: m.celdas,
+      totalesPorColor: m.totalesPorColor, totalesPorPlaca: m.totalesPorPlaca, totalGeneral: m.totalGeneral,
+      observacionesLineas: sol.observaciones ? [sol.observaciones] : [],
+      pie: ["Entregado por: ______________________________     Fecha de entrega: ______________", "Recibido (Firma): ______________________________"],
+      filename: `matriz_individual_${sol.numero_solicitud}.pdf`,
+    });
+  };
+
   return (
     <div className="p-6 space-y-4">
       {/* Header */}
@@ -525,6 +730,8 @@ export default function PlanificacionProduccion() {
                             <div className="flex justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setEditingSolicitud(sol); setShowSolicitudModal(true); }}><Edit2 className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" title="Imprimir Matriz Individual" onClick={() => setMatrizIndividualSol(sol)}>🖨</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-700" title="Exportar Excel" onClick={() => handleExportExcelSolicitud(sol)}>📊</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-700" title="Exportar PDF" onClick={() => handleExportPdfSolicitud(sol)}>📄</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={async () => { if (confirm("¿Eliminar solicitud?")) { await base44.entities.SolicitudProduccion.delete(sol.id); loadData(); } }}><Trash2 className="w-3 h-3" /></Button>
                             </div>
                           </td>
@@ -668,6 +875,8 @@ export default function PlanificacionProduccion() {
                             <div className="flex justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-purple-600" onClick={() => { setAvanceOrden(ord); setShowAvanceModal(true); }} title="Registrar avance"><TrendingUp className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" onClick={() => setFormatoPintorOrden(ord)} title="Imprimir formato para pintor">🖨</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-700" title="Exportar Excel" onClick={() => handleExportExcelOrden(ord)}>📊</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-700" title="Exportar PDF" onClick={() => handleExportPdfOrden(ord)}>📄</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600" onClick={() => { setEditingOrden(ord); setShowOrdenModal(true); }}><Edit2 className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={async () => { if (confirm("¿Eliminar orden?")) { await base44.entities.OrdenProduccionPCP.delete(ord.id); loadData(); } }}><Trash2 className="w-3 h-3" /></Button>
                             </div>
@@ -1051,36 +1260,6 @@ function FormatoPintorModal({ orden, matriz, onClose }) {
   const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones, solicitudesNumeros } = matriz;
   const fechaImpresion = new Date().toLocaleString("es-CO");
 
-  const handleExportExcel = () => {
-    const filas = [
-      ["FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR"],
-      ["N. Orden", orden.numero_orden],
-      ["Código Pedido Consolidado", (solicitudesNumeros || []).join(", ")],
-      ["Fecha", fmtDate(orden.fecha)],
-      ["Pintor", orden.pintor_nombre || ""],
-      ["Tipo de Acabado", orden.tipo_cuero_nombre || ""],
-      ["Calibre", orden.calibre || ""],
-      ["Total Hojas", totalGeneral],
-      ["Fecha de impresión", fechaImpresion],
-      [],
-      ["COLOR", ...placas, "TOTAL COLOR"],
-      ...colores.map(c => [c, ...placas.map(p => celdas[c]?.[p] || 0), totalesPorColor[c]]),
-      ["TOTAL PLACA", ...placas.map(p => totalesPorPlaca[p]), totalGeneral],
-      [],
-      ["OBSERVACIONES"],
-      ...observaciones.map(o => [`${o.numero} — ${o.solicitante}${!o.general ? ` (${o.color}/${o.placa})` : ""}: ${o.obs}`]),
-      ...(obsGeneral ? [["Observación general:", obsGeneral]] : []),
-    ];
-    const csv = filas.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `formato_pintor_${orden.numero_orden}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1180,8 +1359,6 @@ function FormatoPintorModal({ orden, matriz, onClose }) {
 
         <div className="flex justify-end gap-2 pt-4 no-print">
           <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
-          <Button type="button" variant="outline" onClick={handleExportExcel}>📊 Exportar Excel</Button>
-          <Button type="button" variant="outline" onClick={() => window.print()} title='En el diálogo de impresión, elija "Guardar como PDF" como destino'>📄 Exportar PDF</Button>
           <Button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900">🖨 Imprimir</Button>
         </div>
       </DialogContent>
@@ -1196,31 +1373,6 @@ function FormatoPintorModal({ orden, matriz, onClose }) {
 function MatrizIndividualModal({ solicitud, matriz, onClose }) {
   const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, tiposAcabado } = matriz;
   const fechaImpresion = new Date().toLocaleString("es-CO");
-
-  const handleExportExcel = () => {
-    const filas = [
-      ["MATRIZ INDIVIDUAL — ENTREGA A SOLICITANTE"],
-      ["N. Solicitud", solicitud.numero_solicitud],
-      ["Solicitante", solicitud.cliente_nombre || ""],
-      ["Tipo de Acabado", tiposAcabado.join(", ")],
-      ["Total Hojas", totalGeneral],
-      ["Fecha de impresión", fechaImpresion],
-      [],
-      ["COLOR", ...placas, "TOTAL COLOR"],
-      ...colores.map(c => [c, ...placas.map(p => celdas[c]?.[p] || 0), totalesPorColor[c]]),
-      ["TOTAL PLACA", ...placas.map(p => totalesPorPlaca[p]), totalGeneral],
-      [],
-      ["OBSERVACIONES", solicitud.observaciones || ""],
-    ];
-    const csv = filas.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `matriz_individual_${solicitud.numero_solicitud}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -1296,8 +1448,6 @@ function MatrizIndividualModal({ solicitud, matriz, onClose }) {
 
         <div className="flex justify-end gap-2 pt-4 no-print">
           <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
-          <Button type="button" variant="outline" onClick={handleExportExcel}>📊 Exportar Excel</Button>
-          <Button type="button" variant="outline" onClick={() => window.print()} title='En el diálogo de impresión, elija "Guardar como PDF" como destino'>📄 Exportar PDF</Button>
           <Button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900">🖨 Imprimir</Button>
         </div>
       </DialogContent>
