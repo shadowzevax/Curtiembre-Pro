@@ -31,7 +31,6 @@ export const OrdenCompra = makeEntity('OrdenCompra');
 export const OrdenProduccionPCP = makeEntity('OrdenProduccionPCP');
 export const OrdenVenta = makeEntity('OrdenVenta');
 export const PedidoMarroquinero = makeEntity('PedidoMarroquinero');
-export const PlacaPCP = makeEntity('PlacaPCP');
 export const PlanCuentas = makeEntity('PlanCuentas');
 export const ProcesoProduccion = makeEntity('ProcesoProduccion');
 export const ProductoCatalogo = makeEntity('ProductoCatalogo');
