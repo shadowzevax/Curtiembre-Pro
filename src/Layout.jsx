@@ -81,29 +81,16 @@ const menuItems = [
         ]
     },
     {
-        title: "Finanzas/Tesorería",
+        title: "Finanzas y Tesorería",
         icon: Users,
         roles: ["admin", "contador"],
         subItems: [
-            { title: "Recibo de Caja", url: createPageUrl("ReciboCaja"), icon: Calculator },
-            { title: "Comprobante de Egreso", url: createPageUrl("ComprobanteEgreso"), icon: Calculator },
-            { title: "Cuentas por Pagar", url: createPageUrl("CuentasPorPagar"), icon: Calculator },
-            { title: "Cuentas por Cobrar", url: createPageUrl("CuentasPorCobrar"), icon: Calculator },
-            {
-                title: "Gestión de Efectivo", icon: Calculator, subItems: [
-                    { title: "Configuración de Cajas", url: createPageUrl("CajaConfig"), icon: Calculator },
-                    { title: "Movimientos de Caja", url: createPageUrl("CajaMovimientos"), icon: Calculator },
-                    { title: "Transferencias entre Cajas", url: createPageUrl("CajaTransferencias"), icon: Calculator }
-                ]
-            },
-            {
-                title: "Gestión Bancaria", icon: Calculator, subItems: [
-                    { title: "Cuentas Bancarias", url: createPageUrl("CuentasBancarias"), icon: Calculator },
-                    { title: "Movimientos Bancarios", url: createPageUrl("MovimientosBancarios"), icon: Calculator },
-                    { title: "Transferencias Internas", url: createPageUrl("TransferenciasBancarias"), icon: Calculator },
-                    { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator }
-                ]
-            }
+            { title: "Caja", url: createPageUrl("FinanzasCaja"), icon: Calculator },
+            { title: "Bancos", url: createPageUrl("FinanzasBancos"), icon: Calculator },
+            { title: "Cuentas por Cobrar", url: createPageUrl("FinanzasCuentasCobrar"), icon: Calculator },
+            { title: "Cuentas por Pagar", url: createPageUrl("FinanzasCuentasPagar"), icon: Calculator },
+            { title: "Tesorería", url: createPageUrl("FinanzasTesoreria"), icon: Calculator },
+            { title: "Cuentas Bancarias (catálogo)", url: createPageUrl("CuentasBancarias"), icon: Calculator },
         ]
     },
     {
@@ -130,15 +117,9 @@ const menuItems = [
         roles: ["admin", "contador"],
         subItems: [
             { title: "Libro Diario", url: createPageUrl("LibroDiario"), icon: Calculator },
-            { title: "Plan de Cuentas", url: createPageUrl("PlanCuentas"), icon: Calculator },
-            { title: "Libro Mayor/Balances", url: createPageUrl("LibroMayor"), icon: Calculator },
-            { title: "Gastos", url: createPageUrl("ContabilidadGastos"), icon: Calculator },
-            { title: "Otros Ingresos", url: createPageUrl("ContabilidadIngresos"), icon: Calculator },
-            { title: "Traslados Efectivo", url: createPageUrl("ContabilidadTraslados"), icon: Calculator },
-            { title: "Cuentas por Pagar", url: createPageUrl("ContabilidadPagar"), icon: Calculator },
-            { title: "Cuentas por Cobrar", url: createPageUrl("ContabilidadCobrar"), icon: Calculator },
-            { title: "Informe de Caja", url: createPageUrl("InformeCaja"), icon: Calculator },
-            { title: "Informe de Costos", url: createPageUrl("InformeCostos"), icon: Calculator }
+            { title: "Libro Mayor", url: createPageUrl("LibroMayor"), icon: Calculator },
+            { title: "Libro Auxiliar Contable", url: createPageUrl("LibroAuxiliarContable"), icon: Calculator },
+            { title: "Comprobantes Contables", url: createPageUrl("ComprobantesContables"), icon: Calculator },
         ]
     },
     {
@@ -146,14 +127,12 @@ const menuItems = [
         icon: TrendingUp,
         roles: ["admin", "contador", "operario"],
         subItems: [
-            { title: "Reportes de Ventas", url: createPageUrl("ReportesVentas"), icon: TrendingUp },
-            { title: "Reportes de Compras", url: createPageUrl("ReportesCompras"), icon: TrendingUp },
-            { title: "Reportes de Inventario", url: createPageUrl("ReportesInventario"), icon: TrendingUp },
-            { title: "Reportes de Producción", url: createPageUrl("ReportesProduccion"), icon: TrendingUp },
-            { title: "Reportes Financieros", url: createPageUrl("ReportesFinancieros"), icon: TrendingUp },
-            { title: "Reportes de Procesos", url: createPageUrl("ReportesProcesos"), icon: TrendingUp },
-            { title: "Reportes Bancarios", url: createPageUrl("ReportesBancarios"), icon: TrendingUp },
-            { title: "Reportes de Movimientos de Caja", url: createPageUrl("ReportesMovimientosCaja"), icon: TrendingUp }
+            { title: "Área de Tesorería", url: createPageUrl("ReportesAreaTesoreria"), icon: TrendingUp },
+            { title: "Área de Cuentas por Cobrar", url: createPageUrl("ReportesAreaCuentasCobrar"), icon: TrendingUp },
+            { title: "Área de Cuentas por Pagar", url: createPageUrl("ReportesAreaCuentasPagar"), icon: TrendingUp },
+            { title: "Área de Inventarios", url: createPageUrl("ReportesAreaInventarios"), icon: TrendingUp },
+            { title: "Área de Producción", url: createPageUrl("ReportesAreaProduccion"), icon: TrendingUp },
+            { title: "Área Comercial y Financiera", url: createPageUrl("ReportesAreaComercial"), icon: TrendingUp },
         ]
     },
     {
