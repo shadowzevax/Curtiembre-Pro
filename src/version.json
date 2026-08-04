@@ -1,6 +1,6 @@
 {
-  "version": "18.1",
+  "version": "19",
   "fecha": "2026-08-04",
-  "descripcion": "Correccion critica: las paginas nuevas de la reestructuracion de Finanzas/Contabilidad/Reportes (v18) no se habian registrado en pages.config.js, por lo que daban error 404 aunque el menu las enlazaba correctamente; ya quedaron registradas y accesibles",
+  "descripcion": "PCP Registrar Avance: ahora muestra el detalle completo Color+Placa de la orden (Programadas/Producidas/Pendientes calculados solos) en vez de un unico campo de cantidad total; el usuario solo digita Registrar hoy por linea, se acumula sobre el historial sin nunca reemplazarlo, y valida cantidades negativas, que superen lo pendiente, lineas ya completas u ordenes ya finalizadas|Historial de avances: cada registro queda con fecha, hora, usuario, color, placa, cantidad y observaciones, consultable desde un boton Historial por orden|Produccion en Curso: dejo de ser un listado plano de registros y ahora es un tablero en tiempo real (indicadores de ordenes en produccion, hojas programadas/producidas/pendientes, avance promedio, ordenes proximas a finalizar y retrasadas) alimentado 100% por los mismos datos de Registrar Avance, sin formulario propio; al completarse el 100% de una orden pasa automaticamente a Produccion Terminada, sale de este tablero y queda disponible en una nueva cola de Pendientes de Control de Calidad",
   "advertencias": ""
 }

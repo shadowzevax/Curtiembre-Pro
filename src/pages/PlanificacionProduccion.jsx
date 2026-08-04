@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import jsPDF from "jspdf";
+import { useAuth } from "@/lib/AuthContext";
 
 // Genera un PDF real (.pdf) dibujando la matriz Color x Placa directamente con
 // jsPDF (sin capturar pantalla), por eso puede dispararse con un solo clic
@@ -160,6 +161,7 @@ const ESTADO_LABEL = {
 };
 
 export default function PlanificacionProduccion() {
+  const { user } = useAuth();
   const [tab, setTab] = useState("dashboard");
   const [solicitudes, setSolicitudes] = useState([]);
   const [ordenes, setOrdenes] = useState([]);
@@ -186,6 +188,7 @@ export default function PlanificacionProduccion() {
   const [showCalidadModal, setShowCalidadModal] = useState(false);
   const [formatoPintorOrden, setFormatoPintorOrden] = useState(null);
   const [matrizIndividualSol, setMatrizIndividualSol] = useState(null);
+  const [historialOrden, setHistorialOrden] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -434,6 +437,68 @@ export default function PlanificacionProduccion() {
     colores.forEach(c => { totalesPorColor[c] = placas.reduce((s, p) => s + (celdas[c]?.[p] || 0), 0); });
 
     return { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones, solicitudesNumeros: solsOrden.map(s => s.numero_solicitud) };
+  };
+
+  // Detalle Color x Placa de una orden, con lo Producido acumulado hasta ahora
+  // (sumando todo el historial de AvanceProduccionPCP de esa orden por línea).
+  // Esta es la ÚNICA fuente de verdad para "Registrar Avance" y para el
+  // tablero "Producción en Curso": ambos leen de aquí, nada se duplica.
+  const construirLineasOrden = (orden) => {
+    const matriz = construirMatrizPintor(orden);
+    const avancesOrden = avances.filter(a => a.orden_id === orden.id);
+    const lineas = [];
+    matriz.colores.forEach(color => {
+      matriz.placas.forEach(placa => {
+        const programadas = matriz.celdas[color]?.[placa] || 0;
+        if (programadas <= 0) return; // no mostrar combinaciones que no existen en la orden
+        const producidas = avancesOrden
+          .filter(a => (a.color || "") === color && (a.placa || "") === placa)
+          .reduce((s, a) => s + (parseFloat(a.cantidad_producida) || 0), 0);
+        lineas.push({ color, placa, programadas, producidas, pendiente: Math.max(0, programadas - producidas) });
+      });
+    });
+    const totalProgramadas = lineas.reduce((s, l) => s + l.programadas, 0);
+    const totalProducidas = lineas.reduce((s, l) => s + l.producidas, 0);
+    const totalPendiente = Math.max(0, totalProgramadas - totalProducidas);
+    const pctAvance = totalProgramadas > 0 ? (totalProducidas / totalProgramadas) * 100 : 0;
+    const ultimoAvance = avancesOrden.reduce((max, a) => (!max || new Date(a.fecha) > new Date(max) ? a.fecha : max), null);
+    return { lineas, totalProgramadas, totalProducidas, totalPendiente, pctAvance, ultimoAvance };
+  };
+
+  // Guarda un lote de registros de avance (uno por línea Color+Placa con
+  // cantidad > 0), acumulando siempre sobre el historial existente — nunca
+  // reemplaza registros anteriores. Al final recalcula el total de la orden
+  // contra TODO el historial (no solo lo recién creado) y decide el estado:
+  // primer avance → en_produccion; todas las líneas en 0 pendiente → finalizada.
+  const handleGuardarAvance = async (orden, registros, observaciones) => {
+    if (orden.estado === "finalizada") {
+      alert("Esta orden ya fue finalizada. No es posible registrar más producción.");
+      return;
+    }
+    const ahora = new Date();
+    const fecha = ahora.toISOString().split("T")[0];
+    const hora = ahora.toTimeString().slice(0, 5);
+    const usuario = user?.full_name || user?.email || "Sistema";
+    for (const r of registros) {
+      await base44.entities.AvanceProduccionPCP.create({
+        orden_id: orden.id, orden_numero: orden.numero_orden,
+        fecha, hora, usuario,
+        color: r.color, placa: r.placa,
+        cantidad_producida: r.cantidad, observaciones: observaciones || "",
+      });
+    }
+    const avancesActualizados = await base44.entities.AvanceProduccionPCP.filter({ orden_id: orden.id });
+    const totalProducidas = (Array.isArray(avancesActualizados) ? avancesActualizados : [])
+      .reduce((s, a) => s + (parseFloat(a.cantidad_producida) || 0), 0);
+    const nuevoEstado = totalProducidas >= (orden.cantidad_total_hojas || 0) ? "finalizada" : "en_produccion";
+    const dataUpd = { hojas_producidas: totalProducidas, estado: nuevoEstado };
+    if (nuevoEstado === "finalizada") dataUpd.fecha_finalizacion = ahora.toISOString();
+    await base44.entities.OrdenProduccionPCP.update(orden.id, dataUpd);
+    await loadData();
+    setShowAvanceModal(false);
+    if (nuevoEstado === "finalizada") {
+      alert(`✅ Orden ${orden.numero_orden} completada al 100%. Pasó automáticamente a Producción Terminada y queda disponible para Control de Calidad.`);
+    }
   };
 
   // Matriz Color x Placa de UNA sola solicitud (para entrega física individual
@@ -873,7 +938,7 @@ export default function PlanificacionProduccion() {
                           <td className="p-2 text-center"><Badge className={`text-xs ${ESTADO_BADGE[ord.estado]}`}>{ESTADO_LABEL[ord.estado]}</Badge></td>
                           <td className="p-2 text-center">
                             <div className="flex justify-center gap-1">
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-purple-600" onClick={() => { setAvanceOrden(ord); setShowAvanceModal(true); }} title="Registrar avance"><TrendingUp className="w-3 h-3" /></Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-purple-600" disabled={ord.estado === "finalizada"} onClick={() => { setAvanceOrden(ord); setShowAvanceModal(true); }} title="Registrar avance"><TrendingUp className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" onClick={() => setFormatoPintorOrden(ord)} title="Imprimir formato para pintor">🖨</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-700" title="Exportar Excel" onClick={() => handleExportExcelOrden(ord)}>📊</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-700" title="Exportar PDF" onClick={() => handleExportPdfOrden(ord)}>📄</Button>
@@ -893,39 +958,78 @@ export default function PlanificacionProduccion() {
 
         {/* ──────────── AVANCES ──────────── */}
         <TabsContent value="avances">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Producción en Curso — Registro de Avances</CardTitle></CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-800 text-white">
-                    <tr>
-                      <th className="p-2 text-left">Orden</th>
-                      <th className="p-2 text-left">Fecha</th>
-                      <th className="p-2 text-right">Cant. Producida</th>
-                      <th className="p-2 text-left">Observaciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {avances.length === 0 ? (
-                      <tr><td colSpan={4} className="p-4 text-center text-slate-400">No hay avances registrados.</td></tr>
-                    ) : avances.map(a => (
-                      <tr key={a.id} className="border-t hover:bg-slate-50">
-                        <td className="p-2 font-mono font-bold text-blue-700">{a.orden_numero}</td>
-                        <td className="p-2">{fmtDate(a.fecha)}</td>
-                        <td className="p-2 text-right font-bold text-emerald-700">{a.cantidad_producida}</td>
-                        <td className="p-2 text-slate-500">{a.observaciones || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {(() => {
+            const enCurso = ordenes.filter(o => o.estado === "en_produccion");
+            const filas = enCurso.map(o => ({ orden: o, r: construirLineasOrden(o) }));
+            const totalProgramadas = filas.reduce((s, x) => s + x.r.totalProgramadas, 0);
+            const totalProducidas = filas.reduce((s, x) => s + x.r.totalProducidas, 0);
+            const totalPendiente = filas.reduce((s, x) => s + x.r.totalPendiente, 0);
+            const avgAvance = filas.length ? filas.reduce((s, x) => s + x.r.pctAvance, 0) / filas.length : 0;
+            const proximasAFinalizar = filas.filter(x => x.r.pctAvance >= 80 && x.r.pctAvance < 100).length;
+            const retrasadas = filas.filter(x => x.orden.fecha && new Date(x.orden.fecha + "T00:00:00") < new Date(today() + "T00:00:00")).length;
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                  {[
+                    { l: "Órdenes en Producción", v: filas.length, c: "blue" },
+                    { l: "Hojas Programadas", v: totalProgramadas, c: "slate" },
+                    { l: "Hojas Producidas", v: totalProducidas, c: "emerald" },
+                    { l: "Hojas Pendientes", v: totalPendiente, c: "amber" },
+                    { l: "Avance Promedio", v: `${avgAvance.toFixed(0)}%`, c: "purple" },
+                    { l: "Próximas a Finalizar", v: proximasAFinalizar, c: "cyan" },
+                    { l: "Órdenes Retrasadas", v: retrasadas, c: "rose" },
+                  ].map(k => (
+                    <div key={k.l} className={`bg-${k.c}-50 border border-${k.c}-200 rounded-xl p-2 text-center`}>
+                      <p className="text-xs text-slate-500 leading-tight">{k.l}</p>
+                      <p className={`text-lg font-extrabold text-${k.c}-700`}>{k.v}</p>
+                    </div>
+                  ))}
+                </div>
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-base">Producción en Curso — Tablero en Tiempo Real</CardTitle></CardHeader>
+                  <CardContent>
+                    {filas.length === 0 ? (
+                      <p className="text-slate-400 text-sm text-center py-6">No hay órdenes en producción actualmente.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {filas.map(({ orden, r }) => (
+                          <OrdenEnCursoCard
+                            key={orden.id}
+                            orden={orden}
+                            resumen={r}
+                            retrasada={orden.fecha && new Date(orden.fecha + "T00:00:00") < new Date(today() + "T00:00:00")}
+                            onRegistrarAvance={() => { setAvanceOrden(orden); setShowAvanceModal(true); }}
+                            onVerHistorial={() => setHistorialOrden(orden)}
+                            onImprimir={() => setFormatoPintorOrden(orden)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
+            );
+          })()}
         </TabsContent>
 
         {/* ──────────── CONTROL DE CALIDAD ──────────── */}
         <TabsContent value="calidad">
+          {(() => {
+            const pendientesCalidad = ordenes.filter(o => o.estado === "finalizada" && !calidadRegistros.some(c => c.orden_id === o.id || c.orden_numero === o.numero_orden));
+            return pendientesCalidad.length > 0 ? (
+              <Card className="mb-3 border-amber-300">
+                <CardHeader className="pb-2"><CardTitle className="text-base text-amber-700">📥 Órdenes Pendientes de Control de Calidad ({pendientesCalidad.length})</CardTitle></CardHeader>
+                <CardContent>
+                  <p className="text-xs text-slate-500 mb-2">Estas órdenes llegaron aquí automáticamente al completar el 100% de su producción en "Producción en Curso".</p>
+                  <div className="flex flex-wrap gap-2">
+                    {pendientesCalidad.map(o => (
+                      <Badge key={o.id} className="bg-amber-100 text-amber-800 text-xs">{o.numero_orden} · {o.cantidad_total_hojas} hojas</Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null;
+          })()}
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <div>
@@ -1159,13 +1263,23 @@ export default function PlanificacionProduccion() {
         />
       )}
 
+      {/* ══ MODAL HISTORIAL DE AVANCES ══ */}
+      {historialOrden && (
+        <HistorialAvancesModal
+          orden={historialOrden}
+          avances={avances.filter(a => a.orden_id === historialOrden.id).sort((a, b) => new Date(`${b.fecha}T${b.hora || "00:00"}`) - new Date(`${a.fecha}T${a.hora || "00:00"}`))}
+          onClose={() => setHistorialOrden(null)}
+        />
+      )}
+
       {/* ══ MODAL AVANCE ══ */}
       {showAvanceModal && avanceOrden && (
         <AvanceModal
           open={showAvanceModal}
           onClose={() => setShowAvanceModal(false)}
           orden={avanceOrden}
-          onSave={loadData}
+          resumen={construirLineasOrden(avanceOrden)}
+          onGuardar={(registros, observaciones) => handleGuardarAvance(avanceOrden, registros, observaciones)}
         />
       )}
 
@@ -1248,6 +1362,119 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── OrdenEnCursoCard ───
+// Tarjeta del tablero "Producción en Curso": se alimenta 100% de los mismos
+// datos que "Registrar Avance" (resumen viene de construirLineasOrden), sin
+// ningún formulario ni registro propio — solo lectura + accesos directos.
+function OrdenEnCursoCard({ orden, resumen, retrasada, onRegistrarAvance, onVerHistorial, onImprimir }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="border border-purple-200 rounded-xl bg-purple-50 p-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex flex-col gap-0.5 text-sm">
+          <span className="font-bold text-purple-800">
+            {orden.numero_orden} · {orden.tipo_cuero_nombre || "—"} · Calibre {orden.calibre || "—"} · Pintor: {orden.pintor_nombre || "—"}
+          </span>
+          <span className="text-slate-600 text-xs">
+            Programado: {fmtDate(orden.fecha)} · Programadas: {resumen.totalProgramadas} · Producidas: {resumen.totalProducidas} · Pendientes: {resumen.totalPendiente}
+            {resumen.ultimoAvance && <> · Último avance: {fmtDate(resumen.ultimoAvance)}</>}
+            {retrasada && <span className="ml-2 text-red-600 font-semibold">⚠ Retrasada</span>}
+          </span>
+          <div className="flex items-center gap-2 mt-1">
+            <div className="flex-1 max-w-xs bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div className={`h-2 rounded-full ${resumen.pctAvance >= 100 ? "bg-emerald-500" : "bg-purple-500"}`} style={{ width: `${Math.min(100, resumen.pctAvance)}%` }} />
+            </div>
+            <span className="font-bold text-xs text-purple-700">{resumen.pctAvance.toFixed(0)}%</span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </Button>
+          <Button size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700" onClick={onRegistrarAvance}>Registrar Avance</Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onVerHistorial}>Historial</Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onImprimir}>🖨 Formato</Button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead className="bg-purple-100">
+              <tr>
+                <th className="p-1.5 text-left">Color</th>
+                <th className="p-1.5 text-left">Placa</th>
+                <th className="p-1.5 text-right">Programadas</th>
+                <th className="p-1.5 text-right">Producidas</th>
+                <th className="p-1.5 text-right">Pendientes</th>
+                <th className="p-1.5 text-right">% Avance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {resumen.lineas.map(l => {
+                const pct = l.programadas > 0 ? (l.producidas / l.programadas) * 100 : 0;
+                return (
+                  <tr key={`${l.color}|${l.placa}`} className="bg-white border-t">
+                    <td className="p-1.5 font-semibold">{l.color}</td>
+                    <td className="p-1.5">{l.placa}</td>
+                    <td className="p-1.5 text-right">{l.programadas}</td>
+                    <td className="p-1.5 text-right text-emerald-700">{l.producidas}</td>
+                    <td className="p-1.5 text-right text-amber-700">{l.pendiente}</td>
+                    <td className="p-1.5 text-right font-semibold">{pct.toFixed(0)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── HistorialAvancesModal ───
+function HistorialAvancesModal({ orden, avances, onClose }) {
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Historial de Avances — {orden.numero_orden}</DialogTitle></DialogHeader>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-800 text-white">
+              <tr>
+                <th className="p-2 text-left">Fecha</th>
+                <th className="p-2 text-left">Hora</th>
+                <th className="p-2 text-left">Usuario</th>
+                <th className="p-2 text-left">Color</th>
+                <th className="p-2 text-left">Placa</th>
+                <th className="p-2 text-right">Cantidad</th>
+                <th className="p-2 text-left">Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {avances.length === 0 ? (
+                <tr><td colSpan={7} className="p-4 text-center text-slate-400">No hay avances registrados para esta orden.</td></tr>
+              ) : avances.map(a => (
+                <tr key={a.id} className="border-t hover:bg-slate-50">
+                  <td className="p-2">{fmtDate(a.fecha)}</td>
+                  <td className="p-2">{a.hora || "—"}</td>
+                  <td className="p-2">{a.usuario || "—"}</td>
+                  <td className="p-2 font-semibold">{a.color || "—"}</td>
+                  <td className="p-2">{a.placa || "—"}</td>
+                  <td className="p-2 text-right font-bold text-emerald-700">{a.cantidad_producida}</td>
+                  <td className="p-2 text-slate-500">{a.observaciones || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end pt-4 border-t">
+          <Button variant="outline" onClick={onClose}>Cerrar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1832,42 +2059,105 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
 }
 
 // ─── AvanceModal ───
-function AvanceModal({ open, onClose, orden, onSave }) {
-  const [fecha, setFecha] = useState(today());
-  const [cantidad, setCantidad] = useState(0);
+// Registra el avance de producción por cada línea Color+Placa de la orden
+// (nunca un solo total global). El usuario solo digita "Registrar hoy" por
+// línea; Programadas/Producidas/Pendientes se calculan solos a partir del
+// historial completo (resumen.lineas, ya construido por el padre).
+function AvanceModal({ open, onClose, orden, resumen, onGuardar }) {
+  const [cantidades, setCantidades] = useState({}); // clave "color|placa" -> string
   const [obs, setObs] = useState("");
+  const [guardando, setGuardando] = useState(false);
 
-  const pendiente = Math.max(0, (orden.cantidad_total_hojas || 0) - (orden.hojas_producidas || 0));
+  const clave = (l) => `${l.color}|${l.placa}`;
 
-  const handleSave = async () => {
-    const cant = parseFloat(cantidad) || 0;
-    if (cant <= 0) { alert("La cantidad debe ser mayor a 0."); return; }
-    if (cant > pendiente) { alert(`No puede registrar más de ${pendiente} hojas pendientes.`); return; }
-    await base44.entities.AvanceProduccionPCP.create({ orden_id: orden.id, orden_numero: orden.numero_orden, fecha, cantidad_producida: cant, observaciones: obs });
-    const nuevasProducidas = (orden.hojas_producidas || 0) + cant;
-    const nuevoEstado = nuevasProducidas >= orden.cantidad_total_hojas ? "finalizada" : "en_produccion";
-    await base44.entities.OrdenProduccionPCP.update(orden.id, { hojas_producidas: nuevasProducidas, estado: nuevoEstado });
-    onSave();
-    onClose();
+  const registros = resumen.lineas
+    .map(l => ({ ...l, cantidad: parseFloat(cantidades[clave(l)]) || 0 }))
+    .filter(l => l.cantidad > 0);
+
+  const hayErrores = resumen.lineas.some(l => {
+    const v = cantidades[clave(l)];
+    if (v === undefined || v === "") return false;
+    const n = parseFloat(v);
+    return isNaN(n) || n < 0 || n > l.pendiente;
+  });
+
+  const handleGuardar = async () => {
+    if (registros.length === 0) { alert("Ingrese al menos una cantidad en \"Registrar hoy\"."); return; }
+    if (hayErrores) { alert("Hay cantidades inválidas: no pueden ser negativas ni superar lo pendiente de esa línea."); return; }
+    setGuardando(true);
+    try {
+      await onGuardar(registros.map(r => ({ color: r.color, placa: r.placa, cantidad: r.cantidad })), obs);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Registrar Avance — {orden.numero_orden}</DialogTitle></DialogHeader>
         <div className="space-y-3 text-sm">
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded text-xs grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-slate-500">Total</p><p className="font-bold text-blue-700">{orden.cantidad_total_hojas}</p></div>
-            <div><p className="text-slate-500">Producidas</p><p className="font-bold text-emerald-700">{orden.hojas_producidas || 0}</p></div>
-            <div><p className="text-slate-500">Pendientes</p><p className="font-bold text-amber-700">{pendiente}</p></div>
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded text-xs grid grid-cols-4 gap-2 text-center">
+            <div><p className="text-slate-500">Total Orden</p><p className="font-bold text-blue-700">{resumen.totalProgramadas}</p></div>
+            <div><p className="text-slate-500">Producidas</p><p className="font-bold text-emerald-700">{resumen.totalProducidas}</p></div>
+            <div><p className="text-slate-500">Pendientes</p><p className="font-bold text-amber-700">{resumen.totalPendiente}</p></div>
+            <div><p className="text-slate-500">Avance</p><p className="font-bold text-slate-700">{resumen.pctAvance.toFixed(0)}%</p></div>
           </div>
-          <div><Label>Fecha</Label><Input type="date" value={fecha} onChange={e => setFecha(e.target.value)} /></div>
-          <div><Label>Cantidad Producida (máx: {pendiente})</Label><Input type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} max={pendiente} /></div>
-          <div><Label>Observaciones</Label><Textarea value={obs} onChange={e => setObs(e.target.value)} rows={2} /></div>
+
+          <div className="border rounded-lg overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="p-2 text-left">Color</th>
+                  <th className="p-2 text-left">Placa</th>
+                  <th className="p-2 text-right">Programadas</th>
+                  <th className="p-2 text-right">Producidas</th>
+                  <th className="p-2 text-right">Pendientes</th>
+                  <th className="p-2 text-right">Registrar hoy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumen.lineas.length === 0 ? (
+                  <tr><td colSpan={6} className="p-3 text-center text-slate-400">Esta orden no tiene líneas Color+Placa detectadas.</td></tr>
+                ) : resumen.lineas.map(l => {
+                  const completada = l.pendiente <= 0;
+                  const v = cantidades[clave(l)] ?? "";
+                  const n = parseFloat(v);
+                  const invalido = v !== "" && (isNaN(n) || n < 0 || n > l.pendiente);
+                  return (
+                    <tr key={clave(l)} className={`border-t ${completada ? "bg-emerald-50" : ""}`}>
+                      <td className="p-2 font-semibold">{l.color}</td>
+                      <td className="p-2">{l.placa}</td>
+                      <td className="p-2 text-right">{l.programadas}</td>
+                      <td className="p-2 text-right text-emerald-700 font-semibold">{l.producidas}</td>
+                      <td className="p-2 text-right text-amber-700 font-semibold">{l.pendiente}</td>
+                      <td className="p-2 text-right w-28">
+                        {completada ? (
+                          <span className="text-emerald-600 font-semibold text-xs">✅ Completa</span>
+                        ) : (
+                          <Input
+                            type="number" min="0" max={l.pendiente}
+                            value={v}
+                            onChange={e => setCantidades(prev => ({ ...prev, [clave(l)]: e.target.value }))}
+                            className={`h-8 text-xs text-right ${invalido ? "border-red-400" : ""}`}
+                            disabled={orden.estado === "finalizada"}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div><Label>Observaciones</Label><Textarea value={obs} onChange={e => setObs(e.target.value)} rows={2} placeholder="Observaciones de este registro de avance..." /></div>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSave}><Save className="w-4 h-4 mr-1" /> Registrar</Button>
+          <Button onClick={handleGuardar} disabled={guardando || orden.estado === "finalizada"}>
+            <Save className="w-4 h-4 mr-1" /> {guardando ? "Guardando..." : "Registrar"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
