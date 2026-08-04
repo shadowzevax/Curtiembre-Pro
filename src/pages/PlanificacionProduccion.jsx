@@ -73,6 +73,7 @@ export default function PlanificacionProduccion() {
   const [showCatalogoModal, setShowCatalogoModal] = useState(false);
   const [showCalidadModal, setShowCalidadModal] = useState(false);
   const [formatoPintorOrden, setFormatoPintorOrden] = useState(null);
+  const [matrizIndividualSol, setMatrizIndividualSol] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -320,7 +321,34 @@ export default function PlanificacionProduccion() {
     const totalesPorColor = {};
     colores.forEach(c => { totalesPorColor[c] = placas.reduce((s, p) => s + (celdas[c]?.[p] || 0), 0); });
 
-    return { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones };
+    return { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones, solicitudesNumeros: solsOrden.map(s => s.numero_solicitud) };
+  };
+
+  // Matriz Color x Placa de UNA sola solicitud (para entrega física individual
+  // al solicitante) — misma estructura que la matriz consolidada.
+  const construirMatrizSolicitud = (sol) => {
+    const celdas = {};
+    const coloresSet = new Set();
+    const placasSet = new Set();
+    let totalGeneral = 0;
+    (sol.items || []).forEach(item => {
+      const color = item.nombre_color || item.codigo_color || "SIN COLOR";
+      const placa = item.placa_nombre || item.codigo_placa || "SIN PLACA";
+      const cant = item.cantidad_hojas || 0;
+      if (!celdas[color]) celdas[color] = {};
+      celdas[color][placa] = (celdas[color][placa] || 0) + cant;
+      coloresSet.add(color);
+      placasSet.add(placa);
+      totalGeneral += cant;
+    });
+    const colores = [...coloresSet].sort();
+    const placas = [...placasSet].sort();
+    const totalesPorPlaca = {};
+    placas.forEach(p => { totalesPorPlaca[p] = colores.reduce((s, c) => s + (celdas[c]?.[p] || 0), 0); });
+    const totalesPorColor = {};
+    colores.forEach(c => { totalesPorColor[c] = placas.reduce((s, p) => s + (celdas[c]?.[p] || 0), 0); });
+    const tiposAcabado = [...new Set((sol.items || []).map(i => i.tipo_cuero_nombre).filter(Boolean))];
+    return { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, tiposAcabado };
   };
 
   return (
@@ -496,6 +524,7 @@ export default function PlanificacionProduccion() {
                           <td className="p-2 text-center">
                             <div className="flex justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setEditingSolicitud(sol); setShowSolicitudModal(true); }}><Edit2 className="w-3 h-3" /></Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" title="Imprimir Matriz Individual" onClick={() => setMatrizIndividualSol(sol)}>🖨</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={async () => { if (confirm("¿Eliminar solicitud?")) { await base44.entities.SolicitudProduccion.delete(sol.id); loadData(); } }}><Trash2 className="w-3 h-3" /></Button>
                             </div>
                           </td>
@@ -912,6 +941,15 @@ export default function PlanificacionProduccion() {
         />
       )}
 
+      {/* ══ MODAL MATRIZ INDIVIDUAL POR SOLICITANTE ══ */}
+      {matrizIndividualSol && (
+        <MatrizIndividualModal
+          solicitud={matrizIndividualSol}
+          matriz={construirMatrizSolicitud(matrizIndividualSol)}
+          onClose={() => setMatrizIndividualSol(null)}
+        />
+      )}
+
       {/* ══ MODAL AVANCE ══ */}
       {showAvanceModal && avanceOrden && (
         <AvanceModal
@@ -1010,7 +1048,38 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
 // redigita nada — toma los datos ya calculados en construirMatrizPintor().
 function FormatoPintorModal({ orden, matriz, onClose }) {
   const [obsGeneral, setObsGeneral] = useState("");
-  const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones } = matriz;
+  const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones, solicitudesNumeros } = matriz;
+  const fechaImpresion = new Date().toLocaleString("es-CO");
+
+  const handleExportExcel = () => {
+    const filas = [
+      ["FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR"],
+      ["N. Orden", orden.numero_orden],
+      ["Código Pedido Consolidado", (solicitudesNumeros || []).join(", ")],
+      ["Fecha", fmtDate(orden.fecha)],
+      ["Pintor", orden.pintor_nombre || ""],
+      ["Tipo de Acabado", orden.tipo_cuero_nombre || ""],
+      ["Calibre", orden.calibre || ""],
+      ["Total Hojas", totalGeneral],
+      ["Fecha de impresión", fechaImpresion],
+      [],
+      ["COLOR", ...placas, "TOTAL COLOR"],
+      ...colores.map(c => [c, ...placas.map(p => celdas[c]?.[p] || 0), totalesPorColor[c]]),
+      ["TOTAL PLACA", ...placas.map(p => totalesPorPlaca[p]), totalGeneral],
+      [],
+      ["OBSERVACIONES"],
+      ...observaciones.map(o => [`${o.numero} — ${o.solicitante}${!o.general ? ` (${o.color}/${o.placa})` : ""}: ${o.obs}`]),
+      ...(obsGeneral ? [["Observación general:", obsGeneral]] : []),
+    ];
+    const csv = filas.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `formato_pintor_${orden.numero_orden}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -1040,6 +1109,8 @@ function FormatoPintorModal({ orden, matriz, onClose }) {
               <div><span className="font-semibold">Código Tipo de Acabado:</span> {orden.codigo_tipo_acabado || "—"}</div>
               <div><span className="font-semibold">Tipo de Acabado:</span> {orden.tipo_cuero_nombre || "—"}</div>
               <div><span className="font-semibold">Calibre:</span> {orden.calibre || "—"}</div>
+              <div><span className="font-semibold">Código Pedido Consolidado:</span> <span className="font-mono">{(solicitudesNumeros || []).join(", ") || "—"}</span></div>
+              <div><span className="font-semibold">Fecha de Impresión:</span> {fechaImpresion}</div>
               <div className="col-span-3"><span className="font-semibold">Total de Hojas:</span> <span className="font-bold">{totalGeneral}</span></div>
             </div>
           </div>
@@ -1093,7 +1164,7 @@ function FormatoPintorModal({ orden, matriz, onClose }) {
             )}
             <div className="mt-2 no-print">
               <Label className="text-xs">Observación general de producción (opcional, se incluye al imprimir)</Label>
-              <Textarea value={obsGeneral} onChange={e => setObsGeneral(e.target.value)} rows={2} className="text-xs" />
+              <Textarea value={obsGeneral} onChange={e => setObsGeneral(e.target.value)} rows={4} className="text-xs" placeholder="Instrucciones importantes para producción..." />
             </div>
             {obsGeneral && <p className="text-xs mt-1"><span className="font-semibold">Observación general:</span> {obsGeneral}</p>}
           </div>
@@ -1109,6 +1180,124 @@ function FormatoPintorModal({ orden, matriz, onClose }) {
 
         <div className="flex justify-end gap-2 pt-4 no-print">
           <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
+          <Button type="button" variant="outline" onClick={handleExportExcel}>📊 Exportar Excel</Button>
+          <Button type="button" variant="outline" onClick={() => window.print()} title='En el diálogo de impresión, elija "Guardar como PDF" como destino'>📄 Exportar PDF</Button>
+          <Button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900">🖨 Imprimir</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── MatrizIndividualModal ───
+// Formato imprimible con la misma estructura de la matriz consolidada, pero
+// filtrado a UNA sola solicitud — para separar y entregar físicamente el
+// pedido terminado a cada solicitante.
+function MatrizIndividualModal({ solicitud, matriz, onClose }) {
+  const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, tiposAcabado } = matriz;
+  const fechaImpresion = new Date().toLocaleString("es-CO");
+
+  const handleExportExcel = () => {
+    const filas = [
+      ["MATRIZ INDIVIDUAL — ENTREGA A SOLICITANTE"],
+      ["N. Solicitud", solicitud.numero_solicitud],
+      ["Solicitante", solicitud.cliente_nombre || ""],
+      ["Tipo de Acabado", tiposAcabado.join(", ")],
+      ["Total Hojas", totalGeneral],
+      ["Fecha de impresión", fechaImpresion],
+      [],
+      ["COLOR", ...placas, "TOTAL COLOR"],
+      ...colores.map(c => [c, ...placas.map(p => celdas[c]?.[p] || 0), totalesPorColor[c]]),
+      ["TOTAL PLACA", ...placas.map(p => totalesPorPlaca[p]), totalGeneral],
+      [],
+      ["OBSERVACIONES", solicitud.observaciones || ""],
+    ];
+    const csv = filas.map(row => row.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `matriz_individual_${solicitud.numero_solicitud}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <style>{`@media print {
+          #matriz-individual-imprimible { position: absolute; left: 0; top: 0; width: 100%; }
+          #matriz-individual-numero-fijo { position: fixed; top: 0; left: 0; right: 0; padding: 4px 0; text-align: center; font-size: 11px; font-weight: bold; }
+          .no-print, #page-header { display: none !important; }
+          body * { visibility: hidden; }
+          #matriz-individual-imprimible, #matriz-individual-imprimible *,
+          #matriz-individual-numero-fijo, #matriz-individual-numero-fijo * { visibility: visible; }
+        }`}</style>
+        <DialogHeader className="no-print">
+          <DialogTitle>🖨 Matriz Individual — {solicitud.numero_solicitud}</DialogTitle>
+        </DialogHeader>
+
+        <div id="matriz-individual-numero-fijo">Solicitud: {solicitud.numero_solicitud}</div>
+
+        <div id="matriz-individual-imprimible" className="space-y-4 text-sm">
+          <div className="border-b-2 border-slate-800 pb-2">
+            <h2 className="text-lg font-extrabold text-center">MATRIZ INDIVIDUAL — ENTREGA A SOLICITANTE</h2>
+            <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+              <div><span className="font-semibold">N.º Solicitud:</span> <span className="font-mono font-bold">{solicitud.numero_solicitud}</span></div>
+              <div><span className="font-semibold">Solicitante:</span> {solicitud.cliente_nombre || "—"}</div>
+              <div><span className="font-semibold">Tipo de Acabado:</span> {tiposAcabado.join(", ") || "—"}</div>
+              <div><span className="font-semibold">Fecha de Impresión:</span> {fechaImpresion}</div>
+              <div className="col-span-2"><span className="font-semibold">Total de Hojas:</span> <span className="font-bold">{totalGeneral}</span></div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-bold text-sm mb-1">MATRIZ (Color x Placa — cantidad de hojas)</h3>
+            {colores.length === 0 || placas.length === 0 ? (
+              <p className="text-slate-400 text-xs">No hay ítems registrados en esta solicitud.</p>
+            ) : (
+              <table className="w-full text-xs border-collapse border border-slate-400">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="border border-slate-400 p-1.5 text-left">COLOR</th>
+                    {placas.map(p => <th key={p} className="border border-slate-400 p-1.5 text-center">{p}</th>)}
+                    <th className="border border-slate-400 p-1.5 text-center">TOTAL COLOR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {colores.map(c => (
+                    <tr key={c}>
+                      <td className="border border-slate-400 p-1.5 font-semibold">{c}</td>
+                      {placas.map(p => <td key={p} className="border border-slate-400 p-1.5 text-center">{celdas[c]?.[p] || 0}</td>)}
+                      <td className="border border-slate-400 p-1.5 text-center font-bold bg-slate-100">{totalesPorColor[c]}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-100 font-bold">
+                    <td className="border border-slate-400 p-1.5">TOTAL PLACA</td>
+                    {placas.map(p => <td key={p} className="border border-slate-400 p-1.5 text-center">{totalesPorPlaca[p]}</td>)}
+                    <td className="border border-slate-400 p-1.5 text-center">{totalGeneral}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div>
+            <h3 className="font-bold text-sm mb-1 border-t pt-2">OBSERVACIONES</h3>
+            <p className="text-xs">{solicitud.observaciones || "Sin observaciones."}</p>
+          </div>
+
+          <div className="border-t-2 border-slate-800 pt-3 mt-6 text-xs grid grid-cols-2 gap-4">
+            <div>Entregado por: ______________________________</div>
+            <div>Fecha de entrega: ______________</div>
+            <div className="col-span-2 mt-4">Recibido (Firma): ______________________________</div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4 no-print">
+          <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
+          <Button type="button" variant="outline" onClick={handleExportExcel}>📊 Exportar Excel</Button>
+          <Button type="button" variant="outline" onClick={() => window.print()} title='En el diálogo de impresión, elija "Guardar como PDF" como destino'>📄 Exportar PDF</Button>
           <Button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900">🖨 Imprimir</Button>
         </div>
       </DialogContent>
@@ -1129,6 +1318,60 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
   const updateItem = (idx, field, val) => setForm(p => { const items = [...p.items]; items[idx] = { ...items[idx], [field]: val }; return { ...p, items }; });
   const removeItem = (idx) => setForm(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
 
+  // ── Resumen y validación en vivo (se recalcula en cada cambio, sin guardar) ──
+  const resumen = React.useMemo(() => {
+    const items = form.items || [];
+    const porColor = {};
+    const porPlaca = {};
+    let totalHojas = 0;
+    items.forEach(it => {
+      const color = it.nombre_color || it.codigo_color || "Sin color";
+      const placa = it.placa_nombre || it.codigo_placa || "Sin placa";
+      const cant = parseFloat(it.cantidad_hojas) || 0;
+      porColor[color] = (porColor[color] || 0) + cant;
+      porPlaca[placa] = (porPlaca[placa] || 0) + cant;
+      totalHojas += cant;
+    });
+    return {
+      porColor: Object.entries(porColor).sort((a, b) => a[0].localeCompare(b[0])),
+      porPlaca: Object.entries(porPlaca).sort((a, b) => a[0].localeCompare(b[0])),
+      totalRegistros: items.length,
+      totalColores: Object.keys(porColor).length,
+      totalPlacas: Object.keys(porPlaca).length,
+      totalHojas,
+    };
+  }, [form.items]);
+
+  // ── Advertencias: duplicados exactos, campos vacíos, cantidades negativas ──
+  const advertencias = React.useMemo(() => {
+    const items = form.items || [];
+    const lista = [];
+    const clavesVistas = new Map(); // clave color+placa+calibre -> cantidad de filas
+    items.forEach((it) => {
+      const clave = `${it.codigo_color || it.nombre_color || ""}|${it.codigo_placa || it.placa_nombre || ""}|${it.calibre || ""}`;
+      clavesVistas.set(clave, (clavesVistas.get(clave) || 0) + 1);
+    });
+    items.forEach((it, idx) => {
+      const fila = idx + 1;
+      if (!it.tipo_cuero_id || !it.color_id || !it.placa_id || !it.calibre) {
+        lista.push(`Fila ${fila}: hay campos obligatorios vacíos (Tipo de Acabado, Color, Placa o Calibre).`);
+      }
+      if ((parseFloat(it.cantidad_hojas) || 0) < 0) {
+        lista.push(`Fila ${fila}: la cantidad de hojas no puede ser negativa.`);
+      }
+      if ((parseFloat(it.cantidad_hojas) || 0) === 0) {
+        lista.push(`Fila ${fila}: la cantidad de hojas está en 0.`);
+      }
+    });
+    for (const [clave, count] of clavesVistas) {
+      if (count > 1 && clave !== "||") {
+        const [, , calibre] = clave.split("|");
+        lista.push(`Hay ${count} filas repetidas con el mismo Color + Placa + Calibre (${calibre || "sin calibre"}) — podrían consolidarse en una sola línea.`);
+      }
+    }
+    return lista;
+  }, [form.items]);
+
   const handleSave = async () => {
     let numero_solicitud = form.numero_solicitud;
     if (!solicitud) {
@@ -1137,7 +1380,17 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
       const maxNum = existentes.reduce((max, s) => { const n = parseInt(s.numero_solicitud?.split("-").pop() || "0"); return n > max ? n : max; }, 0);
       numero_solicitud = `SOL-${year}-${String(maxNum + 1).padStart(4, "0")}`;
     }
-    const data = { ...form, numero_solicitud };
+    // Ordenar automáticamente por Tipo de Acabado, Color, Placa, Calibre antes de guardar
+    const itemsOrdenados = [...(form.items || [])].sort((a, b) => {
+      const ta = (a.codigo_tipo_acabado || a.tipo_cuero_nombre || "").localeCompare(b.codigo_tipo_acabado || b.tipo_cuero_nombre || "");
+      if (ta !== 0) return ta;
+      const co = (a.nombre_color || a.codigo_color || "").localeCompare(b.nombre_color || b.codigo_color || "");
+      if (co !== 0) return co;
+      const pl = (a.placa_nombre || a.codigo_placa || "").localeCompare(b.placa_nombre || b.codigo_placa || "");
+      if (pl !== 0) return pl;
+      return (a.calibre || "").localeCompare(b.calibre || "");
+    });
+    const data = { ...form, items: itemsOrdenados, numero_solicitud };
     if (solicitud) await base44.entities.SolicitudProduccion.update(solicitud.id, data);
     else await base44.entities.SolicitudProduccion.create(data);
     onSave();
@@ -1149,6 +1402,15 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{solicitud ? "Editar" : "Nueva"} Solicitud de Producción</DialogTitle></DialogHeader>
         <div className="space-y-4 text-sm">
+          {/* Resumen de la Solicitud */}
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+            <div><span className="text-slate-500">Solicitante:</span> <span className="font-semibold">{form.cliente_nombre || "—"}</span></div>
+            <div><span className="text-slate-500">Fecha:</span> <span className="font-semibold">{fmtDate(form.fecha)}</span></div>
+            <div><span className="text-slate-500">N.º Solicitud:</span> <span className="font-mono font-semibold">{form.numero_solicitud || "Se asigna al guardar"}</span></div>
+            <div><span className="text-slate-500">Referencias:</span> <span className="font-bold">{resumen.totalRegistros}</span></div>
+            <div><span className="text-slate-500">Total Hojas:</span> <span className="font-bold text-blue-700">{resumen.totalHojas}</span></div>
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <Label>Fecha *</Label>
@@ -1263,6 +1525,48 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
               </table>
             </div>
           </div>
+
+          {/* Totales y validación */}
+          {form.items.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="border rounded-lg p-2">
+                <p className="text-xs font-bold text-slate-600 mb-1">Total por Color</p>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {resumen.porColor.map(([color, cant]) => (
+                      <tr key={color} className="border-t"><td className="py-1">{color}</td><td className="py-1 text-right font-semibold">{cant}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border rounded-lg p-2">
+                <p className="text-xs font-bold text-slate-600 mb-1">Total por Placa</p>
+                <table className="w-full text-xs">
+                  <tbody>
+                    {resumen.porPlaca.map(([placa, cant]) => (
+                      <tr key={placa} className="border-t"><td className="py-1">{placa}</td><td className="py-1 text-right font-semibold">{cant}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs space-y-1">
+                <p className="font-bold text-blue-800 mb-1">Total General</p>
+                <p>Total de registros: <span className="font-bold">{resumen.totalRegistros}</span></p>
+                <p>Colores diferentes: <span className="font-bold">{resumen.totalColores}</span></p>
+                <p>Placas diferentes: <span className="font-bold">{resumen.totalPlacas}</span></p>
+                <p>Total general de hojas: <span className="font-bold text-blue-700">{resumen.totalHojas}</span></p>
+              </div>
+            </div>
+          )}
+
+          {advertencias.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs">
+              <p className="font-bold text-amber-800 mb-1">⚠️ Advertencias</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-amber-800">
+                {advertencias.map((a, i) => <li key={i}>{a}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>

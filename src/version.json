@@ -1,6 +1,6 @@
 {
-  "version": "15",
+  "version": "16",
   "fecha": "2026-08-04",
-  "descripcion": "Bot Telegram: el aviso de nueva version ahora se muestra organizado con vinetas y saltos de linea por modulo, en vez de un parrafo corrido|Se agrego una seccion fija de Recomendaciones/advertencias del ingeniero dentro del mismo mensaje de Telegram, visible para todo el equipo (no solo en la conversacion con el asistente)",
-  "advertencias": "Desde esta version, cualquier inconsistencia, riesgo tecnico o recomendacion que detecte al publicar un cambio quedara escrita en esta misma seccion del mensaje de Telegram, para que tu companera de equipo tambien la vea sin depender de que se la reenvies"
+  "descripcion": "PCP Ordenes: el formato Imprimir para pintor ahora incluye Codigo del Pedido Consolidado (solicitudes que lo conforman), Fecha de Impresion, observaciones ampliadas, y botones Exportar Excel y Exportar PDF ademas de Imprimir|PCP Solicitudes: nuevo boton Imprimir Matriz Individual por solicitante (misma estructura Color x Placa que el consolidado, pero solo con los datos de esa solicitud), tambien con Exportar Excel/PDF|PCP Editar Solicitud: nuevo panel de resumen y validacion en vivo (Total por Color, Total por Placa, Total General de registros/colores/placas/hojas) que se recalcula mientras se digita, mas advertencias automaticas de campos vacios, cantidades negativas o en cero y filas duplicadas Color+Placa+Calibre; al guardar el detalle se ordena automaticamente por Tipo de Acabado, Color, Placa y Calibre",
+  "advertencias": "La exportacion a PDF usa el dialogo de impresion del navegador (opcion Guardar como PDF), no genera un PDF nativo aparte; si en el futuro se necesita un PDF con diseno mas elaborado (logo, membrete) se recomienda evaluar una libreria de generacion de PDF en el servidor"
 }
