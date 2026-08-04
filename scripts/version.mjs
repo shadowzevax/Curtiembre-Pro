@@ -1,10 +1,17 @@
 // Sistema de versiones de Curtiembre ERP.
 //
-//   node scripts/version.mjs guardar "descripcion del cambio"
+//   node scripts/version.mjs guardar "descripcion del cambio" "advertencias (opcional)"
 //     → crea la versión entera siguiente (v2, v3...). Úsalo para cambios
 //       independientes y ya terminados.
+//     La descripción y las advertencias se escriben como varios puntos
+//     separados por "|" (uno por módulo/tema), por ejemplo:
+//       "Pintura: se corrigio X|PCP: se agrego Y"
+//     así el mensaje de Telegram sale con viñetas y saltos de línea en vez
+//     de un párrafo corrido. El segundo argumento (advertencias) es para
+//     recomendaciones, inconsistencias o riesgos detectados al publicar que
+//     el usuario debe conocer aunque no sean parte del cambio en sí.
 //
-//   node scripts/version.mjs fase "descripcion de esta fase"
+//   node scripts/version.mjs fase "descripcion de esta fase" "advertencias (opcional)"
 //     → crea una sub-versión (v3.1, v3.2...) dentro del mismo requerimiento,
 //       cuando un cambio grande se libera por fases para reducir riesgo.
 //       La primera fase de un requerimiento pasa de vN a vN.1; cada fase
@@ -47,9 +54,9 @@ function readVersion() {
   return JSON.parse(fs.readFileSync(VERSION_FILE, 'utf-8'));
 }
 
-function writeVersion(v, descripcion) {
+function writeVersion(v, descripcion, advertencias) {
   const fecha = new Date().toISOString().slice(0, 10);
-  fs.writeFileSync(VERSION_FILE, JSON.stringify({ version: v, fecha, descripcion }, null, 2) + '\n');
+  fs.writeFileSync(VERSION_FILE, JSON.stringify({ version: v, fecha, descripcion, advertencias: advertencias || '' }, null, 2) + '\n');
 }
 
 function pruneOldTags(tags) {
@@ -62,16 +69,17 @@ function pruneOldTags(tags) {
   }
 }
 
-function publicar(nueva, desc) {
-  writeVersion(nueva, desc);
+function publicar(nueva, desc, advertencias) {
+  writeVersion(nueva, desc, advertencias);
   git('add -A');
   const hayCambios = git('status --porcelain');
   if (!hayCambios) {
     console.log('No hay cambios para guardar.');
     return false;
   }
+  const tagMsg = advertencias ? `${desc}\n\nAdvertencias/Recomendaciones: ${advertencias}` : desc;
   git(`commit -m "v${nueva}: ${desc.replace(/"/g, "'")}"`);
-  git(`tag -a v${nueva} -m "${desc.replace(/"/g, "'")}"`);
+  git(`tag -a v${nueva} -m "${tagMsg.replace(/"/g, "'")}"`);
   git('push origin main --follow-tags');
   console.log(`\n✅ Versión v${nueva} guardada y publicándose en https://curtiembre-pro.vercel.app`);
   console.log('   (el deploy tarda ~1 minuto)');
@@ -80,21 +88,21 @@ function publicar(nueva, desc) {
 }
 
 // vN → vN+1 (cambio independiente y terminado)
-function guardar(descripcion) {
+function guardar(descripcion, advertencias) {
   const actual = String(readVersion().version);
   const enteroActual = Math.trunc(parseFloat(actual));
   const nueva = String(enteroActual + 1);
-  publicar(nueva, descripcion || `Version ${nueva}`);
+  publicar(nueva, descripcion || `Version ${nueva}`, advertencias);
 }
 
 // vN → vN.1, vN.1 → vN.2... (fase dentro del mismo requerimiento grande)
-function fase(descripcion) {
+function fase(descripcion, advertencias) {
   const actual = String(readVersion().version);
   const [enteroStr, decStr] = actual.split('.');
   const entero = parseInt(enteroStr, 10);
   const siguienteDecimal = (decStr ? parseInt(decStr, 10) : 0) + 1;
   const nueva = `${entero}.${siguienteDecimal}`;
-  publicar(nueva, descripcion || `Fase ${nueva}`);
+  publicar(nueva, descripcion || `Fase ${nueva}`, advertencias);
 }
 
 function listar() {
@@ -157,10 +165,10 @@ async function restaurar(arg) {
 }
 
 const [, , comando, ...resto] = process.argv;
-if (comando === 'guardar') guardar(resto.join(' '));
-else if (comando === 'fase') fase(resto.join(' '));
+if (comando === 'guardar') guardar(resto[0], resto[1]);
+else if (comando === 'fase') fase(resto[0], resto[1]);
 else if (comando === 'listar') listar();
 else if (comando === 'restaurar') await restaurar(resto[0]);
 else {
-  console.log('Uso: node scripts/version.mjs [guardar "descripcion" | fase "descripcion" | listar | restaurar [N]]');
+  console.log('Uso: node scripts/version.mjs [guardar "descripcion" "advertencias" | fase "descripcion" "advertencias" | listar | restaurar [N]]');
 }

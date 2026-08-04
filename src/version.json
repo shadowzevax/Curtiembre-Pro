@@ -1,5 +1,6 @@
 {
-  "version": "14.1",
+  "version": "15",
   "fecha": "2026-08-04",
-  "descripcion": "Limpieza: eliminada por completo la entidad huerfana PlacaPCP (archivo, export y sus 20 registros de prueba en la base de datos) que ya no tenia ninguna pantalla de gestion ni referencias en el codigo tras el fix de Pintura hacia el Catalogo de Placas real."
+  "descripcion": "Bot Telegram: el aviso de nueva version ahora se muestra organizado con vinetas y saltos de linea por modulo, en vez de un parrafo corrido|Se agrego una seccion fija de Recomendaciones/advertencias del ingeniero dentro del mismo mensaje de Telegram, visible para todo el equipo (no solo en la conversacion con el asistente)",
+  "advertencias": "Desde esta version, cualquier inconsistencia, riesgo tecnico o recomendacion que detecte al publicar un cambio quedara escrita en esta misma seccion del mensaje de Telegram, para que tu companera de equipo tambien la vea sin depender de que se la reenvies"
 }

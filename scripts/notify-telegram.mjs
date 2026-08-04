@@ -17,12 +17,29 @@ async function main() {
 
   const versionFile = path.join(ROOT, 'src', 'version.json');
   if (!fs.existsSync(versionFile)) return;
-  const { version, descripcion } = JSON.parse(fs.readFileSync(versionFile, 'utf-8'));
+  const { version, descripcion, advertencias } = JSON.parse(fs.readFileSync(versionFile, 'utf-8'));
 
   // Solo versiones enteras (vN); las sub-fases (vN.1, vN.2...) no notifican.
   if (String(version).includes('.')) return;
 
-  const texto = `🚀 <b>Curtiembre Pro v${version}</b> publicada\n\n${descripcion || ''}\n\nhttps://curtiembre-pro.vercel.app`;
+  // La descripción/advertencias se escriben como puntos separados por "|"
+  // (uno por módulo/tema); si no traen "|" se muestran como un único punto.
+  const aBullets = (texto) => (texto || '')
+    .split('|')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `• ${p}`)
+    .join('\n\n');
+
+  const bloqueCambios = aBullets(descripcion);
+  const bloqueAdvertencias = aBullets(advertencias);
+
+  let texto = `🚀 <b>Curtiembre Pro v${version}</b> publicada\n\n`;
+  texto += `📋 <b>Cambios en esta versión:</b>\n${bloqueCambios || '—'}\n`;
+  if (bloqueAdvertencias) {
+    texto += `\n⚠️ <b>Recomendaciones / advertencias del ingeniero:</b>\n${bloqueAdvertencias}\n`;
+  }
+  texto += `\nhttps://curtiembre-pro.vercel.app`;
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
