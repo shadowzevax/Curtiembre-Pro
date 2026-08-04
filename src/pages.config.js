@@ -129,6 +129,19 @@ import VentaProductos from './pages/VentaProductos';
 import SeguimientoProduccion from './pages/SeguimientoProduccion';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
+import FinanzasCaja from './pages/FinanzasCaja';
+import FinanzasBancos from './pages/FinanzasBancos';
+import FinanzasCuentasCobrar from './pages/FinanzasCuentasCobrar';
+import FinanzasCuentasPagar from './pages/FinanzasCuentasPagar';
+import FinanzasTesoreria from './pages/FinanzasTesoreria';
+import LibroAuxiliarContable from './pages/LibroAuxiliarContable';
+import ComprobantesContables from './pages/ComprobantesContables';
+import ReportesAreaTesoreria from './pages/ReportesAreaTesoreria';
+import ReportesAreaCuentasCobrar from './pages/ReportesAreaCuentasCobrar';
+import ReportesAreaCuentasPagar from './pages/ReportesAreaCuentasPagar';
+import ReportesAreaInventarios from './pages/ReportesAreaInventarios';
+import ReportesAreaProduccion from './pages/ReportesAreaProduccion';
+import ReportesAreaComercial from './pages/ReportesAreaComercial';
 import __Layout from './Layout.jsx';
 
 
@@ -215,6 +228,19 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
+    "FinanzasCaja": FinanzasCaja,
+    "FinanzasBancos": FinanzasBancos,
+    "FinanzasCuentasCobrar": FinanzasCuentasCobrar,
+    "FinanzasCuentasPagar": FinanzasCuentasPagar,
+    "FinanzasTesoreria": FinanzasTesoreria,
+    "LibroAuxiliarContable": LibroAuxiliarContable,
+    "ComprobantesContables": ComprobantesContables,
+    "ReportesAreaTesoreria": ReportesAreaTesoreria,
+    "ReportesAreaCuentasCobrar": ReportesAreaCuentasCobrar,
+    "ReportesAreaCuentasPagar": ReportesAreaCuentasPagar,
+    "ReportesAreaInventarios": ReportesAreaInventarios,
+    "ReportesAreaProduccion": ReportesAreaProduccion,
+    "ReportesAreaComercial": ReportesAreaComercial,
 }
 
 export const pagesConfig = {
