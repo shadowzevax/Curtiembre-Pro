@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, PlacaPCP } from '@/entities/all';
+import { ProcesoProduccion, Insumo, InventarioEnProceso, ProductoTerminado, MovimientoInventario, ColorPintura, ProductoCatalogo } from '@/entities/all';
 import { agruparPorCodigoProducto, calcularConsumoFIFOConReservas, disponibleReal } from '@/lib/inventarioProceso';
 import { calcularCostoPromedioCompra } from '@/lib/costoPromedio';
 import PageHeader from '../components/common/PageHeader';
@@ -33,7 +33,7 @@ const newSublote = (idx, idPedido) => ({
   codigo_partida: '', codigo_lote_padre: '', color_base_origen: '',
   producto_terminado_id: '', producto_terminado_codigo: '', producto_terminado_nombre: '',
   placa_id: '', placa_codigo: '', placa_nombre: '',
-  tipo_acabado: '', color_final: '', cantidad_hojas: 0, pct_participacion: 0,
+  tipo_acabado: '', color_final: '', cantidad_hojas: 0, pct_participacion: 0, campos_bloqueados_por_catalogo: false,
   observaciones: '', estado: 'pendiente', insumos: [], mano_obra: [],
   hojas_iniciales: 0, hojas_buenas: 0, hojas_defectuosas: 0, hojas_rechazadas: 0, obs_calidad: '',
 });
@@ -105,14 +105,18 @@ export default function Pintura() {
         Insumo.list(), InventarioEnProceso.list(),
         ProductoTerminado.filter({ categoria: 'producto_terminado' }),
         ColorPintura.list(),
-        PlacaPCP.filter({ activo: true }),
+        // Catálogo de Placas real y único (ProductoCatalogo categoria='placa'),
+        // el mismo que administra CatalogoPlacas.jsx y consume PCP — antes esto
+        // leía de la entidad PlacaPCP, que no tiene ninguna pantalla de gestión
+        // y quedaba desincronizada del catálogo que el usuario realmente edita.
+        ProductoCatalogo.filter({ categoria: 'placa' }),
       ]);
       setProcesos(Array.isArray(procesosData) ? procesosData : []);
       setInsumosQuimicos(Array.isArray(insumosData) ? insumosData : []);
       setInventarioEnProceso(Array.isArray(inventarioData) ? inventarioData : []);
       setProductosTerminados(Array.isArray(productosTermData) ? productosTermData : []);
       setColoresCatalogo(Array.isArray(coloresData) ? coloresData.filter(c => c.estado === 'activo') : []);
-      setPlacas(Array.isArray(placasData) ? placasData : []);
+      setPlacas(Array.isArray(placasData) ? placasData.filter(p => p.estado === 'activo').map(p => ({ id: p.id, codigo: p.codigo, nombre: p.descripcion || p.codigo })) : []);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, []);
 
@@ -260,15 +264,25 @@ export default function Pintura() {
     setMostrarListaProducto(false); setMostrarListaNombre(false);
   };
 
-  // Seleccionar producto terminado del inventario de productos terminados para el sublote
+  // Seleccionar producto terminado del inventario de productos terminados para el sublote.
+  // Si el producto fue creado desde el Catálogo Maestro con Tipo de Acabado + Color +
+  // Placa ya definidos, esos 3 campos se traen automáticamente y quedan de solo lectura
+  // (no se debe volver a crear esa información manualmente desde Pintura).
   const handleSeleccionarProductoTerminado = (productoId) => {
     const prod = productosTerminados.find(p => p.id === productoId);
     if (!prod) return;
+    const tieneDatosCatalogo = !!(prod.tipo_acabado && prod.codigo_color && prod.codigo_placa);
+    const placaCat = tieneDatosCatalogo ? placas.find(p => p.codigo === prod.codigo_placa) : null;
     setSubloteActivo({
       producto_terminado_id: prod.id,
       producto_terminado_codigo: prod.codigo,
       producto_terminado_nombre: prod.descripcion || '',
-      tipo_acabado: prod.acabado || subloteActivo?.tipo_acabado || '',
+      tipo_acabado: prod.tipo_acabado || prod.acabado || subloteActivo?.tipo_acabado || '',
+      color_final: tieneDatosCatalogo ? (prod.nombre_color || '') : (subloteActivo?.color_final || ''),
+      placa_id: tieneDatosCatalogo ? (placaCat?.id || '') : (subloteActivo?.placa_id || ''),
+      placa_codigo: tieneDatosCatalogo ? (prod.codigo_placa || '') : (subloteActivo?.placa_codigo || ''),
+      placa_nombre: tieneDatosCatalogo ? (prod.placa_nombre || '') : (subloteActivo?.placa_nombre || ''),
+      campos_bloqueados_por_catalogo: tieneDatosCatalogo,
     });
     setBusquedaProducto('');
     setBusquedaNombre('');
@@ -1645,33 +1659,45 @@ export default function Pintura() {
                         </div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Tipo de Acabado *</Label>
-                          <Select value={subloteActivo.tipo_acabado || ''} onValueChange={v => handleSubloteFieldChange('tipo_acabado', v)} disabled={esFinalizado}>
-                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                            <SelectContent>{TIPOS_ACABADO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                          </Select>
+                          {subloteActivo.campos_bloqueados_por_catalogo ? (
+                            <Input readOnly value={subloteActivo.tipo_acabado || ''} className="text-xs h-9 bg-slate-50 cursor-not-allowed" />
+                          ) : (
+                            <Select value={subloteActivo.tipo_acabado || ''} onValueChange={v => handleSubloteFieldChange('tipo_acabado', v)} disabled={esFinalizado}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                              <SelectContent>{TIPOS_ACABADO.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                          )}
                         </div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Color Final *</Label>
-                          <Select value={subloteActivo.color_final || ''} onValueChange={v => handleSubloteFieldChange('color_final', v)} disabled={esFinalizado}>
-                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                            <SelectContent className="max-h-48 overflow-y-auto">
-                              {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.nombre_color}>{c.codigo_color} - {c.nombre_color}</SelectItem>)}
-                              {coloresCatalogo.length === 0 && COLORES_BASE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
+                          {subloteActivo.campos_bloqueados_por_catalogo ? (
+                            <Input readOnly value={subloteActivo.color_final || ''} className="text-xs h-9 bg-slate-50 cursor-not-allowed" />
+                          ) : (
+                            <Select value={subloteActivo.color_final || ''} onValueChange={v => handleSubloteFieldChange('color_final', v)} disabled={esFinalizado}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                              <SelectContent className="max-h-48 overflow-y-auto">
+                                {coloresCatalogo.map(c => <SelectItem key={c.id} value={c.nombre_color}>{c.codigo_color} - {c.nombre_color}</SelectItem>)}
+                                {coloresCatalogo.length === 0 && COLORES_BASE.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Placa *</Label>
-                          <Select value={subloteActivo.placa_id || ''} onValueChange={v => {
-                            const p = placas.find(x => x.id === v);
-                            setSubloteActivo({ placa_id: v, placa_codigo: p?.codigo || '', placa_nombre: p?.nombre || '' });
-                          }} disabled={esFinalizado}>
-                            <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar placa..." /></SelectTrigger>
-                            <SelectContent className="max-h-48 overflow-y-auto">
-                              {placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}
-                              {placas.length === 0 && <SelectItem value="__none__" disabled>Sin placas registradas</SelectItem>}
-                            </SelectContent>
-                          </Select>
+                          {subloteActivo.campos_bloqueados_por_catalogo ? (
+                            <Input readOnly value={subloteActivo.placa_nombre || ''} className="text-xs h-9 bg-slate-50 cursor-not-allowed" />
+                          ) : (
+                            <Select value={subloteActivo.placa_id || ''} onValueChange={v => {
+                              const p = placas.find(x => x.id === v);
+                              setSubloteActivo({ placa_id: v, placa_codigo: p?.codigo || '', placa_nombre: p?.nombre || '' });
+                            }} disabled={esFinalizado}>
+                              <SelectTrigger className="text-xs h-9"><SelectValue placeholder="Seleccionar placa..." /></SelectTrigger>
+                              <SelectContent className="max-h-48 overflow-y-auto">
+                                {placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}
+                                {placas.length === 0 && <SelectItem value="__none__" disabled>Sin placas registradas</SelectItem>}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                         <div>
                           <Label className="text-xs font-bold text-orange-800">Estado</Label>

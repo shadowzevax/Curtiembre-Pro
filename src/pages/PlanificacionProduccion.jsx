@@ -72,6 +72,7 @@ export default function PlanificacionProduccion() {
   const [showEntregaModal, setShowEntregaModal] = useState(false);
   const [showCatalogoModal, setShowCatalogoModal] = useState(false);
   const [showCalidadModal, setShowCalidadModal] = useState(false);
+  const [formatoPintorOrden, setFormatoPintorOrden] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -274,6 +275,53 @@ export default function PlanificacionProduccion() {
     });
     return Object.values(groups).map(g => ({ ...g, clientes: [...g.clientes] }));
   }, [solicitudes]);
+
+  // ── FORMATO IMPRESO PARA EL PINTOR ──────────────────────────────────────
+  // No modifica la lógica del Consolidado: solo reconstruye, a partir de las
+  // solicitudes que ya quedaron ligadas a la Orden (orden.solicitudes_ids),
+  // una matriz Color x Placa. Una misma solicitud puede tener varios items con
+  // distintos color/placa pero el mismo Tipo de Acabado + Calibre de la orden,
+  // por eso la matriz puede tener más de una fila/columna aunque el Consolidado
+  // agrupe por combinación exacta.
+  const construirMatrizPintor = (orden) => {
+    const solsOrden = solicitudes.filter(s => (orden.solicitudes_ids || []).includes(s.id));
+    const celdas = {}; // color -> { placa: cantidad }
+    const coloresSet = new Set();
+    const placasSet = new Set();
+    const observaciones = [];
+    let totalGeneral = 0;
+
+    solsOrden.forEach(sol => {
+      (sol.items || []).forEach(item => {
+        const tipoOk = (item.codigo_tipo_acabado || item.tipo_cuero_nombre) === (orden.codigo_tipo_acabado || orden.tipo_cuero_nombre);
+        const calibreOk = (item.calibre || "") === (orden.calibre || "");
+        if (!tipoOk || !calibreOk) return;
+        const color = item.nombre_color || item.codigo_color || "SIN COLOR";
+        const placa = item.placa_nombre || item.codigo_placa || "SIN PLACA";
+        const cant = item.cantidad_hojas || 0;
+        if (!celdas[color]) celdas[color] = {};
+        celdas[color][placa] = (celdas[color][placa] || 0) + cant;
+        coloresSet.add(color);
+        placasSet.add(placa);
+        totalGeneral += cant;
+        if (item.observaciones) {
+          observaciones.push({ solicitante: sol.cliente_nombre, numero: sol.numero_solicitud, color, placa, obs: item.observaciones });
+        }
+      });
+      if (sol.observaciones) {
+        observaciones.push({ solicitante: sol.cliente_nombre, numero: sol.numero_solicitud, general: true, obs: sol.observaciones });
+      }
+    });
+
+    const colores = [...coloresSet].sort();
+    const placas = [...placasSet].sort();
+    const totalesPorPlaca = {};
+    placas.forEach(p => { totalesPorPlaca[p] = colores.reduce((s, c) => s + (celdas[c]?.[p] || 0), 0); });
+    const totalesPorColor = {};
+    colores.forEach(c => { totalesPorColor[c] = placas.reduce((s, p) => s + (celdas[c]?.[p] || 0), 0); });
+
+    return { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones };
+  };
 
   return (
     <div className="p-6 space-y-4">
@@ -590,6 +638,7 @@ export default function PlanificacionProduccion() {
                           <td className="p-2 text-center">
                             <div className="flex justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-purple-600" onClick={() => { setAvanceOrden(ord); setShowAvanceModal(true); }} title="Registrar avance"><TrendingUp className="w-3 h-3" /></Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" onClick={() => setFormatoPintorOrden(ord)} title="Imprimir formato para pintor">🖨</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600" onClick={() => { setEditingOrden(ord); setShowOrdenModal(true); }}><Edit2 className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={async () => { if (confirm("¿Eliminar orden?")) { await base44.entities.OrdenProduccionPCP.delete(ord.id); loadData(); } }}><Trash2 className="w-3 h-3" /></Button>
                             </div>
@@ -854,6 +903,15 @@ export default function PlanificacionProduccion() {
         />
       )}
 
+      {/* ══ MODAL FORMATO IMPRESO PARA PINTOR ══ */}
+      {formatoPintorOrden && (
+        <FormatoPintorModal
+          orden={formatoPintorOrden}
+          matriz={construirMatrizPintor(formatoPintorOrden)}
+          onClose={() => setFormatoPintorOrden(null)}
+        />
+      )}
+
       {/* ══ MODAL AVANCE ══ */}
       {showAvanceModal && avanceOrden && (
         <AvanceModal
@@ -943,6 +1001,118 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── FormatoPintorModal ───
+// Formato imprimible para entrega al pintor: matriz Color x Placa construida
+// automáticamente desde las solicitudes ya consolidadas en la orden. No
+// redigita nada — toma los datos ya calculados en construirMatrizPintor().
+function FormatoPintorModal({ orden, matriz, onClose }) {
+  const [obsGeneral, setObsGeneral] = useState("");
+  const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones } = matriz;
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <style>{`@media print {
+          #formato-pintor-imprimible { position: absolute; left: 0; top: 0; width: 100%; }
+          #formato-pintor-numero-orden-fijo { position: fixed; top: 0; left: 0; right: 0; padding: 4px 0; text-align: center; font-size: 11px; font-weight: bold; }
+          .no-print, #page-header { display: none !important; }
+          body * { visibility: hidden; }
+          #formato-pintor-imprimible, #formato-pintor-imprimible *,
+          #formato-pintor-numero-orden-fijo, #formato-pintor-numero-orden-fijo * { visibility: visible; }
+        }`}</style>
+        <DialogHeader className="no-print">
+          <DialogTitle>🖨 Formato para Pintor — {orden.numero_orden}</DialogTitle>
+        </DialogHeader>
+
+        <div id="formato-pintor-numero-orden-fijo">Orden de Producción: {orden.numero_orden}</div>
+
+        <div id="formato-pintor-imprimible" className="space-y-4 text-sm">
+          {/* Encabezado */}
+          <div className="border-b-2 border-slate-800 pb-2">
+            <h2 className="text-lg font-extrabold text-center">FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR</h2>
+            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+              <div><span className="font-semibold">N.º Orden:</span> <span className="font-mono font-bold">{orden.numero_orden}</span></div>
+              <div><span className="font-semibold">Fecha:</span> {fmtDate(orden.fecha)}</div>
+              <div><span className="font-semibold">Pintor:</span> {orden.pintor_nombre || "—"}</div>
+              <div><span className="font-semibold">Código Tipo de Acabado:</span> {orden.codigo_tipo_acabado || "—"}</div>
+              <div><span className="font-semibold">Tipo de Acabado:</span> {orden.tipo_cuero_nombre || "—"}</div>
+              <div><span className="font-semibold">Calibre:</span> {orden.calibre || "—"}</div>
+              <div className="col-span-3"><span className="font-semibold">Total de Hojas:</span> <span className="font-bold">{totalGeneral}</span></div>
+            </div>
+          </div>
+
+          {/* Matriz de Producción */}
+          <div>
+            <h3 className="font-bold text-sm mb-1">MATRIZ DE PRODUCCIÓN (Color x Placa — cantidad de hojas)</h3>
+            {colores.length === 0 || placas.length === 0 ? (
+              <p className="text-slate-400 text-xs">No hay datos suficientes para construir la matriz.</p>
+            ) : (
+              <table className="w-full text-xs border-collapse border border-slate-400">
+                <thead>
+                  <tr className="bg-slate-800 text-white">
+                    <th className="border border-slate-400 p-1.5 text-left">COLOR</th>
+                    {placas.map(p => <th key={p} className="border border-slate-400 p-1.5 text-center">{p}</th>)}
+                    <th className="border border-slate-400 p-1.5 text-center">TOTAL COLOR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {colores.map(c => (
+                    <tr key={c}>
+                      <td className="border border-slate-400 p-1.5 font-semibold">{c}</td>
+                      {placas.map(p => <td key={p} className="border border-slate-400 p-1.5 text-center">{celdas[c]?.[p] || 0}</td>)}
+                      <td className="border border-slate-400 p-1.5 text-center font-bold bg-slate-100">{totalesPorColor[c]}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-slate-100 font-bold">
+                    <td className="border border-slate-400 p-1.5">TOTAL PLACA</td>
+                    {placas.map(p => <td key={p} className="border border-slate-400 p-1.5 text-center">{totalesPorPlaca[p]}</td>)}
+                    <td className="border border-slate-400 p-1.5 text-center">{totalGeneral}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Observaciones */}
+          <div>
+            <h3 className="font-bold text-sm mb-1 border-t pt-2">OBSERVACIONES DE PRODUCCIÓN</h3>
+            {observaciones.length === 0 ? (
+              <p className="text-slate-400 text-xs">Sin observaciones registradas en las solicitudes de esta orden.</p>
+            ) : (
+              <ul className="text-xs list-disc pl-4 space-y-0.5">
+                {observaciones.map((o, i) => (
+                  <li key={i}>
+                    <span className="font-semibold">{o.numero}</span> — {o.solicitante}
+                    {!o.general && <> ({o.color} / {o.placa})</>}: {o.obs}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-2 no-print">
+              <Label className="text-xs">Observación general de producción (opcional, se incluye al imprimir)</Label>
+              <Textarea value={obsGeneral} onChange={e => setObsGeneral(e.target.value)} rows={2} className="text-xs" />
+            </div>
+            {obsGeneral && <p className="text-xs mt-1"><span className="font-semibold">Observación general:</span> {obsGeneral}</p>}
+          </div>
+
+          {/* Pie del formato */}
+          <div className="border-t-2 border-slate-800 pt-3 mt-6 text-xs grid grid-cols-2 gap-4">
+            <div>Pintor: ______________________________</div>
+            <div>Fecha de recibido: ______________</div>
+            <div className="col-span-2">Observaciones del pintor: ______________________________________________________</div>
+            <div className="col-span-2 mt-4">Firma: ______________________________</div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4 no-print">
+          <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
+          <Button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900">🖨 Imprimir</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
