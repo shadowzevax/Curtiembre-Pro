@@ -142,6 +142,8 @@ import ReportesAreaCuentasPagar from './pages/ReportesAreaCuentasPagar';
 import ReportesAreaInventarios from './pages/ReportesAreaInventarios';
 import ReportesAreaProduccion from './pages/ReportesAreaProduccion';
 import ReportesAreaComercial from './pages/ReportesAreaComercial';
+import ProcesosExternos from './pages/ProcesosExternos';
+import CatalogoTiposProceso from './pages/CatalogoTiposProceso';
 import __Layout from './Layout.jsx';
 
 
@@ -241,6 +243,8 @@ export const PAGES = {
     "ReportesAreaInventarios": ReportesAreaInventarios,
     "ReportesAreaProduccion": ReportesAreaProduccion,
     "ReportesAreaComercial": ReportesAreaComercial,
+    "ProcesosExternos": ProcesosExternos,
+    "CatalogoTiposProceso": CatalogoTiposProceso,
 }
 
 export const pagesConfig = {

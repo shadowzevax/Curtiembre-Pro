@@ -48,5 +48,6 @@ export const TransferenciaCaja = makeEntity('TransferenciaCaja');
 export const TransferenciaInterna = makeEntity('TransferenciaInterna');
 export const TrasladoInventario = makeEntity('TrasladoInventario');
 export const UnidadMedida = makeEntity('UnidadMedida');
+export const ProcesoExterno = makeEntity('ProcesoExterno');
 
 export { User };
