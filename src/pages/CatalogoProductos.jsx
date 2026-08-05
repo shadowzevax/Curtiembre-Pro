@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProductoCatalogo, UnidadMedida, Insumo, ProductoTerminado, Proveedor, InventarioEnProceso, ColorPintura } from '@/entities/all';
+import { ProductoCatalogo, UnidadMedida, Insumo, ProductoTerminado, Proveedor, InventarioEnProceso, ColorPintura, MovimientoInventario } from '@/entities/all';
 import PageHeader from '../components/common/PageHeader';
 import DataTable from '../components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,6 +55,105 @@ export default function CatalogoProductos() {
     };
 
     const esProductoTerminado = (categoria) => categoria === 'productos_terminados';
+
+    // La categoría determina a qué inventario pertenece el producto. Antes de
+    // permitir cambiarla se verifica si ese inventario ya tiene movimientos
+    // reales (existencia distinta de cero o algún MovimientoInventario ya
+    // registrado) — de ser así, cambiar la categoría rompería la trazabilidad
+    // y no se permite.
+    const tieneMovimientosInventario = async (prod) => {
+        if (!prod?.categoria || prod.categoria === 'n_a') return false;
+        try {
+            if (prod.categoria === 'productos_en_proceso') {
+                const registros = await InventarioEnProceso.filter({ codigo_producto_proceso: prod.codigo });
+                return (registros || []).some(r => (parseFloat(r.cantidad_hojas) || 0) > 0 || (parseFloat(r.costo_acumulado) || 0) > 0);
+            }
+            const EntityMap = { materia_prima: ProductoTerminado, productos_terminados: ProductoTerminado, insumos_quimicos: Insumo };
+            const Entity = EntityMap[prod.categoria];
+            if (!Entity) return false;
+            const registros = await Entity.filter({ codigo: prod.codigo });
+            if ((registros || []).some(r => (parseFloat(r.stock_actual) || 0) !== 0)) return true;
+            const item = (registros || [])[0];
+            if (item) {
+                const movs = await MovimientoInventario.filter({ insumo_id: item.id });
+                if ((movs || []).length > 0) return true;
+            }
+            return false;
+        } catch {
+            return false;
+        }
+    };
+
+    // Traslada el producto de un inventario a otro cuando la categoría cambia
+    // sin movimientos previos: crea el registro en el inventario nuevo
+    // (conservando código e información) y elimina el del inventario anterior.
+    const trasladarEntreInventarios = async (categoriaAnterior, nuevoProduct) => {
+        const baseInventoryData = {
+            codigo: nuevoProduct.codigo,
+            nombre: nuevoProduct.descripcion,
+            descripcion: nuevoProduct.descripcion,
+            unidad_medida: nuevoProduct.unidad_medida || 'UN',
+            stock_actual: 0,
+            stock_minimo: nuevoProduct.stock_minimo || 0,
+            costo_promedio: nuevoProduct.costo_estandar || 0,
+            precio_venta_1: 0,
+            precio_venta_2: 0,
+            iva: 'grabado_19',
+            activo: nuevoProduct.estado === 'activo'
+        };
+
+        // Eliminar del inventario anterior
+        try {
+            if (categoriaAnterior === 'materia_prima' || categoriaAnterior === 'productos_terminados') {
+                const items = await ProductoTerminado.filter({ codigo: nuevoProduct.codigo });
+                for (const it of (items || [])) await ProductoTerminado.delete(it.id);
+            } else if (categoriaAnterior === 'insumos_quimicos') {
+                const items = await Insumo.filter({ codigo: nuevoProduct.codigo });
+                for (const it of (items || [])) await Insumo.delete(it.id);
+            } else if (categoriaAnterior === 'productos_en_proceso') {
+                const items = await InventarioEnProceso.filter({ codigo_producto_proceso: nuevoProduct.codigo });
+                for (const it of (items || [])) await InventarioEnProceso.delete(it.id);
+            }
+        } catch (err) {
+            console.error('Error eliminando del inventario anterior:', err);
+        }
+
+        // Crear en el inventario nuevo (si maneja inventario y no es N/A)
+        if (!nuevoProduct.maneja_inventario || !nuevoProduct.categoria || nuevoProduct.categoria === 'n_a') return;
+        if (nuevoProduct.categoria === 'materia_prima') {
+            await ProductoTerminado.create({ ...baseInventoryData, categoria: 'pieles' });
+        } else if (nuevoProduct.categoria === 'insumos_quimicos') {
+            await Insumo.create({ ...baseInventoryData, categoria: 'quimicos' });
+        } else if (nuevoProduct.categoria === 'productos_terminados') {
+            await ProductoTerminado.create({
+                ...baseInventoryData,
+                categoria: 'producto_terminado',
+                tipo_acabado: nuevoProduct.tipo_acabado || '',
+                codigo_color: nuevoProduct.codigo_color || '',
+                nombre_color: nuevoProduct.nombre_color || '',
+                codigo_placa: nuevoProduct.codigo_placa || '',
+                placa_nombre: nuevoProduct.placa_nombre || '',
+            });
+        } else if (nuevoProduct.categoria === 'productos_en_proceso') {
+            await InventarioEnProceso.create({
+                codigo: nuevoProduct.codigo,
+                descripcion: nuevoProduct.nombre_comercial || nuevoProduct.descripcion || '',
+                codigo_producto_proceso: nuevoProduct.codigo,
+                descripcion_producto_proceso: nuevoProduct.nombre_comercial || nuevoProduct.descripcion || '',
+                unidad_medida: nuevoProduct.unidad_medida || 'UN',
+                stock_minimo: nuevoProduct.stock_minimo || 0,
+                codigo_lote: nuevoProduct.codigo,
+                origen_modulo: 'compras',
+                etapa_actual: 'recurtido',
+                estado_actual: 'EN_PROCESO',
+                destino_sublote: 'disponible_pintura',
+                cantidad_hojas: 0,
+                costo_promedio: 0,
+                costo_acumulado: 0,
+                fecha_ingreso_proceso: new Date().toISOString().split('T')[0],
+            });
+        }
+    };
 
     const handleOpenModal = (item = null) => {
         setIsEditing(!!item);
@@ -116,9 +215,28 @@ export default function CatalogoProductos() {
             }
         }
 
+        // ── Cambio de categoría: validar contra movimientos de inventario ──
+        const originalProd = isEditing ? productos.find(p => p.id === currentItem.id) : null;
+        const categoriaCambio = originalProd && originalProd.categoria !== currentItem.categoria;
+        if (categoriaCambio) {
+            const bloqueado = await tieneMovimientosInventario(originalProd);
+            if (bloqueado) {
+                alert('❌ No es posible modificar la categoría de este producto porque ya registra movimientos de inventario. Esto afectaría la trazabilidad del inventario.');
+                return;
+            }
+        }
+
         try {
             if (isEditing) {
                 await ProductoCatalogo.update(currentItem.id, { ...currentItem, ultima_modificacion: new Date().toISOString() });
+
+                if (categoriaCambio) {
+                    await trasladarEntreInventarios(originalProd.categoria, currentItem);
+                    setShowModal(false);
+                    loadData();
+                    alert(`✅ Producto trasladado de "${originalProd.categoria.replace(/_/g, ' ')}" a "${currentItem.categoria.replace(/_/g, ' ')}" sin perder su código ni su información.`);
+                    return;
+                }
 
                 // Sincronizar datos básicos en el inventario espejo al editar
                 if (currentItem.maneja_inventario && currentItem.categoria) {

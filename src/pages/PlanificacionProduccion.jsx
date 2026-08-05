@@ -139,12 +139,23 @@ const semaforoPedido = (fechaCompromiso, estado) => {
   return { icon: "🟢", label: "Al día", cls: "bg-green-100 text-green-800" };
 };
 
+// Prioridad de 4 niveles (Muy Alta/Alta/Normal/Baja). Compatibilidad: los
+// valores antiguos (normal/urgente/muy_urgente) se migraron una sola vez en
+// la base de datos hacia este esquema; estos alias quedan solo por si algún
+// registro viejo llegara a colarse sin migrar.
 const PRIORIDAD_BADGE = {
+  muy_alta: "bg-red-100 text-red-800",
+  alta: "bg-amber-100 text-amber-800",
   normal: "bg-blue-100 text-blue-800",
+  baja: "bg-slate-100 text-slate-700",
   urgente: "bg-amber-100 text-amber-800",
   muy_urgente: "bg-red-100 text-red-800",
 };
-const PRIORIDAD_LABEL = { normal: "Normal", urgente: "Urgente", muy_urgente: "Muy Urgente" };
+const PRIORIDAD_LABEL = {
+  muy_alta: "Muy Alta (Urgente)", alta: "Alta", normal: "Normal", baja: "Baja",
+  urgente: "Alta", muy_urgente: "Muy Alta (Urgente)",
+};
+const PRIORIDAD_RANK = { muy_alta: 4, alta: 3, normal: 2, baja: 1, urgente: 3, muy_urgente: 4 };
 const ESTADO_BADGE = {
   pendiente: "bg-yellow-100 text-yellow-800",
   consolidada: "bg-blue-100 text-blue-800",
@@ -249,16 +260,18 @@ export default function PlanificacionProduccion() {
   // Organiza automáticamente lo que falta producir: una fila por Orden activa,
   // con la prioridad heredada de sus Solicitudes de origen (la más alta entre ellas).
   const planMaestro = React.useMemo(() => {
-    const prioridadRank = { muy_urgente: 3, urgente: 2, normal: 1 };
     return ordenes
       .filter(o => ["pendiente", "en_produccion"].includes(o.estado))
       .map(o => {
-        const solsOrigen = solicitudes.filter(s => (o.solicitudes_ids || []).includes(s.id));
-        const prioridad = solsOrigen.reduce((max, s) => (prioridadRank[s.prioridad] || 1) > (prioridadRank[max] || 1) ? s.prioridad : max, "normal");
+        let prioridad = o.prioridad;
+        if (!prioridad) {
+          const solsOrigen = solicitudes.filter(s => (o.solicitudes_ids || []).includes(s.id));
+          prioridad = solsOrigen.reduce((max, s) => (PRIORIDAD_RANK[s.prioridad] || 2) > (PRIORIDAD_RANK[max] || 2) ? s.prioridad : max, "normal");
+        }
         const cantidadPendiente = Math.max(0, (o.cantidad_total_hojas || 0) - (o.hojas_producidas || 0));
         return { ...o, prioridad, cantidadPendiente };
       })
-      .sort((a, b) => (prioridadRank[b.prioridad] || 1) - (prioridadRank[a.prioridad] || 1) || new Date(a.fecha) - new Date(b.fecha));
+      .sort((a, b) => (PRIORIDAD_RANK[b.prioridad] || 2) - (PRIORIDAD_RANK[a.prioridad] || 2) || new Date(a.fecha) - new Date(b.fecha));
   }, [ordenes, solicitudes]);
 
   // ── ALERTAS AUTOMÁTICAS ──
@@ -829,6 +842,7 @@ export default function PlanificacionProduccion() {
                         solicitudes_ids: g.solicitudes.map(s => s.id),
                         clientes_incluidos: g.clientes,
                         estado: "pendiente",
+                        prioridad: g.solicitudes.reduce((max, s) => (PRIORIDAD_RANK[s.prioridad] || 2) > (PRIORIDAD_RANK[max] || 2) ? s.prioridad : max, "normal"),
                         origenConsolidado: true,
                       });
                       setShowOrdenModal(true);
@@ -897,6 +911,7 @@ export default function PlanificacionProduccion() {
                   <thead className="bg-slate-800 text-white">
                     <tr>
                       <th className="p-2 text-left">No. Orden</th>
+                      <th className="p-2 text-center">Prioridad</th>
                       <th className="p-2 text-left">Fecha</th>
                       <th className="p-2 text-left">Color</th>
                       <th className="p-2 text-left">Tipo de Acabado</th>
@@ -912,13 +927,15 @@ export default function PlanificacionProduccion() {
                   </thead>
                   <tbody>
                     {ordenes.length === 0 ? (
-                      <tr><td colSpan={12} className="p-4 text-center text-slate-400">No hay órdenes de producción.</td></tr>
-                    ) : ordenes.map(ord => {
+                      <tr><td colSpan={13} className="p-4 text-center text-slate-400">No hay órdenes de producción.</td></tr>
+                    ) : [...ordenes].sort((a, b) => (PRIORIDAD_RANK[b.prioridad] || 2) - (PRIORIDAD_RANK[a.prioridad] || 2) || new Date(a.fecha) - new Date(b.fecha)).map(ord => {
                       const pend = Math.max(0, (ord.cantidad_total_hojas || 0) - (ord.hojas_producidas || 0));
                       const pct = ord.cantidad_total_hojas > 0 ? Math.min(100, ((ord.hojas_producidas || 0) / ord.cantidad_total_hojas) * 100) : 0;
+                      const esMuyAlta = ord.prioridad === "muy_alta" || ord.prioridad === "muy_urgente";
                       return (
-                        <tr key={ord.id} className="border-t hover:bg-slate-50">
+                        <tr key={ord.id} className={`border-t hover:bg-slate-50 ${esMuyAlta ? "bg-red-50" : ""}`}>
                           <td className="p-2 font-mono font-bold text-blue-700">{ord.numero_orden}</td>
+                          <td className="p-2 text-center">{ord.prioridad ? <Badge className={`text-xs ${PRIORIDAD_BADGE[ord.prioridad]}`}>{PRIORIDAD_LABEL[ord.prioridad]}</Badge> : "—"}</td>
                           <td className="p-2">{fmtDate(ord.fecha)}</td>
                           <td className="p-2">{ord.nombre_color || "—"}</td>
                           <td className="p-2">{ord.tipo_cuero_nombre || "—"}</td>
@@ -959,7 +976,8 @@ export default function PlanificacionProduccion() {
         {/* ──────────── AVANCES ──────────── */}
         <TabsContent value="avances">
           {(() => {
-            const enCurso = ordenes.filter(o => o.estado === "en_produccion");
+            const enCurso = [...ordenes.filter(o => o.estado === "en_produccion")]
+              .sort((a, b) => (PRIORIDAD_RANK[b.prioridad] || 2) - (PRIORIDAD_RANK[a.prioridad] || 2) || new Date(a.fecha) - new Date(b.fecha));
             const filas = enCurso.map(o => ({ orden: o, r: construirLineasOrden(o) }));
             const totalProgramadas = filas.reduce((s, x) => s + x.r.totalProgramadas, 0);
             const totalProducidas = filas.reduce((s, x) => s + x.r.totalProducidas, 0);
@@ -1371,11 +1389,13 @@ function ConsolidadoCard({ grupo, onGenerarOrden }) {
 // ningún formulario ni registro propio — solo lectura + accesos directos.
 function OrdenEnCursoCard({ orden, resumen, retrasada, onRegistrarAvance, onVerHistorial, onImprimir }) {
   const [expanded, setExpanded] = useState(false);
+  const esMuyAlta = orden.prioridad === "muy_alta" || orden.prioridad === "muy_urgente";
   return (
-    <div className="border border-purple-200 rounded-xl bg-purple-50 p-3">
+    <div className={`border rounded-xl p-3 ${esMuyAlta ? "border-red-300 bg-red-50" : "border-purple-200 bg-purple-50"}`}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex flex-col gap-0.5 text-sm">
           <span className="font-bold text-purple-800">
+            {esMuyAlta && <Badge className="bg-red-100 text-red-800 text-xs mr-1">🔥 {PRIORIDAD_LABEL[orden.prioridad]}</Badge>}
             {orden.numero_orden} · {orden.tipo_cuero_nombre || "—"} · Calibre {orden.calibre || "—"} · Pintor: {orden.pintor_nombre || "—"}
           </span>
           <span className="text-slate-600 text-xs">
@@ -1805,9 +1825,10 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
               <Select value={form.prioridad} onValueChange={v => setForm(p => ({ ...p, prioridad: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="muy_alta">Muy Alta (Urgente)</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
                   <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="urgente">Urgente</SelectItem>
-                  <SelectItem value="muy_urgente">Muy Urgente</SelectItem>
+                  <SelectItem value="baja">Baja</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1956,16 +1977,20 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
 
 // ─── OrdenModal ───
 function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes, onSave }) {
-  const [form, setForm] = useState({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", observaciones: "" });
+  const [form, setForm] = useState({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", prioridad: "normal", observaciones: "" });
 
   // Una Orden que proviene del Consolidado (tiene solicitudes de origen) hereda
   // TODA su información técnica de ahí: esos campos quedan bloqueados y solo se
   // puede editar la fecha programada, el responsable y las observaciones.
   const bloqueadaPorConsolidado = (form.solicitudes_ids || []).length > 0;
+  // Una orden que ya tiene avances registrados (o está en producción/finalizada)
+  // no puede cambiar sus cantidades programadas: adicionar/quitar solicitudes o
+  // modificar el total rompería la trazabilidad de lo ya producido.
+  const tieneAvances = (orden?.hojas_producidas || 0) > 0 || ["en_produccion", "finalizada"].includes(orden?.estado);
 
   useEffect(() => {
-    if (orden) setForm({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", observaciones: "", ...orden });
-    else setForm({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", observaciones: "" });
+    if (orden) setForm({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", prioridad: "normal", observaciones: "", ...orden });
+    else setForm({ fecha: today(), tipo_cuero_id: "", tipo_cuero_nombre: "", codigo_color: "", nombre_color: "", placa_id: "", placa_nombre: "", cantidad_total_hojas: 0, pintor_nombre: "", estado: "pendiente", prioridad: "normal", observaciones: "" });
   }, [orden, open]);
 
   const handleSave = async () => {
@@ -1978,8 +2003,20 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
     }
     const { clientes_incluidos, origenConsolidado, ...rest } = form;
     const data = { ...rest, numero_orden };
-    if (orden?.id) await base44.entities.OrdenProduccionPCP.update(orden.id, data);
-    else await base44.entities.OrdenProduccionPCP.create(data);
+    if (orden?.id) {
+      await base44.entities.OrdenProduccionPCP.update(orden.id, data);
+    } else {
+      await base44.entities.OrdenProduccionPCP.create(data);
+      // Las solicitudes que dieron origen a esta orden dejan de estar
+      // "pendiente" para no volver a aparecer en el Consolidado ni mezclarse
+      // con una nueva solicitud urgente que llegue después — así una Orden
+      // Urgente generada más tarde queda siempre independiente de esta.
+      if ((data.solicitudes_ids || []).length > 0) {
+        for (const solId of data.solicitudes_ids) {
+          try { await base44.entities.SolicitudProduccion.update(solId, { estado: "consolidada" }); } catch {}
+        }
+      }
+    }
     onSave();
     onClose();
   };
@@ -2042,11 +2079,29 @@ function OrdenModal({ open, onClose, orden, colores, tiposCuero, placas, ordenes
                     <SelectContent>{placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label>Total Hojas *</Label><Input type="number" value={form.cantidad_total_hojas} onChange={e => setForm(p => ({ ...p, cantidad_total_hojas: parseFloat(e.target.value) || 0 }))} /></div>
+                <div>
+                  <Label>Total Hojas *</Label>
+                  <Input type="number" value={form.cantidad_total_hojas} disabled={tieneAvances} onChange={e => setForm(p => ({ ...p, cantidad_total_hojas: parseFloat(e.target.value) || 0 }))} />
+                </div>
               </>
             )}
+            <div>
+              <Label>Prioridad</Label>
+              <Select value={form.prioridad || "normal"} onValueChange={v => setForm(p => ({ ...p, prioridad: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="muy_alta">Muy Alta (Urgente)</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="baja">Baja</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="col-span-2"><Label>Responsable de Producción</Label><Input value={form.pintor_nombre} onChange={e => setForm(p => ({ ...p, pintor_nombre: e.target.value }))} placeholder="Nombre del responsable..." /></div>
           </div>
+          {tieneAvances && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">⚠ Esta orden ya tiene avances de producción registrados: las cantidades programadas quedan bloqueadas para no afectar la trazabilidad.</p>
+          )}
           <div><Label>Observaciones</Label><Textarea value={form.observaciones} onChange={e => setForm(p => ({ ...p, observaciones: e.target.value }))} rows={2} /></div>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t">
