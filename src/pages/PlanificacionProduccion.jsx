@@ -1808,70 +1808,130 @@ function MatrizIndividualModal({ solicitud, matriz, onClose }) {
 function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuero, placas, solicitudes, onSave }) {
   const [form, setForm] = useState({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
 
+  // ── Matriz de captura: Tipo de Acabado y Calibre son únicos para toda la
+  // solicitud (así lo pide el flujo real); Color va en filas, Placa en
+  // columnas, y cada celda es la cantidad de hojas de esa combinación. Los
+  // "items" internos (uno por celda > 0) se generan solos al Guardar.
+  const [tipoAcabadoId, setTipoAcabadoId] = useState("");
+  const [calibre, setCalibre] = useState("");
+  const [coloresSel, setColoresSel] = useState([]); // [{id, codigo_color, nombre_color}]
+  const [placasSel, setPlacasSel] = useState([]); // [{id, codigo, nombre}]
+  const [cantidades, setCantidades] = useState({}); // "colorId|placaId" -> string
+  const [colorABuscar, setColorABuscar] = useState("");
+
   useEffect(() => {
-    if (solicitud) setForm({ ...solicitud });
-    else setForm({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
+    if (solicitud) {
+      setForm({ ...solicitud });
+      const items = solicitud.items || [];
+      const primerItem = items[0] || {};
+      setTipoAcabadoId(primerItem.tipo_cuero_id || "");
+      setCalibre(primerItem.calibre || "");
+      const coloresMap = new Map();
+      const placasMap = new Map();
+      const cant = {};
+      items.forEach(it => {
+        if (it.color_id && !coloresMap.has(it.color_id)) coloresMap.set(it.color_id, { id: it.color_id, codigo_color: it.codigo_color, nombre_color: it.nombre_color });
+        if (it.placa_id && !placasMap.has(it.placa_id)) placasMap.set(it.placa_id, { id: it.placa_id, codigo: it.codigo_placa, nombre: it.placa_nombre });
+        if (it.color_id && it.placa_id) cant[`${it.color_id}|${it.placa_id}`] = String(it.cantidad_hojas || "");
+      });
+      setColoresSel([...coloresMap.values()]);
+      setPlacasSel([...placasMap.values()]);
+      setCantidades(cant);
+    } else {
+      setForm({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
+      setTipoAcabadoId(""); setCalibre(""); setColoresSel([]); setPlacasSel([]); setCantidades({}); setColorABuscar("");
+    }
   }, [solicitud, open]);
 
-  const addItem = () => setForm(p => ({ ...p, items: [...p.items, { codigo_producto: "", descripcion: "", tipo_cuero_id: "", codigo_tipo_acabado: "", tipo_cuero_nombre: "", color_id: "", codigo_color: "", nombre_color: "", placa_id: "", codigo_placa: "", placa_nombre: "", calibre: "", cantidad_hojas: 0, observaciones: "" }] }));
-  const updateItem = (idx, field, val) => setForm(p => { const items = [...p.items]; items[idx] = { ...items[idx], [field]: val }; return { ...p, items }; });
-  const removeItem = (idx) => setForm(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }));
+  const agregarColor = (colorId) => {
+    if (!colorId || coloresSel.some(c => c.id === colorId)) return;
+    const c = colores.find(x => x.id === colorId);
+    if (!c) return;
+    setColoresSel(prev => [...prev, { id: c.id, codigo_color: c.codigo_color, nombre_color: c.nombre_color }]);
+  };
+  const quitarColor = (colorId) => {
+    setColoresSel(prev => prev.filter(c => c.id !== colorId));
+    setCantidades(prev => { const next = { ...prev }; Object.keys(next).forEach(k => { if (k.startsWith(`${colorId}|`)) delete next[k]; }); return next; });
+  };
+  const togglePlaca = (p) => {
+    setPlacasSel(prev => prev.some(x => x.id === p.id) ? prev.filter(x => x.id !== p.id) : [...prev, { id: p.id, codigo: p.codigo, nombre: p.nombre }]);
+  };
 
-  // ── Resumen y validación en vivo (se recalcula en cada cambio, sin guardar) ──
-  const resumen = React.useMemo(() => {
-    const items = form.items || [];
+  // Convierte la matriz (colores x placas) en el arreglo de "items" internos.
+  const construirItemsDesdeMatriz = () => {
+    const tipo = tiposCuero.find(t => t.id === tipoAcabadoId);
+    const items = [];
+    coloresSel.forEach(c => {
+      placasSel.forEach(p => {
+        const cant = parseFloat(cantidades[`${c.id}|${p.id}`]) || 0;
+        if (cant <= 0) return;
+        items.push({
+          tipo_cuero_id: tipoAcabadoId, codigo_tipo_acabado: tipo?.codigo || "", tipo_cuero_nombre: tipo?.nombre || "",
+          color_id: c.id, codigo_color: c.codigo_color, nombre_color: c.nombre_color,
+          placa_id: p.id, codigo_placa: p.codigo, placa_nombre: p.nombre,
+          calibre, cantidad_hojas: cant, observaciones: "",
+        });
+      });
+    });
+    return items;
+  };
+
+  // ── Totales en vivo de la matriz (mientras se captura, sin guardar) ──
+  const totalesMatriz = React.useMemo(() => {
     const porColor = {};
     const porPlaca = {};
     let totalHojas = 0;
-    items.forEach(it => {
-      const color = it.nombre_color || it.codigo_color || "Sin color";
-      const placa = it.placa_nombre || it.codigo_placa || "Sin placa";
-      const cant = parseFloat(it.cantidad_hojas) || 0;
-      porColor[color] = (porColor[color] || 0) + cant;
-      porPlaca[placa] = (porPlaca[placa] || 0) + cant;
-      totalHojas += cant;
+    coloresSel.forEach(c => {
+      placasSel.forEach(p => {
+        const cant = parseFloat(cantidades[`${c.id}|${p.id}`]) || 0;
+        porColor[c.id] = (porColor[c.id] || 0) + cant;
+        porPlaca[p.id] = (porPlaca[p.id] || 0) + cant;
+        totalHojas += cant;
+      });
     });
-    return {
-      porColor: Object.entries(porColor).sort((a, b) => a[0].localeCompare(b[0])),
-      porPlaca: Object.entries(porPlaca).sort((a, b) => a[0].localeCompare(b[0])),
-      totalRegistros: items.length,
-      totalColores: Object.keys(porColor).length,
-      totalPlacas: Object.keys(porPlaca).length,
-      totalHojas,
-    };
-  }, [form.items]);
+    return { porColor, porPlaca, totalHojas };
+  }, [coloresSel, placasSel, cantidades]);
 
-  // ── Advertencias: duplicados exactos, campos vacíos, cantidades negativas ──
+  // ── Resumen general (a partir de la matriz, en vivo) ──
+  const resumen = React.useMemo(() => {
+    const porColor = coloresSel
+      .map(c => [c.nombre_color || c.codigo_color, totalesMatriz.porColor[c.id] || 0])
+      .filter(([, cant]) => cant > 0)
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    const porPlaca = placasSel
+      .map(p => [p.nombre || p.codigo, totalesMatriz.porPlaca[p.id] || 0])
+      .filter(([, cant]) => cant > 0)
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    return {
+      porColor, porPlaca,
+      totalRegistros: construirItemsDesdeMatriz().length,
+      totalColores: porColor.length,
+      totalPlacas: porPlaca.length,
+      totalHojas: totalesMatriz.totalHojas,
+    };
+  }, [coloresSel, placasSel, totalesMatriz]);
+
+  // ── Advertencias: campos obligatorios, colores/placas sin ninguna cantidad ──
   const advertencias = React.useMemo(() => {
-    const items = form.items || [];
     const lista = [];
-    const clavesVistas = new Map(); // clave color+placa+calibre -> cantidad de filas
-    items.forEach((it) => {
-      const clave = `${it.codigo_color || it.nombre_color || ""}|${it.codigo_placa || it.placa_nombre || ""}|${it.calibre || ""}`;
-      clavesVistas.set(clave, (clavesVistas.get(clave) || 0) + 1);
+    if (!tipoAcabadoId) lista.push("Falta seleccionar el Tipo de Acabado de la solicitud.");
+    if (!calibre) lista.push("Falta seleccionar el Calibre de la solicitud.");
+    coloresSel.forEach(c => {
+      if ((totalesMatriz.porColor[c.id] || 0) <= 0) lista.push(`El color "${c.nombre_color}" no tiene ninguna cantidad registrada en la matriz — quítelo si no se va a usar.`);
     });
-    items.forEach((it, idx) => {
-      const fila = idx + 1;
-      if (!it.tipo_cuero_id || !it.color_id || !it.placa_id || !it.calibre) {
-        lista.push(`Fila ${fila}: hay campos obligatorios vacíos (Tipo de Acabado, Color, Placa o Calibre).`);
-      }
-      if ((parseFloat(it.cantidad_hojas) || 0) < 0) {
-        lista.push(`Fila ${fila}: la cantidad de hojas no puede ser negativa.`);
-      }
-      if ((parseFloat(it.cantidad_hojas) || 0) === 0) {
-        lista.push(`Fila ${fila}: la cantidad de hojas está en 0.`);
-      }
+    placasSel.forEach(p => {
+      if ((totalesMatriz.porPlaca[p.id] || 0) <= 0) lista.push(`La placa "${p.nombre}" no tiene ninguna cantidad registrada en la matriz — quítela si no se va a usar.`);
     });
-    for (const [clave, count] of clavesVistas) {
-      if (count > 1 && clave !== "||") {
-        const [, , calibre] = clave.split("|");
-        lista.push(`Hay ${count} filas repetidas con el mismo Color + Placa + Calibre (${calibre || "sin calibre"}) — podrían consolidarse en una sola línea.`);
-      }
-    }
     return lista;
-  }, [form.items]);
+  }, [tipoAcabadoId, calibre, coloresSel, placasSel, totalesMatriz]);
 
   const handleSave = async () => {
+    if (!form.cliente_id) { alert("Seleccione el Solicitante."); return; }
+    if (!tipoAcabadoId) { alert("Seleccione el Tipo de Acabado."); return; }
+    if (!calibre) { alert("Seleccione el Calibre."); return; }
+    const itemsGenerados = construirItemsDesdeMatriz();
+    if (itemsGenerados.length === 0) { alert("Registre al menos una cantidad mayor a 0 en la matriz Color x Placa."); return; }
+
     let numero_solicitud = form.numero_solicitud;
     if (!solicitud) {
       const year = new Date().getFullYear();
@@ -1879,15 +1939,12 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
       const maxNum = existentes.reduce((max, s) => { const n = parseInt(s.numero_solicitud?.split("-").pop() || "0"); return n > max ? n : max; }, 0);
       numero_solicitud = `SOL-${year}-${String(maxNum + 1).padStart(4, "0")}`;
     }
-    // Ordenar automáticamente por Tipo de Acabado, Color, Placa, Calibre antes de guardar
-    const itemsOrdenados = [...(form.items || [])].sort((a, b) => {
-      const ta = (a.codigo_tipo_acabado || a.tipo_cuero_nombre || "").localeCompare(b.codigo_tipo_acabado || b.tipo_cuero_nombre || "");
-      if (ta !== 0) return ta;
+    // Ordenar automáticamente por Color, Placa antes de guardar (Tipo de
+    // Acabado y Calibre ya son únicos para toda la solicitud)
+    const itemsOrdenados = itemsGenerados.sort((a, b) => {
       const co = (a.nombre_color || a.codigo_color || "").localeCompare(b.nombre_color || b.codigo_color || "");
       if (co !== 0) return co;
-      const pl = (a.placa_nombre || a.codigo_placa || "").localeCompare(b.placa_nombre || b.codigo_placa || "");
-      if (pl !== 0) return pl;
-      return (a.calibre || "").localeCompare(b.calibre || "");
+      return (a.placa_nombre || a.codigo_placa || "").localeCompare(b.placa_nombre || b.codigo_placa || "");
     });
     const data = { ...form, items: itemsOrdenados, numero_solicitud };
     if (solicitud) await base44.entities.SolicitudProduccion.update(solicitud.id, data);
@@ -1944,90 +2001,113 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
             <Textarea value={form.observaciones} onChange={e => setForm(p => ({ ...p, observaciones: e.target.value }))} rows={2} />
           </div>
 
-          {/* Items */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label className="text-base font-semibold">Detalle de Productos</Label>
-              <Button size="sm" variant="outline" onClick={addItem}><Plus className="w-3 h-3 mr-1" /> Agregar</Button>
+          {/* Paso 1 (complemento): Tipo de Acabado y Calibre, únicos para toda la solicitud */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Tipo de Acabado *</Label>
+              <Select value={tipoAcabadoId} onValueChange={setTipoAcabadoId}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.codigo} — {t.nombre}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-            <div className="border rounded-lg overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-100">
-                  <tr>
-                    <th className="p-2 text-left">Código Tipo de Acabado</th>
-                    <th className="p-2 text-left">Tipo de Acabado</th>
-                    <th className="p-2 text-left">Código Color</th>
-                    <th className="p-2 text-left">Color</th>
-                    <th className="p-2 text-left">Código Placa</th>
-                    <th className="p-2 text-left">Placa</th>
-                    <th className="p-2 text-left">Calibre</th>
-                    <th className="p-2 text-right">Cant. Hojas</th>
-                    <th className="p-2 text-left">Obs.</th>
-                    <th className="p-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.items.map((item, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="p-1 w-28">
-                        <Select value={item.tipo_cuero_id} onValueChange={v => { const t = tiposCuero.find(x => x.id === v); updateItem(idx, "tipo_cuero_id", v); updateItem(idx, "codigo_tipo_acabado", t?.codigo || ""); updateItem(idx, "tipo_cuero_nombre", t?.nombre || ""); }}>
-                          <SelectTrigger className="h-8 text-xs font-mono"><SelectValue placeholder="Cód..." /></SelectTrigger>
-                          <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.codigo}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1">
-                        <Select value={item.tipo_cuero_id} onValueChange={v => { const t = tiposCuero.find(x => x.id === v); updateItem(idx, "tipo_cuero_id", v); updateItem(idx, "codigo_tipo_acabado", t?.codigo || ""); updateItem(idx, "tipo_cuero_nombre", t?.nombre || ""); }}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Tipo..." /></SelectTrigger>
-                          <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.nombre}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1 w-28">
-                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo_color || ""); updateItem(idx, "nombre_color", c?.nombre_color || ""); }}>
-                          <SelectTrigger className="h-8 text-xs font-mono"><SelectValue placeholder="Cód..." /></SelectTrigger>
-                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.codigo_color}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1">
-                        <Select value={item.color_id || ""} onValueChange={v => { const c = colores.find(x => x.id === v); updateItem(idx, "color_id", v); updateItem(idx, "codigo_color", c?.codigo_color || ""); updateItem(idx, "nombre_color", c?.nombre_color || ""); }}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Color..." /></SelectTrigger>
-                          <SelectContent>{colores.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre_color}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1 w-28">
-                        <Select value={item.placa_id} onValueChange={v => { const p = placas.find(x => x.id === v); updateItem(idx, "placa_id", v); updateItem(idx, "codigo_placa", p?.codigo || ""); updateItem(idx, "placa_nombre", p?.nombre || ""); }}>
-                          <SelectTrigger className="h-8 text-xs font-mono"><SelectValue placeholder="Cód..." /></SelectTrigger>
-                          <SelectContent>{placas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1">
-                        <Select value={item.placa_id} onValueChange={v => { const p = placas.find(x => x.id === v); updateItem(idx, "placa_id", v); updateItem(idx, "codigo_placa", p?.codigo || ""); updateItem(idx, "placa_nombre", p?.nombre || ""); }}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Placa..." /></SelectTrigger>
-                          <SelectContent>{placas.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1 w-20">
-                        <Select value={item.calibre || ""} onValueChange={v => updateItem(idx, "calibre", v)}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Calibre..." /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0.5">0.5</SelectItem>
-                            <SelectItem value="0.7">0.7</SelectItem>
-                            <SelectItem value="0.8">0.8</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-1 w-20"><Input type="number" className="h-8 text-xs text-right" value={item.cantidad_hojas} onChange={e => updateItem(idx, "cantidad_hojas", parseFloat(e.target.value) || 0)} /></td>
-                      <td className="p-1"><Input className="h-8 text-xs" placeholder="Obs..." value={item.observaciones} onChange={e => updateItem(idx, "observaciones", e.target.value)} /></td>
-                      <td className="p-1"><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => removeItem(idx)}><X className="w-3 h-3 text-red-500" /></Button></td>
-                    </tr>
-                  ))}
-                  {form.items.length === 0 && <tr><td colSpan={10} className="p-3 text-center text-slate-400">Agregue al menos un ítem.</td></tr>}
-                </tbody>
-              </table>
+            <div>
+              <Label>Calibre *</Label>
+              <Select value={calibre} onValueChange={setCalibre}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0.5">0.5</SelectItem>
+                  <SelectItem value="0.7">0.7</SelectItem>
+                  <SelectItem value="0.8">0.8</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
+          {/* Paso 2: Agregar Color (buscador) */}
+          <div>
+            <Label className="text-base font-semibold">Colores de la Solicitud</Label>
+            <div className="flex gap-2 mt-1">
+              <Select value={colorABuscar} onValueChange={v => { agregarColor(v); setColorABuscar(""); }}>
+                <SelectTrigger className="max-w-xs"><SelectValue placeholder="Buscar y agregar color..." /></SelectTrigger>
+                <SelectContent>
+                  {colores.filter(c => !coloresSel.some(cs => cs.id === c.id)).map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.codigo_color} — {c.nombre_color}</SelectItem>
+                  ))}
+                  {colores.filter(c => !coloresSel.some(cs => cs.id === c.id)).length === 0 && <SelectItem value="__none__" disabled>No hay más colores</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+            {coloresSel.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {coloresSel.map(c => (
+                  <Badge key={c.id} className="bg-purple-100 text-purple-800 text-xs flex items-center gap-1">
+                    {c.nombre_color}
+                    <button type="button" onClick={() => quitarColor(c.id)} className="hover:text-red-600"><X className="w-3 h-3" /></button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Paso 3: Selección de Placas */}
+          <div>
+            <Label className="text-base font-semibold">Placas de la Solicitud</Label>
+            <div className="flex flex-wrap gap-3 mt-1 p-2 border rounded-lg bg-slate-50">
+              {placas.map(p => (
+                <label key={p.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                  <input type="checkbox" checked={placasSel.some(x => x.id === p.id)} onChange={() => togglePlaca(p)} />
+                  {p.codigo} — {p.nombre}
+                </label>
+              ))}
+              {placas.length === 0 && <p className="text-xs text-slate-400">Sin placas registradas en el catálogo.</p>}
+            </div>
+          </div>
+
+          {/* Matriz de Captura: filas = colores, columnas = placas */}
+          <div>
+            <Label className="text-base font-semibold">Matriz de Captura (Color x Placa)</Label>
+            {coloresSel.length === 0 || placasSel.length === 0 ? (
+              <p className="text-xs text-slate-400 border rounded-lg p-3 mt-1">Agregue al menos un color y marque al menos una placa para capturar cantidades.</p>
+            ) : (
+              <div className="border rounded-lg overflow-x-auto mt-1">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-800 text-white">
+                    <tr>
+                      <th className="p-2 text-left">COLOR</th>
+                      {placasSel.map(p => <th key={p.id} className="p-2 text-center">{p.codigo || p.nombre}</th>)}
+                      <th className="p-2 text-center">TOTAL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coloresSel.map(c => (
+                      <tr key={c.id} className="border-t">
+                        <td className="p-1.5 font-semibold">{c.nombre_color}</td>
+                        {placasSel.map(p => (
+                          <td key={p.id} className="p-1 text-center w-20">
+                            <Input
+                              type="number" min="0"
+                              value={cantidades[`${c.id}|${p.id}`] ?? ""}
+                              onChange={e => setCantidades(prev => ({ ...prev, [`${c.id}|${p.id}`]: e.target.value }))}
+                              className="h-8 text-xs text-center"
+                            />
+                          </td>
+                        ))}
+                        <td className="p-1.5 text-center font-bold bg-slate-100">{totalesMatriz.porColor[c.id] || 0}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-100 font-bold border-t">
+                      <td className="p-1.5">TOTALES</td>
+                      {placasSel.map(p => <td key={p.id} className="p-1.5 text-center">{totalesMatriz.porPlaca[p.id] || 0}</td>)}
+                      <td className="p-1.5 text-center">{totalesMatriz.totalHojas}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Totales y validación */}
-          {form.items.length > 0 && (
+          {resumen.totalRegistros > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="border rounded-lg p-2">
                 <p className="text-xs font-bold text-slate-600 mb-1">Total por Color</p>
