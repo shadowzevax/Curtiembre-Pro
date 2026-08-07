@@ -109,6 +109,7 @@ const menuItems = [
             { title: "Inventario de Insumos y Químicos", url: createPageUrl("InventarioInsumos"), icon: Package },
             { title: "Inventario Productos en Proceso", url: createPageUrl("InventarioEnProceso"), icon: Package },
             { title: "Inventario de Productos Terminados", url: createPageUrl("InventarioProductos"), icon: Package },
+            { title: "Inventario de Procesos Externos", url: createPageUrl("InventarioProcesosExternos"), icon: Package },
             { title: "Ajuste de Inventario", url: createPageUrl("AjusteInventario"), icon: Package },
             { title: "Traslado de Inventarios", url: createPageUrl("TrasladoInventario"), icon: Package }
         ]
@@ -397,6 +398,9 @@ export default function Layout({ children, currentPageName }) {
             'InventarioInsumos': 'Inventario de Insumos y Químicos',
             'InventarioEnProceso': 'Inventarios en Proceso',
             'InventarioProductos': 'Inventario de Productos Terminados',
+            'InventarioProcesosExternos': 'Inventario de Procesos Externos',
+            'ProcesosExternos': 'Procesos Externos',
+            'CatalogoTiposProceso': 'Catálogo de Tipos de Procesos',
             'ContabilidadGastos': 'Registro de Gastos',
             'ContabilidadIngresos': 'Otros Ingresos',
             'ContabilidadTraslados': 'Traslados de Efectivo',

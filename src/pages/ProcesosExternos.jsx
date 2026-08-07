@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ProcesoExterno, InventarioEnProceso, MovimientoInventario, Proveedor, ProductoCatalogo } from '@/entities/all';
+import { useAuth } from '@/lib/AuthContext';
 import PageHeader from '../components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,16 +17,38 @@ const formatCurrency = (v) => new Intl.NumberFormat('es-CO', { style: 'currency'
 const fmtDate = (d) => { if (!d) return '—'; try { return new Date(d + 'T00:00:00').toLocaleDateString('es-CO'); } catch { return d; } };
 const today = () => new Date().toISOString().split('T')[0];
 
+// Estados del proceso externo. "pendiente"/"en_proceso" quedan por
+// compatibilidad con registros viejos; el flujo nuevo usa enviado →
+// recibido_parcial → recibido_total (o cancelado en cualquier punto antes
+// de recibirse por completo).
 const ESTADO_BADGE = {
   pendiente: 'bg-yellow-100 text-yellow-800',
   enviado: 'bg-blue-100 text-blue-800',
   en_proceso: 'bg-purple-100 text-purple-800',
   recibido: 'bg-green-100 text-green-800',
+  recibido_parcial: 'bg-amber-100 text-amber-800',
+  recibido_total: 'bg-green-100 text-green-800',
   cancelado: 'bg-red-100 text-red-800',
 };
-const ESTADO_LABEL = { pendiente: 'Pendiente', enviado: 'Enviado', en_proceso: 'En Proceso', recibido: 'Recibido', cancelado: 'Cancelado' };
+const ESTADO_LABEL = {
+  pendiente: 'Pendiente', enviado: 'Enviado', en_proceso: 'En Proceso',
+  recibido: 'Recibido Totalmente', recibido_parcial: 'Recibido Parcialmente', recibido_total: 'Recibido Totalmente',
+  cancelado: 'Cancelado',
+};
+const diasTranscurridos = (fechaSalida, fechaFin) => {
+  if (!fechaSalida) return null;
+  const fin = fechaFin ? new Date(fechaFin + 'T00:00:00') : new Date();
+  const inicio = new Date(fechaSalida + 'T00:00:00');
+  return Math.max(0, Math.round((fin - inicio) / 86400000));
+};
+const agregarHistorial = (proceso, entrada, usuario) => ([
+  ...(proceso.historial || []),
+  { fecha: today(), hora: new Date().toTimeString().slice(0, 5), usuario: usuario || 'Sistema', ...entrada },
+]);
 
 export default function ProcesosExternos() {
+  const { user } = useAuth();
+  const usuarioActual = user?.full_name || user?.email || 'Sistema';
   const [procesos, setProcesos] = useState([]);
   const [inventarioProceso, setInventarioProceso] = useState([]);
   const [tiposProceso, setTiposProceso] = useState([]);
@@ -62,8 +85,8 @@ export default function ProcesosExternos() {
   useEffect(() => { loadData(); }, [loadData]);
 
   // ── Indicadores ─────────────────────────────────────────────────────────
-  const pendientesCount = procesos.filter(p => ['pendiente', 'enviado', 'en_proceso'].includes(p.estado)).length;
-  const recibidosCount = procesos.filter(p => p.estado === 'recibido').length;
+  const pendientesCount = procesos.filter(p => ['pendiente', 'enviado', 'en_proceso', 'recibido_parcial'].includes(p.estado)).length;
+  const recibidosCount = procesos.filter(p => p.estado === 'recibido' || p.estado === 'recibido_total').length;
   const valorTotalServicios = procesos.reduce((s, p) => s + (parseFloat(p.valor_total_servicio) || 0), 0);
 
   // ── Filtro de listado ───────────────────────────────────────────────────
@@ -95,6 +118,29 @@ export default function ProcesosExternos() {
       map[key] = (map[key] || 0) + (parseFloat(p.valor_total_servicio) || 0);
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [procesos]);
+
+  const costosPorLote = React.useMemo(() => {
+    const map = {};
+    procesos.forEach(p => {
+      const key = p.codigo_lote_padre || p.codigo_lote || 'Sin lote';
+      map[key] = (map[key] || 0) + (parseFloat(p.valor_total_servicio) || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [procesos]);
+
+  const materialVencido = React.useMemo(() => {
+    const hoy = today();
+    return procesos.filter(p =>
+      ['enviado', 'en_proceso', 'recibido_parcial'].includes(p.estado) &&
+      p.fecha_estimada_regreso && p.fecha_estimada_regreso < hoy
+    );
+  }, [procesos]);
+
+  const historialCompleto = React.useMemo(() => {
+    const filas = [];
+    procesos.forEach(p => (p.historial || []).forEach(h => filas.push({ ...h, numero_proceso: p.numero_proceso })));
+    return filas.sort((a, b) => new Date(`${b.fecha}T${b.hora || '00:00'}`) - new Date(`${a.fecha}T${a.hora || '00:00'}`));
   }, [procesos]);
 
   return (
@@ -188,7 +234,7 @@ export default function ProcesosExternos() {
                           <td className="p-2">{p.producto_recibido_codigo ? <>{p.producto_recibido_codigo} <span className="text-slate-400">— {p.producto_recibido_descripcion}</span></> : '—'}</td>
                           <td className="p-2 text-right font-bold">{p.cantidad_enviada}</td>
                           <td className="p-2 text-right text-emerald-700">{p.cantidad_recibida || 0}</td>
-                          <td className="p-2 text-right text-amber-700">{['enviado', 'en_proceso'].includes(p.estado) ? pend : 0}</td>
+                          <td className="p-2 text-right text-amber-700">{['enviado', 'en_proceso', 'recibido_parcial'].includes(p.estado) ? pend : 0}</td>
                           <td className="p-2 text-right">{formatCurrency(p.valor_total_servicio)}</td>
                           <td className="p-2">{fmtDate(p.fecha_salida)}</td>
                           <td className="p-2">{fmtDate(p.fecha_recepcion)}</td>
@@ -196,11 +242,11 @@ export default function ProcesosExternos() {
                           <td className="p-2 text-center">
                             <div className="flex justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setDetalleProceso(p)} title="Ver detalle"><Eye className="w-3 h-3" /></Button>
-                              {['enviado', 'en_proceso'].includes(p.estado) && (
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-600" onClick={() => setRecepcionProceso(p)} title="Registrar recepción"><PackageCheck className="w-3 h-3" /></Button>
+                              {['enviado', 'en_proceso', 'recibido_parcial'].includes(p.estado) && (
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-600" onClick={() => setRecepcionProceso(p)} title="Recibir Proceso Externo"><PackageCheck className="w-3 h-3" /></Button>
                               )}
                               {['pendiente', 'enviado'].includes(p.estado) && (
-                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => handleCancelar(p, loadData)} title="Cancelar"><XCircle className="w-3 h-3" /></Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={() => handleCancelar(p, loadData, usuarioActual)} title="Cancelar"><XCircle className="w-3 h-3" /></Button>
                               )}
                             </div>
                           </td>
@@ -222,10 +268,10 @@ export default function ProcesosExternos() {
                 <table className="w-full text-xs">
                   <thead className="bg-slate-100"><tr><th className="p-2 text-left">N.º Proceso</th><th className="p-2 text-left">Producto</th><th className="p-2 text-right">Enviada</th><th className="p-2 text-left">F. Estimada Regreso</th></tr></thead>
                   <tbody>
-                    {procesos.filter(p => ['pendiente', 'enviado', 'en_proceso'].includes(p.estado)).map(p => (
+                    {procesos.filter(p => ['pendiente', 'enviado', 'en_proceso', 'recibido_parcial'].includes(p.estado)).map(p => (
                       <tr key={p.id} className="border-t"><td className="p-2 font-mono">{p.numero_proceso}</td><td className="p-2">{p.codigo_producto_proceso}</td><td className="p-2 text-right">{p.cantidad_enviada}</td><td className="p-2">{fmtDate(p.fecha_estimada_regreso)}</td></tr>
                     ))}
-                    {procesos.filter(p => ['pendiente', 'enviado', 'en_proceso'].includes(p.estado)).length === 0 && <tr><td colSpan={4} className="p-3 text-center text-slate-400">Sin pendientes.</td></tr>}
+                    {procesos.filter(p => ['pendiente', 'enviado', 'en_proceso', 'recibido_parcial'].includes(p.estado)).length === 0 && <tr><td colSpan={4} className="p-3 text-center text-slate-400">Sin pendientes.</td></tr>}
                   </tbody>
                 </table>
               </CardContent>
@@ -236,10 +282,10 @@ export default function ProcesosExternos() {
                 <table className="w-full text-xs">
                   <thead className="bg-slate-100"><tr><th className="p-2 text-left">N.º Proceso</th><th className="p-2 text-left">Producto Recibido</th><th className="p-2 text-right">Recibida</th><th className="p-2 text-left">F. Recepción</th></tr></thead>
                   <tbody>
-                    {procesos.filter(p => p.estado === 'recibido').map(p => (
+                    {procesos.filter(p => p.estado === 'recibido' || p.estado === 'recibido_total').map(p => (
                       <tr key={p.id} className="border-t"><td className="p-2 font-mono">{p.numero_proceso}</td><td className="p-2">{p.producto_recibido_codigo}</td><td className="p-2 text-right">{p.cantidad_recibida}</td><td className="p-2">{fmtDate(p.fecha_recepcion)}</td></tr>
                     ))}
-                    {procesos.filter(p => p.estado === 'recibido').length === 0 && <tr><td colSpan={4} className="p-3 text-center text-slate-400">Sin procesos finalizados.</td></tr>}
+                    {procesos.filter(p => p.estado === 'recibido' || p.estado === 'recibido_total').length === 0 && <tr><td colSpan={4} className="p-3 text-center text-slate-400">Sin procesos finalizados.</td></tr>}
                   </tbody>
                 </table>
               </CardContent>
@@ -268,6 +314,48 @@ export default function ProcesosExternos() {
                 </table>
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Costos por Lote</CardTitle></CardHeader>
+              <CardContent>
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-100"><tr><th className="p-2 text-left">Lote</th><th className="p-2 text-right">Valor Total</th></tr></thead>
+                  <tbody>
+                    {costosPorLote.map(([lote, valor]) => <tr key={lote} className="border-t"><td className="p-2 font-mono">{lote}</td><td className="p-2 text-right font-bold">{formatCurrency(valor)}</td></tr>)}
+                    {costosPorLote.length === 0 && <tr><td colSpan={2} className="p-3 text-center text-slate-400">Sin datos.</td></tr>}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+            <Card className="border-red-300">
+              <CardHeader className="pb-2"><CardTitle className="text-base text-red-700">Material Vencido (superó la fecha estimada de regreso)</CardTitle></CardHeader>
+              <CardContent>
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-100"><tr><th className="p-2 text-left">N.º Proceso</th><th className="p-2 text-left">Proveedor</th><th className="p-2 text-left">Producto</th><th className="p-2 text-left">F. Estimada</th><th className="p-2 text-right">Días de Atraso</th></tr></thead>
+                  <tbody>
+                    {materialVencido.map(p => (
+                      <tr key={p.id} className="border-t"><td className="p-2 font-mono">{p.numero_proceso}</td><td className="p-2">{p.proveedor_nombre}</td><td className="p-2">{p.codigo_producto_proceso}</td><td className="p-2">{fmtDate(p.fecha_estimada_regreso)}</td><td className="p-2 text-right font-bold text-red-700">{diasTranscurridos(p.fecha_estimada_regreso)}</td></tr>
+                    ))}
+                    {materialVencido.length === 0 && <tr><td colSpan={5} className="p-3 text-center text-slate-400">Sin material vencido.</td></tr>}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-2"><CardTitle className="text-base">Historial de Movimientos</CardTitle></CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-100"><tr><th className="p-2 text-left">Fecha</th><th className="p-2 text-left">Hora</th><th className="p-2 text-left">Usuario</th><th className="p-2 text-left">Proceso</th><th className="p-2 text-left">Movimiento</th><th className="p-2 text-right">Cantidad</th></tr></thead>
+                    <tbody>
+                      {historialCompleto.map((h, i) => (
+                        <tr key={i} className="border-t"><td className="p-2">{fmtDate(h.fecha)}</td><td className="p-2">{h.hora}</td><td className="p-2">{h.usuario}</td><td className="p-2 font-mono">{h.numero_proceso}</td><td className="p-2">{h.movimiento}</td><td className="p-2 text-right font-semibold">{h.cantidad}</td></tr>
+                      ))}
+                      {historialCompleto.length === 0 && <tr><td colSpan={6} className="p-3 text-center text-slate-400">Sin movimientos registrados.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
       </Tabs>
@@ -279,6 +367,7 @@ export default function ProcesosExternos() {
           tiposProceso={tiposProceso}
           proveedores={proveedores}
           procesos={procesos}
+          usuarioActual={usuarioActual}
           onClose={() => setShowEnvioModal(false)}
           onSave={loadData}
         />
@@ -288,6 +377,7 @@ export default function ProcesosExternos() {
       {recepcionProceso && (
         <RecepcionModal
           proceso={recepcionProceso}
+          usuarioActual={usuarioActual}
           onClose={() => setRecepcionProceso(null)}
           onSave={loadData}
         />
@@ -296,14 +386,15 @@ export default function ProcesosExternos() {
       {/* ══ MODAL DETALLE ══ */}
       {detalleProceso && (
         <Dialog open={true} onOpenChange={() => setDetalleProceso(null)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Detalle del Proceso — {detalleProceso.numero_proceso}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-3 text-xs">
               {[
                 ['Tipo de Proceso', detalleProceso.tipo_proceso_nombre],
                 ['Proveedor', detalleProceso.proveedor_nombre],
                 ['Producto Enviado', `${detalleProceso.codigo_producto_proceso} — ${detalleProceso.descripcion_producto_proceso}`],
-                ['Lote de Origen', detalleProceso.codigo_lote],
+                ['Lote Padre', detalleProceso.codigo_lote_padre || '—'],
+                ['Código de Sublote', detalleProceso.codigo_lote],
                 ['Color Base', detalleProceso.color_base],
                 ['Calibre', detalleProceso.calibre],
                 ['Cantidad Enviada', detalleProceso.cantidad_enviada],
@@ -312,16 +403,45 @@ export default function ProcesosExternos() {
                 ['Fecha de Salida', fmtDate(detalleProceso.fecha_salida)],
                 ['Fecha Estimada de Regreso', fmtDate(detalleProceso.fecha_estimada_regreso)],
                 ['Estado', ESTADO_LABEL[detalleProceso.estado]],
-                ['Producto Recibido', detalleProceso.producto_recibido_codigo ? `${detalleProceso.producto_recibido_codigo} — ${detalleProceso.producto_recibido_descripcion}` : '—'],
-                ['Cantidad Recibida', detalleProceso.cantidad_recibida || 0],
-                ['Cantidad Rechazada', detalleProceso.cantidad_rechazada || 0],
-                ['Fecha de Recepción', fmtDate(detalleProceso.fecha_recepcion)],
+                ['Días Transcurridos Fuera', `${diasTranscurridos(detalleProceso.fecha_salida, ['recibido', 'recibido_total'].includes(detalleProceso.estado) ? detalleProceso.fecha_recepcion : null) ?? '—'} días`],
+                ['Producto Recibido (último)', detalleProceso.producto_recibido_codigo ? `${detalleProceso.producto_recibido_codigo} — ${detalleProceso.producto_recibido_descripcion}` : '—'],
+                ['Cantidad Recibida (acumulada)', detalleProceso.cantidad_recibida || 0],
+                ['Cantidad Rechazada (acumulada)', detalleProceso.cantidad_rechazada || 0],
+                ['Cantidad Pendiente', Math.max(0, (detalleProceso.cantidad_enviada || 0) - (detalleProceso.cantidad_recibida || 0) - (detalleProceso.cantidad_rechazada || 0))],
+                ['Fecha de Última Recepción', fmtDate(detalleProceso.fecha_recepcion)],
+                ['Responsable que Recibió', detalleProceso.responsable_recepcion || '—'],
                 ['Observaciones de Envío', detalleProceso.observaciones || '—'],
                 ['Observaciones de Recepción', detalleProceso.observaciones_recepcion || '—'],
               ].map(([label, val]) => (
                 <div key={label} className="bg-slate-50 rounded p-2"><p className="text-slate-500 font-semibold">{label}</p><p className="font-bold text-slate-800">{val ?? '—'}</p></div>
               ))}
             </div>
+
+            <div className="mt-3">
+              <p className="text-xs font-bold text-slate-600 mb-1">Historial de Trazabilidad</p>
+              <div className="overflow-x-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-100">
+                    <tr><th className="p-1.5 text-left">Fecha</th><th className="p-1.5 text-left">Hora</th><th className="p-1.5 text-left">Usuario</th><th className="p-1.5 text-left">Movimiento</th><th className="p-1.5 text-right">Cantidad</th><th className="p-1.5 text-left">Origen → Destino</th></tr>
+                  </thead>
+                  <tbody>
+                    {(detalleProceso.historial || []).length === 0 ? (
+                      <tr><td colSpan={6} className="p-2 text-center text-slate-400">Sin movimientos registrados.</td></tr>
+                    ) : (detalleProceso.historial || []).map((h, i) => (
+                      <tr key={i} className="border-t">
+                        <td className="p-1.5">{fmtDate(h.fecha)}</td>
+                        <td className="p-1.5">{h.hora || '—'}</td>
+                        <td className="p-1.5">{h.usuario || '—'}</td>
+                        <td className="p-1.5">{h.movimiento}</td>
+                        <td className="p-1.5 text-right font-semibold">{h.cantidad}</td>
+                        <td className="p-1.5">{h.origen} → {h.destino}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="flex justify-end pt-4"><Button variant="outline" onClick={() => setDetalleProceso(null)}>Cerrar</Button></div>
           </DialogContent>
         </Dialog>
@@ -331,9 +451,17 @@ export default function ProcesosExternos() {
 }
 
 // ── Cancelar un proceso (solo si aún no fue recibido) ──────────────────────
-async function handleCancelar(proceso, reload) {
+async function handleCancelar(proceso, reload, usuarioActual) {
+  // No se puede cancelar un proceso que ya generó movimientos de recepción:
+  // haría falta revertir inventario ya reingresado y consumido, con riesgo
+  // de inconsistencias. Debe manejarse manualmente en ese caso.
+  if ((parseFloat(proceso.cantidad_recibida) || 0) > 0) {
+    alert('❌ No es posible cancelar: este proceso ya tiene recepciones registradas. Cancelar aquí solo aplica a procesos que todavía no han recibido nada.');
+    return;
+  }
   if (!confirm(`¿Cancelar el proceso ${proceso.numero_proceso}? Si ya fue enviado, las hojas descontadas se devolverán al Inventario en Proceso de origen.`)) return;
   try {
+    let historial = proceso.historial || [];
     if (proceso.estado === 'enviado' && proceso.inv_proceso_id) {
       const inv = (await InventarioEnProceso.filter({ id: proceso.inv_proceso_id }))[0]
         || (await InventarioEnProceso.list()).find(i => i.id === proceso.inv_proceso_id);
@@ -344,9 +472,14 @@ async function handleCancelar(proceso, reload) {
           fecha_movimiento: today(), referencia: proceso.numero_proceso,
           observaciones: `Reverso por cancelación de Proceso Externo ${proceso.numero_proceso}`,
         });
+        historial = agregarHistorial(proceso, {
+          movimiento: 'Cancelación — reverso de envío', cantidad: proceso.cantidad_enviada,
+          origen: 'Inventario de Procesos Externos', destino: 'Inventario en Proceso',
+          proceso: proceso.numero_proceso, lote: proceso.codigo_lote_padre, sublote: proceso.codigo_lote, proveedor: proceso.proveedor_nombre,
+        }, usuarioActual);
       }
     }
-    await ProcesoExterno.update(proceso.id, { estado: 'cancelado' });
+    await ProcesoExterno.update(proceso.id, { estado: 'cancelado', historial });
     reload();
   } catch (err) {
     alert('Error al cancelar: ' + err.message);
@@ -354,7 +487,7 @@ async function handleCancelar(proceso, reload) {
 }
 
 // ── EnvioModal ──────────────────────────────────────────────────────────────
-function EnvioModal({ inventarioProceso, tiposProceso, proveedores, procesos, onClose, onSave }) {
+function EnvioModal({ inventarioProceso, tiposProceso, proveedores, procesos, usuarioActual, onClose, onSave }) {
   const [invId, setInvId] = useState('');
   const [tipoProcesoId, setTipoProcesoId] = useState('');
   const [proveedorId, setProveedorId] = useState('');
@@ -388,15 +521,24 @@ function EnvioModal({ inventarioProceso, tiposProceso, proveedores, procesos, on
       const maxNum = existentes.reduce((max, p) => { const n = parseInt(p.numero_proceso?.split('-').pop() || '0'); return n > max ? n : max; }, 0);
       const numero_proceso = `PE-${year}-${String(maxNum + 1).padStart(4, '0')}`;
 
+      const historialInicial = [{
+        fecha: fechaSalida, hora: new Date().toTimeString().slice(0, 5), usuario: usuarioActual || 'Sistema',
+        movimiento: 'Envío a Proceso Externo', cantidad: cant,
+        origen: 'Inventario en Proceso', destino: 'Inventario de Procesos Externos',
+        proceso: numero_proceso, lote: invSel.codigo_lote_padre, sublote: invSel.codigo_lote, proveedor: provSel.nombre,
+      }];
+
       await ProcesoExterno.create({
         numero_proceso,
         tipo_proceso_id: tipoSel.id, tipo_proceso_codigo: tipoSel.codigo, tipo_proceso_nombre: tipoSel.descripcion,
         proveedor_id: provSel.id, proveedor_nombre: provSel.nombre,
         inv_proceso_id: invSel.id, codigo_producto_proceso: invSel.codigo_producto_proceso || invSel.codigo, descripcion_producto_proceso: invSel.descripcion_producto_proceso || invSel.descripcion,
         codigo_lote: invSel.codigo_lote, codigo_lote_padre: invSel.codigo_lote_padre, color_base: invSel.color_base, calibre: invSel.calibre,
+        unidad_medida: invSel.unidad_medida || 'HOJA',
         cantidad_enviada: cant, valor_por_hoja: parseFloat(valorPorHoja) || 0, valor_total_servicio: valorTotal,
         fecha_salida: fechaSalida, fecha_estimada_regreso: fechaEstimada, observaciones: obs,
         estado: 'enviado', cantidad_recibida: 0, cantidad_rechazada: 0,
+        historial: historialInicial,
       });
 
       // Descuenta inmediatamente el inventario de origen y registra el Kardex.
@@ -483,74 +625,113 @@ function EnvioModal({ inventarioProceso, tiposProceso, proveedores, procesos, on
 }
 
 // ── RecepcionModal ──────────────────────────────────────────────────────────
-function RecepcionModal({ proceso, onClose, onSave }) {
+function RecepcionModal({ proceso, usuarioActual, onClose, onSave }) {
   const [cantidadRecibida, setCantidadRecibida] = useState(0);
   const [cantidadRechazada, setCantidadRechazada] = useState(0);
   const [fechaRecepcion, setFechaRecepcion] = useState(today());
+  const [responsable, setResponsable] = useState('');
   const [obs, setObs] = useState('');
   const [guardando, setGuardando] = useState(false);
 
-  const pendiente = Math.max(0, (proceso.cantidad_enviada || 0) - (parseFloat(cantidadRecibida) || 0) - (parseFloat(cantidadRechazada) || 0));
+  // El proceso puede tener recepciones previas (recepción parcial): lo
+  // pendiente se calcula contra lo YA recibido/rechazado acumulado, no
+  // contra cero cada vez.
+  const yaRecibido = parseFloat(proceso.cantidad_recibida) || 0;
+  const yaRechazado = parseFloat(proceso.cantidad_rechazada) || 0;
+  const pendienteAntes = Math.max(0, (proceso.cantidad_enviada || 0) - yaRecibido - yaRechazado);
+  const pendienteDespues = Math.max(0, pendienteAntes - (parseFloat(cantidadRecibida) || 0) - (parseFloat(cantidadRechazada) || 0));
 
   const handleGuardar = async () => {
     const recibida = parseFloat(cantidadRecibida) || 0;
     const rechazada = parseFloat(cantidadRechazada) || 0;
     if (recibida < 0 || rechazada < 0) { alert('Las cantidades no pueden ser negativas.'); return; }
-    if (recibida + rechazada > proceso.cantidad_enviada) { alert(`No puede recibir más de lo enviado (${proceso.cantidad_enviada} hojas).`); return; }
-    if (recibida === 0) { alert('Ingrese la cantidad recibida.'); return; }
+    if (recibida + rechazada > pendienteAntes) { alert(`No puede recibir/rechazar más de lo pendiente (${pendienteAntes} hojas).`); return; }
+    if (recibida === 0 && rechazada === 0) { alert('Ingrese la cantidad recibida o rechazada.'); return; }
     if (!fechaRecepcion) { alert('Ingrese la fecha de recepción.'); return; }
 
     setGuardando(true);
     try {
-      // Traer costo acumulado del origen para heredar + sumar el servicio.
-      const origenes = await InventarioEnProceso.filter({ id: proceso.inv_proceso_id });
-      const origen = (origenes || [])[0];
-      const costoAcumuladoOrigen = origen ? (parseFloat(origen.costo_acumulado) || 0) : 0;
-      const costoPorHojaOrigen = (proceso.cantidad_enviada || 0) > 0 ? costoAcumuladoOrigen / proceso.cantidad_enviada : 0;
-      const costoAcumuladoNuevo = (costoPorHojaOrigen * recibida) + (parseFloat(proceso.valor_total_servicio) || 0);
-      const costoPromedioNuevo = recibida > 0 ? costoAcumuladoNuevo / recibida : 0;
+      let nuevoInv = null;
+      let codigoNuevo = proceso.producto_recibido_codigo;
+      let descripcionNueva = proceso.producto_recibido_descripcion;
 
-      const codigoNuevo = `${proceso.codigo_producto_proceso}-${proceso.tipo_proceso_codigo}`;
-      const descripcionNueva = `${proceso.descripcion_producto_proceso} ${proceso.tipo_proceso_nombre}`.trim().toUpperCase();
+      if (recibida > 0) {
+        // Traer costo acumulado del origen para heredar + prorratear el servicio.
+        const origenes = await InventarioEnProceso.filter({ id: proceso.inv_proceso_id });
+        const origen = (origenes || [])[0];
+        const costoAcumuladoOrigen = origen ? (parseFloat(origen.costo_acumulado) || 0) : 0;
+        const costoPorHojaOrigen = (proceso.cantidad_enviada || 0) > 0 ? costoAcumuladoOrigen / proceso.cantidad_enviada : 0;
+        const costoServicioPorHoja = (proceso.cantidad_enviada || 0) > 0 ? (parseFloat(proceso.valor_total_servicio) || 0) / proceso.cantidad_enviada : 0;
+        const costoAcumuladoNuevo = (costoPorHojaOrigen + costoServicioPorHoja) * recibida;
+        const costoPromedioNuevo = recibida > 0 ? costoAcumuladoNuevo / recibida : 0;
 
-      // Nunca se mezcla con el producto original: entra como un producto nuevo,
-      // trazable hasta el proceso externo que le dio origen.
-      const nuevoInv = await InventarioEnProceso.create({
-        codigo: codigoNuevo,
-        codigo_producto_proceso: codigoNuevo,
-        descripcion: descripcionNueva,
-        descripcion_producto_proceso: descripcionNueva,
-        codigo_lote: `${proceso.codigo_lote || proceso.numero_proceso}-${proceso.tipo_proceso_codigo}`,
-        codigo_lote_padre: proceso.codigo_lote_padre || proceso.codigo_lote,
-        color_base: proceso.color_base, calibre: proceso.calibre,
-        unidad_medida: 'HOJA',
-        cantidad_hojas: recibida,
-        costo_promedio: costoPromedioNuevo,
-        costo_acumulado: costoAcumuladoNuevo,
-        origen_modulo: 'procesos_externos',
-        etapa_actual: 'proceso_externo',
-        estado_actual: 'EN_PROCESO',
-        estado_proceso: 'proceso_externo_recibido',
-        proceso_origen_id: proceso.id,
-        fecha_ingreso_proceso: fechaRecepcion,
-      });
+        codigoNuevo = `${proceso.codigo_producto_proceso}-${proceso.tipo_proceso_codigo}`;
+        descripcionNueva = `${proceso.descripcion_producto_proceso} ${proceso.tipo_proceso_nombre}`.trim().toUpperCase();
+        const numeroRecepcion = (proceso.historial || []).filter(h => h.movimiento === 'Recepción de Proceso Externo').length + 1;
 
-      await MovimientoInventario.create({
-        tipo_movimiento: 'entrada', insumo_id: nuevoInv.id, cantidad: recibida, costo_unitario: costoPromedioNuevo,
-        fecha_movimiento: fechaRecepcion, referencia: proceso.numero_proceso,
-        observaciones: `Recepción de Proceso Externo (${proceso.tipo_proceso_nombre}) — Proveedor: ${proceso.proveedor_nombre}`,
-      });
+        // Nunca se mezcla con el producto original: entra como un producto nuevo,
+        // trazable hasta el proceso externo que le dio origen. Cada recepción
+        // (incluso parcial) genera su propio sublote, para no perder de dónde
+        // vino cada grupo de hojas.
+        nuevoInv = await InventarioEnProceso.create({
+          codigo: codigoNuevo,
+          codigo_producto_proceso: codigoNuevo,
+          descripcion: descripcionNueva,
+          descripcion_producto_proceso: descripcionNueva,
+          codigo_lote: `${proceso.codigo_lote || proceso.numero_proceso}-${proceso.tipo_proceso_codigo}-R${numeroRecepcion}`,
+          codigo_lote_padre: proceso.codigo_lote_padre || proceso.codigo_lote,
+          color_base: proceso.color_base, calibre: proceso.calibre,
+          unidad_medida: proceso.unidad_medida || 'HOJA',
+          cantidad_hojas: recibida,
+          costo_promedio: costoPromedioNuevo,
+          costo_acumulado: costoAcumuladoNuevo,
+          origen_modulo: 'procesos_externos',
+          etapa_actual: 'proceso_externo',
+          estado_actual: 'EN_PROCESO',
+          estado_proceso: 'proceso_externo_recibido',
+          proceso_origen_id: proceso.id,
+          fecha_ingreso_proceso: fechaRecepcion,
+        });
+
+        await MovimientoInventario.create({
+          tipo_movimiento: 'entrada', insumo_id: nuevoInv.id, cantidad: recibida, costo_unitario: costoPromedioNuevo,
+          fecha_movimiento: fechaRecepcion, referencia: proceso.numero_proceso,
+          observaciones: `Recepción de Proceso Externo (${proceso.tipo_proceso_nombre}) — Proveedor: ${proceso.proveedor_nombre}${responsable ? ` — Recibe: ${responsable}` : ''}`,
+        });
+      }
+
+      const totalRecibidoNuevo = yaRecibido + recibida;
+      const totalRechazadoNuevo = yaRechazado + rechazada;
+      const completo = (totalRecibidoNuevo + totalRechazadoNuevo) >= (proceso.cantidad_enviada || 0);
+      const nuevoEstado = completo ? 'recibido_total' : 'recibido_parcial';
+
+      const historial = agregarHistorial(proceso, {
+        movimiento: 'Recepción de Proceso Externo', cantidad: recibida,
+        origen: 'Inventario de Procesos Externos', destino: 'Inventario en Proceso',
+        proceso: proceso.numero_proceso, lote: proceso.codigo_lote_padre, sublote: nuevoInv?.codigo_lote || proceso.codigo_lote, proveedor: proceso.proveedor_nombre,
+      }, usuarioActual);
+      if (rechazada > 0) {
+        historial.push({
+          fecha: fechaRecepcion, hora: new Date().toTimeString().slice(0, 5), usuario: usuarioActual || 'Sistema',
+          movimiento: 'Rechazo en recepción', cantidad: rechazada,
+          origen: 'Inventario de Procesos Externos', destino: '—',
+          proceso: proceso.numero_proceso, lote: proceso.codigo_lote_padre, sublote: proceso.codigo_lote, proveedor: proceso.proveedor_nombre,
+        });
+      }
 
       await ProcesoExterno.update(proceso.id, {
-        estado: 'recibido',
-        cantidad_recibida: recibida, cantidad_rechazada: rechazada,
-        fecha_recepcion: fechaRecepcion, observaciones_recepcion: obs,
-        producto_recibido_id: nuevoInv.id, producto_recibido_codigo: codigoNuevo, producto_recibido_descripcion: descripcionNueva,
+        estado: nuevoEstado,
+        cantidad_recibida: totalRecibidoNuevo, cantidad_rechazada: totalRechazadoNuevo,
+        fecha_recepcion: fechaRecepcion, observaciones_recepcion: obs, responsable_recepcion: responsable,
+        ...(nuevoInv ? { producto_recibido_id: nuevoInv.id, producto_recibido_codigo: codigoNuevo, producto_recibido_descripcion: descripcionNueva } : {}),
+        historial,
       });
 
       await onSave();
       onClose();
-      alert(`✅ Recepción registrada. Se creó "${descripcionNueva}" en el Inventario en Proceso con ${recibida} hojas.`);
+      alert(completo
+        ? `✅ Recepción completa. El proceso ${proceso.numero_proceso} quedó Recibido Totalmente.`
+        : `✅ Recepción parcial registrada (${recibida} hojas). Quedan ${pendienteDespues} hojas pendientes de regresar.`);
     } catch (err) {
       alert('Error al registrar la recepción: ' + err.message);
     } finally {
@@ -561,20 +742,24 @@ function RecepcionModal({ proceso, onClose, onSave }) {
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>Registrar Recepción — {proceso.numero_proceso}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Recibir Proceso Externo — {proceso.numero_proceso}</DialogTitle></DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="p-3 bg-blue-50 border border-blue-200 rounded text-xs grid grid-cols-2 gap-2">
-            <div><span className="text-slate-500">Producto enviado:</span> <strong>{proceso.codigo_producto_proceso}</strong></div>
+            <div><span className="text-slate-500">Proveedor:</span> <strong>{proceso.proveedor_nombre}</strong></div>
+            <div><span className="text-slate-500">Tipo de proceso:</span> <strong>{proceso.tipo_proceso_nombre}</strong></div>
+            <div><span className="text-slate-500">Producto:</span> {proceso.codigo_producto_proceso}</div>
+            <div><span className="text-slate-500">Lote padre / Sublote:</span> {proceso.codigo_lote_padre || '—'} / {proceso.codigo_lote}</div>
             <div><span className="text-slate-500">Cantidad enviada:</span> <strong>{proceso.cantidad_enviada}</strong></div>
-            <div><span className="text-slate-500">Tipo de proceso:</span> {proceso.tipo_proceso_nombre}</div>
-            <div><span className="text-slate-500">Proveedor:</span> {proceso.proveedor_nombre}</div>
+            <div><span className="text-slate-500">Ya recibido/rechazado:</span> {yaRecibido} / {yaRechazado}</div>
+            <div className="col-span-2"><span className="text-slate-500">Cantidad pendiente actual:</span> <strong className="text-amber-700">{pendienteAntes}</strong></div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Cantidad Recibida *</Label><Input type="number" min="0" value={cantidadRecibida} onChange={e => setCantidadRecibida(e.target.value)} /></div>
-            <div><Label>Cantidad Rechazada</Label><Input type="number" min="0" value={cantidadRechazada} onChange={e => setCantidadRechazada(e.target.value)} /></div>
+            <div><Label>Cantidad Recibida</Label><Input type="number" min="0" max={pendienteAntes} value={cantidadRecibida} onChange={e => setCantidadRecibida(e.target.value)} /></div>
+            <div><Label>Cantidad Rechazada / Dañada</Label><Input type="number" min="0" max={pendienteAntes} value={cantidadRechazada} onChange={e => setCantidadRechazada(e.target.value)} /></div>
             <div><Label>Fecha de Recepción *</Label><Input type="date" value={fechaRecepcion} onChange={e => setFechaRecepcion(e.target.value)} /></div>
-            <div className="flex items-end"><p className="text-xs">Pendiente restante: <strong className={pendiente > 0 ? 'text-amber-700' : 'text-emerald-700'}>{pendiente}</strong></p></div>
+            <div><Label>Responsable que Recibe</Label><Input value={responsable} onChange={e => setResponsable(e.target.value)} /></div>
           </div>
+          <p className="text-xs">Quedará pendiente después de este registro: <strong className={pendienteDespues > 0 ? 'text-amber-700' : 'text-emerald-700'}>{pendienteDespues}</strong> {pendienteDespues === 0 && '— el proceso quedará Recibido Totalmente'}</p>
           <div><Label>Observaciones</Label><Textarea value={obs} onChange={e => setObs(e.target.value)} rows={2} /></div>
         </div>
         <div className="flex justify-end gap-2 pt-4 border-t">

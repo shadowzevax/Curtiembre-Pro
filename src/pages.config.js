@@ -144,6 +144,7 @@ import ReportesAreaProduccion from './pages/ReportesAreaProduccion';
 import ReportesAreaComercial from './pages/ReportesAreaComercial';
 import ProcesosExternos from './pages/ProcesosExternos';
 import CatalogoTiposProceso from './pages/CatalogoTiposProceso';
+import InventarioProcesosExternos from './pages/InventarioProcesosExternos';
 import __Layout from './Layout.jsx';
 
 
@@ -245,6 +246,7 @@ export const PAGES = {
     "ReportesAreaComercial": ReportesAreaComercial,
     "ProcesosExternos": ProcesosExternos,
     "CatalogoTiposProceso": CatalogoTiposProceso,
+    "InventarioProcesosExternos": InventarioProcesosExternos,
 }
 
 export const pagesConfig = {
