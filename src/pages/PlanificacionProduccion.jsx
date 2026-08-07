@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Plus, Eye, Edit2, Trash2, CheckCircle2, Package, TrendingUp, Users, Clock, Layers, ChevronDown, ChevronUp, X, Save
+  Plus, Eye, Edit2, Trash2, CheckCircle2, Package, TrendingUp, Users, Clock, Layers, ChevronDown, ChevronUp, X, Save, PackageCheck
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import jsPDF from "jspdf";
@@ -200,6 +200,9 @@ export default function PlanificacionProduccion() {
   const [formatoPintorOrden, setFormatoPintorOrden] = useState(null);
   const [matrizIndividualSol, setMatrizIndividualSol] = useState(null);
   const [historialOrden, setHistorialOrden] = useState(null);
+  const [seleccionSolicitudes, setSeleccionSolicitudes] = useState(new Set());
+  const [detalleSolicitudesOrden, setDetalleSolicitudesOrden] = useState(null);
+  const [entregaOrden, setEntregaOrden] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -382,29 +385,6 @@ export default function PlanificacionProduccion() {
     };
   }, [solicitudes, ordenes, avances, entregas]);
 
-  // ── CONSOLIDADO AUTOMÁTICO ──
-  // Agrupa por Código Tipo de Acabado + Código Color + Código Placa + Calibre,
-  // para que la Orden generada desde aquí herede TODA la información exacta
-  // (códigos y nombres) sin tener que volver a seleccionarla manualmente.
-  const consolidados = React.useMemo(() => {
-    const groups = {};
-    solicitudes.filter(s => s.estado === "pendiente").forEach(sol => {
-      (sol.items || []).forEach(item => {
-        const key = `${item.codigo_tipo_acabado || item.tipo_cuero_nombre}|${item.codigo_color || item.nombre_color}|${item.codigo_placa || item.placa_nombre}|${item.calibre || ""}`;
-        if (!groups[key]) groups[key] = {
-          tipo_cuero_id: item.tipo_cuero_id || "", codigo_tipo_acabado: item.codigo_tipo_acabado || "", tipo_cuero_nombre: item.tipo_cuero_nombre,
-          color_id: item.color_id || "", codigo_color: item.codigo_color || "", nombre_color: item.nombre_color,
-          placa_id: item.placa_id || "", codigo_placa: item.codigo_placa || "", placa_nombre: item.placa_nombre,
-          calibre: item.calibre || "", total_hojas: 0, clientes: new Set(), solicitudes: [],
-        };
-        groups[key].total_hojas += (item.cantidad_hojas || 0);
-        groups[key].clientes.add(sol.cliente_nombre);
-        if (!groups[key].solicitudes.find(s2 => s2.id === sol.id)) groups[key].solicitudes.push(sol);
-      });
-    });
-    return Object.values(groups).map(g => ({ ...g, clientes: [...g.clientes] }));
-  }, [solicitudes]);
-
   // ── FORMATO IMPRESO PARA EL PINTOR ──────────────────────────────────────
   // No modifica la lógica del Consolidado: solo reconstruye, a partir de las
   // solicitudes que ya quedaron ligadas a la Orden (orden.solicitudes_ids),
@@ -422,9 +402,16 @@ export default function PlanificacionProduccion() {
 
     solsOrden.forEach(sol => {
       (sol.items || []).forEach(item => {
-        const tipoOk = (item.codigo_tipo_acabado || item.tipo_cuero_nombre) === (orden.codigo_tipo_acabado || orden.tipo_cuero_nombre);
-        const calibreOk = (item.calibre || "") === (orden.calibre || "");
-        if (!tipoOk || !calibreOk) return;
+        // Órdenes generadas por el flujo viejo (una combinación exacta por
+        // Consolidado) solo suman los ítems que coinciden con esa combinación,
+        // porque cada solicitud podía traer otros ítems ajenos a esa orden.
+        // Las Órdenes nuevas (origen_multi_solicitud) ya vienen armadas a nivel
+        // de Solicitud completa, así que se suma TODO sin filtrar.
+        if (!orden.origen_multi_solicitud) {
+          const tipoOk = (item.codigo_tipo_acabado || item.tipo_cuero_nombre) === (orden.codigo_tipo_acabado || orden.tipo_cuero_nombre);
+          const calibreOk = (item.calibre || "") === (orden.calibre || "");
+          if (!tipoOk || !calibreOk) return;
+        }
         const color = item.nombre_color || item.codigo_color || "SIN COLOR";
         const placa = item.placa_nombre || item.codigo_placa || "SIN PLACA";
         const cant = item.cantidad_hojas || 0;
@@ -483,6 +470,53 @@ export default function PlanificacionProduccion() {
   // reemplaza registros anteriores. Al final recalcula el total de la orden
   // contra TODO el historial (no solo lo recién creado) y decide el estado:
   // primer avance → en_produccion; todas las líneas en 0 pendiente → finalizada.
+  // Nuevo flujo del Consolidado: el usuario marca Solicitudes completas (no
+  // combinaciones color+placa) y se genera UNA Orden que las agrupa todas. La
+  // matriz Color x Placa se construye después, en la Orden, sumando TODO lo
+  // de esas solicitudes (ver construirMatrizPintor con origen_multi_solicitud).
+  const handleGenerarOrdenDesdeSolicitudes = async (seleccionadas) => {
+    if (seleccionadas.length === 0) return;
+    try {
+      const year = new Date().getFullYear();
+      const existentes = ordenes.filter(o => o.numero_orden?.startsWith(`OP-${year}`));
+      const maxNum = existentes.reduce((max, o) => { const n = parseInt(o.numero_orden?.split("-").pop() || "0"); return n > max ? n : max; }, 0);
+      const numero_orden = `OP-${year}-${String(maxNum + 1).padStart(4, "0")}`;
+
+      const cantidadTotal = seleccionadas.reduce((sum, s) => sum + (s.items || []).reduce((s2, i) => s2 + (i.cantidad_hojas || 0), 0), 0);
+      const prioridad = seleccionadas.reduce((max, s) => (PRIORIDAD_RANK[s.prioridad] || 2) > (PRIORIDAD_RANK[max] || 2) ? s.prioridad : max, "normal");
+      const primerItem = seleccionadas[0]?.items?.[0] || {};
+
+      await base44.entities.OrdenProduccionPCP.create({
+        numero_orden,
+        fecha: today(),
+        estado: "pendiente",
+        prioridad,
+        cantidad_total_hojas: cantidadTotal,
+        hojas_producidas: 0,
+        solicitudes_ids: seleccionadas.map(s => s.id),
+        clientes_incluidos: [...new Set(seleccionadas.map(s => s.cliente_nombre))],
+        // Referenciales, tomados del primer ítem solo para mostrar algo en el
+        // encabezado — la matriz real no filtra por esto (origen_multi_solicitud).
+        tipo_cuero_nombre: primerItem.tipo_cuero_nombre || "",
+        codigo_tipo_acabado: primerItem.codigo_tipo_acabado || "",
+        calibre: primerItem.calibre || "",
+        origen_multi_solicitud: true,
+        observaciones: "",
+      });
+
+      for (const s of seleccionadas) {
+        await base44.entities.SolicitudProduccion.update(s.id, { estado: "consolidada" });
+      }
+
+      setSeleccionSolicitudes(new Set());
+      await loadData();
+      setTab("ordenes");
+      alert(`✅ Orden ${numero_orden} generada con ${seleccionadas.length} solicitud(es) — ${cantidadTotal} hojas en total.`);
+    } catch (err) {
+      alert("Error al generar la orden: " + err.message);
+    }
+  };
+
   const handleGuardarAvance = async (orden, registros, observaciones) => {
     if (orden.estado === "finalizada") {
       alert("Esta orden ya fue finalizada. No es posible registrar más producción.");
@@ -825,33 +859,86 @@ export default function PlanificacionProduccion() {
 
         {/* ──────────── CONSOLIDADO ──────────── */}
         <TabsContent value="consolidado">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Consolidado Automático de Producción</CardTitle></CardHeader>
-            <CardContent>
-              {consolidados.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-6">No hay solicitudes pendientes para consolidar.</p>
-              ) : (
-                <div className="space-y-3">
-                  {consolidados.map((g, i) => (
-                    <ConsolidadoCard key={i} grupo={g} onGenerarOrden={() => {
-                      setEditingOrden({
-                        tipo_cuero_id: g.tipo_cuero_id, codigo_tipo_acabado: g.codigo_tipo_acabado, tipo_cuero_nombre: g.tipo_cuero_nombre,
-                        color_id: g.color_id, codigo_color: g.codigo_color, nombre_color: g.nombre_color,
-                        placa_id: g.placa_id, codigo_placa: g.codigo_placa, placa_nombre: g.placa_nombre,
-                        calibre: g.calibre, cantidad_total_hojas: g.total_hojas,
-                        solicitudes_ids: g.solicitudes.map(s => s.id),
-                        clientes_incluidos: g.clientes,
-                        estado: "pendiente",
-                        prioridad: g.solicitudes.reduce((max, s) => (PRIORIDAD_RANK[s.prioridad] || 2) > (PRIORIDAD_RANK[max] || 2) ? s.prioridad : max, "normal"),
-                        origenConsolidado: true,
-                      });
-                      setShowOrdenModal(true);
-                    }} />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {(() => {
+            const pendientes = solicitudes.filter(s => s.estado === "pendiente");
+            const seleccionadas = pendientes.filter(s => seleccionSolicitudes.has(s.id));
+            const totalHojasSel = seleccionadas.reduce((sum, s) => sum + (s.items || []).reduce((s2, i) => s2 + (i.cantidad_hojas || 0), 0), 0);
+            const toggleTodas = () => {
+              if (seleccionadas.length === pendientes.length) setSeleccionSolicitudes(new Set());
+              else setSeleccionSolicitudes(new Set(pendientes.map(s => s.id)));
+            };
+            const toggleUna = (id) => setSeleccionSolicitudes(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            });
+
+            return (
+              <Card>
+                <CardHeader className="pb-2 flex flex-row items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle className="text-base">Consolidado de Solicitudes</CardTitle>
+                    <p className="text-xs text-slate-500">Marque las solicitudes completas que desea incluir en una Orden de Producción</p>
+                  </div>
+                  <Button
+                    size="sm" className="bg-blue-600 hover:bg-blue-700"
+                    disabled={seleccionadas.length === 0}
+                    onClick={() => handleGenerarOrdenDesdeSolicitudes(seleccionadas)}
+                  >
+                    Generar Orden de Producción {seleccionadas.length > 0 && `(${seleccionadas.length} sol. · ${totalHojasSel} hojas)`}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-800 text-white">
+                        <tr>
+                          <th className="p-2 text-center"><input type="checkbox" checked={pendientes.length > 0 && seleccionadas.length === pendientes.length} onChange={toggleTodas} /></th>
+                          <th className="p-2 text-left">No. Solicitud</th>
+                          <th className="p-2 text-left">Fecha</th>
+                          <th className="p-2 text-left">Solicitante</th>
+                          <th className="p-2 text-center">Prioridad</th>
+                          <th className="p-2 text-center">F. Compromiso</th>
+                          <th className="p-2 text-right">Total Hojas</th>
+                          <th className="p-2 text-center">Colores</th>
+                          <th className="p-2 text-center">Placas</th>
+                          <th className="p-2 text-center">Estado</th>
+                          <th className="p-2 text-center">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendientes.length === 0 ? (
+                          <tr><td colSpan={11} className="p-4 text-center text-slate-400">No hay solicitudes pendientes para consolidar.</td></tr>
+                        ) : pendientes.map(sol => {
+                          const items = sol.items || [];
+                          const totalH = items.reduce((s, i) => s + (i.cantidad_hojas || 0), 0);
+                          const coloresDif = new Set(items.map(i => i.nombre_color || i.codigo_color).filter(Boolean)).size;
+                          const placasDif = new Set(items.map(i => i.placa_nombre || i.codigo_placa).filter(Boolean)).size;
+                          return (
+                            <tr key={sol.id} className={`border-t hover:bg-slate-50 ${seleccionSolicitudes.has(sol.id) ? "bg-blue-50" : ""}`}>
+                              <td className="p-2 text-center"><input type="checkbox" checked={seleccionSolicitudes.has(sol.id)} onChange={() => toggleUna(sol.id)} /></td>
+                              <td className="p-2 font-mono font-bold text-purple-700">{sol.numero_solicitud}</td>
+                              <td className="p-2">{fmtDate(sol.fecha)}</td>
+                              <td className="p-2 font-semibold">{sol.cliente_nombre}</td>
+                              <td className="p-2 text-center"><Badge className={`text-xs ${PRIORIDAD_BADGE[sol.prioridad]}`}>{PRIORIDAD_LABEL[sol.prioridad]}</Badge></td>
+                              <td className="p-2 text-center">{fmtDate(sol.fecha_compromiso)}</td>
+                              <td className="p-2 text-right font-bold">{totalH}</td>
+                              <td className="p-2 text-center">{coloresDif}</td>
+                              <td className="p-2 text-center">{placasDif}</td>
+                              <td className="p-2 text-center"><Badge className={`text-xs ${ESTADO_BADGE[sol.estado]}`}>{ESTADO_LABEL[sol.estado]}</Badge></td>
+                              <td className="p-2 text-center">
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setEditingSolicitud(sol); setShowSolicitudModal(true); }} title="Ver"><Eye className="w-3 h-3" /></Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
         </TabsContent>
 
         {/* ──────────── PLAN MAESTRO DE PRODUCCIÓN ──────────── */}
@@ -959,6 +1046,10 @@ export default function PlanificacionProduccion() {
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" onClick={() => setFormatoPintorOrden(ord)} title="Imprimir formato para pintor">🖨</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-700" title="Exportar Excel" onClick={() => handleExportExcelOrden(ord)}>📊</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-700" title="Exportar PDF" onClick={() => handleExportPdfOrden(ord)}>📄</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-indigo-600" title="Detalle de Solicitudes" onClick={() => setDetalleSolicitudesOrden(ord)}>📋</Button>
+                              {ord.estado === "finalizada" && (
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-teal-700" title="Preparar Entrega" onClick={() => setEntregaOrden(ord)}><PackageCheck className="w-3 h-3" /></Button>
+                              )}
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-600" onClick={() => { setEditingOrden(ord); setShowOrdenModal(true); }}><Edit2 className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500" onClick={async () => { if (confirm("¿Eliminar orden?")) { await base44.entities.OrdenProduccionPCP.delete(ord.id); loadData(); } }}><Trash2 className="w-3 h-3" /></Button>
                             </div>
@@ -1281,6 +1372,64 @@ export default function PlanificacionProduccion() {
         />
       )}
 
+      {/* ══ MODAL DETALLE DE SOLICITUDES DE LA ORDEN ══ */}
+      {detalleSolicitudesOrden && (
+        <Dialog open={true} onOpenChange={() => setDetalleSolicitudesOrden(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>{detalleSolicitudesOrden.numero_orden} — Solicitudes Incluidas</DialogTitle></DialogHeader>
+            <div className="space-y-1 text-sm max-h-96 overflow-y-auto">
+              {solicitudes.filter(s => (detalleSolicitudesOrden.solicitudes_ids || []).includes(s.id)).map(s => {
+                const totalH = (s.items || []).reduce((sum, i) => sum + (i.cantidad_hojas || 0), 0);
+                return (
+                  <button
+                    key={s.id} type="button"
+                    className="w-full text-left flex items-center justify-between p-2 rounded border hover:bg-slate-50"
+                    onClick={() => { setDetalleSolicitudesOrden(null); setEditingSolicitud(s); setShowSolicitudModal(true); }}
+                  >
+                    <span><span className="font-mono font-bold text-purple-700">{s.numero_solicitud}</span> — {s.cliente_nombre}</span>
+                    <span className="font-bold">{totalH} hojas</span>
+                  </button>
+                );
+              })}
+              {(detalleSolicitudesOrden.solicitudes_ids || []).length === 0 && <p className="text-slate-400 text-center py-4">Esta orden no tiene solicitudes de origen registradas.</p>}
+            </div>
+            <div className="flex justify-end pt-4 border-t"><Button variant="outline" onClick={() => setDetalleSolicitudesOrden(null)}>Cerrar</Button></div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ══ MODAL PREPARAR ENTREGA ══ */}
+      {entregaOrden && (
+        <Dialog open={true} onOpenChange={() => setEntregaOrden(null)}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Preparar Entrega — {entregaOrden.numero_orden}</DialogTitle></DialogHeader>
+            <div className="space-y-4 text-sm">
+              <p className="text-xs text-slate-500">Separación automática de lo que corresponde entregar a cada solicitante, según lo registrado en su solicitud original.</p>
+              {solicitudes.filter(s => (entregaOrden.solicitudes_ids || []).includes(s.id)).map(s => {
+                const totalH = (s.items || []).reduce((sum, i) => sum + (i.cantidad_hojas || 0), 0);
+                return (
+                  <div key={s.id} className="border rounded-lg p-3">
+                    <p className="font-bold text-purple-800 mb-1">{s.cliente_nombre} <span className="text-xs font-mono text-slate-400">({s.numero_solicitud})</span></p>
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100"><tr><th className="p-1.5 text-left">Color</th><th className="p-1.5 text-left">Placa</th><th className="p-1.5 text-right">Cantidad</th></tr></thead>
+                      <tbody>
+                        {(s.items || []).map((it, idx) => (
+                          <tr key={idx} className="border-t"><td className="p-1.5">{it.nombre_color || it.codigo_color || "—"}</td><td className="p-1.5">{it.placa_nombre || it.codigo_placa || "—"}</td><td className="p-1.5 text-right font-semibold">{it.cantidad_hojas}</td></tr>
+                        ))}
+                      </tbody>
+                      <tfoot><tr className="border-t font-bold bg-slate-50"><td className="p-1.5" colSpan={2}>Total</td><td className="p-1.5 text-right">{totalH}</td></tr></tfoot>
+                    </table>
+                  </div>
+                );
+              })}
+              {(entregaOrden.solicitudes_ids || []).length === 0 && <p className="text-slate-400 text-center py-4">Esta orden no tiene solicitudes de origen registradas.</p>}
+              <p className="text-xs text-slate-400">Para registrar formalmente la entrega y descontar lo entregado, use la pestaña "Entregas".</p>
+            </div>
+            <div className="flex justify-end pt-4 border-t"><Button variant="outline" onClick={() => setEntregaOrden(null)}>Cerrar</Button></div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* ══ MODAL HISTORIAL DE AVANCES ══ */}
       {historialOrden && (
         <HistorialAvancesModal
@@ -1335,53 +1484,6 @@ export default function PlanificacionProduccion() {
   );
 }
 
-// ─── ConsolidadoCard ───
-function ConsolidadoCard({ grupo, onGenerarOrden }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="border border-blue-200 rounded-xl bg-blue-50 p-3">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5 text-sm">
-          <span className="font-bold text-blue-800">
-            {grupo.codigo_tipo_acabado ? `${grupo.codigo_tipo_acabado} — ` : ""}{grupo.tipo_cuero_nombre} · {grupo.codigo_color ? `${grupo.codigo_color} — ` : ""}{grupo.nombre_color} · {grupo.codigo_placa ? `${grupo.codigo_placa} — ` : ""}{grupo.placa_nombre}{grupo.calibre ? ` · Calibre ${grupo.calibre}` : ""}
-          </span>
-          <span className="text-slate-600 text-xs">{grupo.solicitudes.length} solicitud(es) · {grupo.total_hojas} hojas totales · {grupo.clientes.length} solicitante(s) · <Badge className="text-xs bg-amber-100 text-amber-800">Pendiente de generar orden</Badge></span>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpanded(!expanded)}>
-            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </Button>
-          <Button size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700" onClick={onGenerarOrden}>Generar Orden</Button>
-        </div>
-      </div>
-      {expanded && (
-        <div className="mt-2 text-xs space-y-1">
-          {grupo.solicitudes.map(s => {
-            // Debe sumar únicamente las hojas del detalle de ESTA solicitud que
-            // coincide exactamente con las características que formaron el grupo
-            // (tipo de acabado + color + placa + calibre), nunca el total de la
-            // solicitud completa — de lo contrario un solicitante con varias
-            // líneas distintas infla el total mostrado en cada grupo.
-            const totalH = (s.items || []).filter(i =>
-              (i.codigo_tipo_acabado || i.tipo_cuero_nombre) === (grupo.codigo_tipo_acabado || grupo.tipo_cuero_nombre) &&
-              (i.codigo_color || i.nombre_color) === (grupo.codigo_color || grupo.nombre_color) &&
-              (i.codigo_placa || i.placa_nombre) === (grupo.codigo_placa || grupo.placa_nombre) &&
-              (i.calibre || "") === (grupo.calibre || "")
-            ).reduce((sum, i) => sum + (i.cantidad_hojas || 0), 0);
-            return (
-              <div key={s.id} className="flex items-center gap-2 bg-white rounded p-1.5 border">
-                <span className="font-mono text-purple-700 font-bold">{s.numero_solicitud}</span>
-                <span>{s.cliente_nombre}</span>
-                <span className="text-slate-500">{totalH || "—"} hojas</span>
-                <Badge className={`text-xs ${PRIORIDAD_BADGE[s.prioridad]}`}>{PRIORIDAD_LABEL[s.prioridad]}</Badge>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── OrdenEnCursoCard ───
 // Tarjeta del tablero "Producción en Curso": se alimenta 100% de los mismos

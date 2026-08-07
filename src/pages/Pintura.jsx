@@ -821,8 +821,17 @@ export default function Pintura() {
         finalizar_pintura: true,
       };
 
+      // Cuando se Finaliza directamente sin haber guardado antes un Borrador,
+      // el registro de ProcesoProduccion todavía no existe: hay que crearlo
+      // aquí y usar el id devuelto (currentItem.id sigue undefined hasta que
+      // se recarga desde el servidor). Antes este id no se capturaba, por lo
+      // que las llamadas siguientes fallaban con "ProcesoProduccion undefined
+      // no existe" — especialmente notorio con varios sublotes, porque
+      // afectarInventarioPT() sí alcanzaba a procesarlos antes del error.
+      let savedIdFin = currentItem.id;
       if (!isEditing) {
-        await ProcesoProduccion.create(dataToSave);
+        const createdFin = await ProcesoProduccion.create(dataToSave);
+        savedIdFin = createdFin.id;
       }
 
       const fechaHoy = new Date().toISOString().split('T')[0];
@@ -830,7 +839,7 @@ export default function Pintura() {
       // Obtener sublotes previos guardados para calcular delta de PT
       let prevSublotesFin = [];
       try {
-        const prevDataFin = await ProcesoProduccion.get(currentItem.id);
+        const prevDataFin = await ProcesoProduccion.get(savedIdFin);
         prevSublotesFin = Array.isArray(prevDataFin?.sublotes_pintura) ? prevDataFin.sublotes_pintura : [];
       } catch {}
 
@@ -840,7 +849,7 @@ export default function Pintura() {
       );
 
       // Guardar sublotes con inv_contabilizado actualizado + estado terminado
-      await ProcesoProduccion.update(currentItem.id, { ...dataToSave, sublotes_pintura: sublotesConContabilizadoFin });
+      await ProcesoProduccion.update(savedIdFin, { ...dataToSave, sublotes_pintura: sublotesConContabilizadoFin });
 
       // ── SALIDA DEFINITIVA DEL INVENTARIO EN PROCESO ──
       // Al finalizar: se descuenta de verdad la existencia física de cada
