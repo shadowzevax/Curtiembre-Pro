@@ -633,6 +633,26 @@ function RecepcionModal({ proceso, usuarioActual, onClose, onSave }) {
   const [obs, setObs] = useState('');
   const [guardando, setGuardando] = useState(false);
 
+  // Producto en Proceso de Destino: se elige del Catálogo Maestro (solo los
+  // clasificados como "Productos en Proceso"), nunca se crea uno nuevo desde
+  // aquí. Determina el código con el que el material reingresa al inventario.
+  const [productosDestino, setProductosDestino] = useState([]);
+  const [destinoId, setDestinoId] = useState('');
+  const [busquedaDestino, setBusquedaDestino] = useState('');
+
+  useEffect(() => {
+    ProductoCatalogo.filter({ categoria: 'productos_en_proceso' })
+      .then(data => setProductosDestino((Array.isArray(data) ? data : []).filter(p => p.estado === 'activo')))
+      .catch(() => setProductosDestino([]));
+  }, []);
+
+  const destinoSel = productosDestino.find(p => p.id === destinoId);
+  const destinosFiltrados = productosDestino.filter(p => {
+    if (!busquedaDestino) return true;
+    const q = busquedaDestino.toLowerCase();
+    return (p.codigo || '').toLowerCase().includes(q) || (p.descripcion || '').toLowerCase().includes(q);
+  });
+
   // El proceso puede tener recepciones previas (recepción parcial): lo
   // pendiente se calcula contra lo YA recibido/rechazado acumulado, no
   // contra cero cada vez.
@@ -648,6 +668,7 @@ function RecepcionModal({ proceso, usuarioActual, onClose, onSave }) {
     if (recibida + rechazada > pendienteAntes) { alert(`No puede recibir/rechazar más de lo pendiente (${pendienteAntes} hojas).`); return; }
     if (recibida === 0 && rechazada === 0) { alert('Ingrese la cantidad recibida o rechazada.'); return; }
     if (!fechaRecepcion) { alert('Ingrese la fecha de recepción.'); return; }
+    if (recibida > 0 && !destinoSel) { alert('Seleccione el Producto en Proceso de Destino.'); return; }
 
     setGuardando(true);
     try {
@@ -665,20 +686,18 @@ function RecepcionModal({ proceso, usuarioActual, onClose, onSave }) {
         const costoAcumuladoNuevo = (costoPorHojaOrigen + costoServicioPorHoja) * recibida;
         const costoPromedioNuevo = recibida > 0 ? costoAcumuladoNuevo / recibida : 0;
 
-        codigoNuevo = `${proceso.codigo_producto_proceso}-${proceso.tipo_proceso_codigo}`;
-        descripcionNueva = `${proceso.descripcion_producto_proceso} ${proceso.tipo_proceso_nombre}`.trim().toUpperCase();
-        const numeroRecepcion = (proceso.historial || []).filter(h => h.movimiento === 'Recepción de Proceso Externo').length + 1;
+        codigoNuevo = destinoSel.codigo;
+        descripcionNueva = destinoSel.descripcion;
 
-        // Nunca se mezcla con el producto original: entra como un producto nuevo,
-        // trazable hasta el proceso externo que le dio origen. Cada recepción
-        // (incluso parcial) genera su propio sublote, para no perder de dónde
-        // vino cada grupo de hojas.
+        // Nunca se mezcla con el producto original: entra con el código del
+        // Producto en Proceso de Destino elegido por el usuario, conservando
+        // el mismo lote padre y sublote de origen para no perder trazabilidad.
         nuevoInv = await InventarioEnProceso.create({
           codigo: codigoNuevo,
           codigo_producto_proceso: codigoNuevo,
           descripcion: descripcionNueva,
           descripcion_producto_proceso: descripcionNueva,
-          codigo_lote: `${proceso.codigo_lote || proceso.numero_proceso}-${proceso.tipo_proceso_codigo}-R${numeroRecepcion}`,
+          codigo_lote: proceso.codigo_lote,
           codigo_lote_padre: proceso.codigo_lote_padre || proceso.codigo_lote,
           color_base: proceso.color_base, calibre: proceso.calibre,
           unidad_medida: proceso.unidad_medida || 'HOJA',
@@ -707,7 +726,8 @@ function RecepcionModal({ proceso, usuarioActual, onClose, onSave }) {
 
       const historial = agregarHistorial(proceso, {
         movimiento: 'Recepción de Proceso Externo', cantidad: recibida,
-        origen: 'Inventario de Procesos Externos', destino: 'Inventario en Proceso',
+        origen: `Inventario de Procesos Externos (${proceso.codigo_producto_proceso})`,
+        destino: `Inventario en Proceso (${codigoNuevo || '—'})`,
         proceso: proceso.numero_proceso, lote: proceso.codigo_lote_padre, sublote: nuevoInv?.codigo_lote || proceso.codigo_lote, proveedor: proceso.proveedor_nombre,
       }, usuarioActual);
       if (rechazada > 0) {
@@ -753,6 +773,22 @@ function RecepcionModal({ proceso, usuarioActual, onClose, onSave }) {
             <div><span className="text-slate-500">Ya recibido/rechazado:</span> {yaRecibido} / {yaRechazado}</div>
             <div className="col-span-2"><span className="text-slate-500">Cantidad pendiente actual:</span> <strong className="text-amber-700">{pendienteAntes}</strong></div>
           </div>
+
+          <div>
+            <Label>Producto en Proceso de Destino *</Label>
+            <Select value={destinoId} onValueChange={setDestinoId}>
+              <SelectTrigger><SelectValue placeholder="Buscar por código o nombre..." /></SelectTrigger>
+              <SelectContent>
+                <div className="px-2 pb-1 sticky top-0 bg-white">
+                  <Input placeholder="Buscar..." value={busquedaDestino} onChange={e => setBusquedaDestino(e.target.value)} onKeyDown={e => e.stopPropagation()} className="h-8 text-xs" />
+                </div>
+                {destinosFiltrados.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.descripcion}</SelectItem>)}
+                {destinosFiltrados.length === 0 && <SelectItem value="__none__" disabled>Sin productos en proceso que coincidan</SelectItem>}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-slate-400 mt-0.5">Solo productos clasificados como "Productos en Proceso" en el Catálogo Maestro. No crea productos nuevos.</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Cantidad Recibida</Label><Input type="number" min="0" max={pendienteAntes} value={cantidadRecibida} onChange={e => setCantidadRecibida(e.target.value)} /></div>
             <div><Label>Cantidad Rechazada / Dañada</Label><Input type="number" min="0" max={pendienteAntes} value={cantidadRechazada} onChange={e => setCantidadRechazada(e.target.value)} /></div>
