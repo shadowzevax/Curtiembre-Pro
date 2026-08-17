@@ -575,6 +575,68 @@ export default function SeguimientoProduccion() {
                 </div>
               </div>
 
+              {/* Trazabilidad de costo por etapa */}
+              {(() => {
+                const recepcionProc = loteDetalle.allLoteProcesos.find(p => p.tipo_proceso === 'recepcion');
+                const limpiezaProc = loteDetalle.allLoteProcesos.find(p => p.tipo_proceso === 'limpieza');
+                const curtidoProc = loteDetalle.allLoteProcesos.find(p => p.tipo_proceso === 'curtido');
+                if (!recepcionProc) return null;
+                const hojasOriginal = loteDetalle.totalHojas || 1;
+                const compra = parseFloat(recepcionProc.costo_compra_total ?? ((parseFloat(recepcionProc.cantidad_total_lote_hojas)||0) * (parseFloat(recepcionProc.costo_promedio)||0))) || 0;
+                const salada = parseFloat(recepcionProc.costo_salada) || 0;
+                const transporte = parseFloat(recepcionProc.costo_transporte) || 0;
+                const descargue = parseFloat(recepcionProc.costo_descargue) || 0;
+                const otros = parseFloat(recepcionProc.otros_costos_recepcion) || 0;
+                const acumRecepcion = parseFloat(recepcionProc.costo_total_recepcion) || (compra + salada + transporte + descargue + otros);
+                const promRecepcion = hojasOriginal > 0 ? acumRecepcion / hojasOriginal : 0;
+
+                const filas = [{
+                  etapa: 'Recepción', heredado: null,
+                  detalle: [
+                    ['Compra', compra], ['Salada', salada], ['Transporte', transporte],
+                    ['Descargue', descargue], ['Otros', otros],
+                  ],
+                  acumulado: acumRecepcion, promedio: promRecepcion,
+                }];
+                let acumAnterior = acumRecepcion;
+                if (limpiezaProc) {
+                  const costoLimpieza = (parseFloat(limpiezaProc.costo_remojo)||0) + (parseFloat(limpiezaProc.costo_pelambre)||0);
+                  const nuevoAcum = acumAnterior + costoLimpieza;
+                  filas.push({ etapa: 'Limpieza', heredado: acumAnterior, detalle: [['Costos de Limpieza', costoLimpieza]], acumulado: nuevoAcum, promedio: hojasOriginal > 0 ? nuevoAcum / hojasOriginal : 0 });
+                  acumAnterior = nuevoAcum;
+                }
+                if (curtidoProc) {
+                  const costoCurtido = parseFloat(curtidoProc.costo_total_curtido) || (curtidoProc.insumos_utilizados || []).reduce((s,i)=>s+(parseFloat(i.valor_total)||0),0);
+                  const nuevoAcum = acumAnterior + costoCurtido;
+                  filas.push({ etapa: 'Curtido', heredado: acumAnterior, detalle: [['Costos de Curtido', costoCurtido]], acumulado: nuevoAcum, promedio: hojasOriginal > 0 ? nuevoAcum / hojasOriginal : 0 });
+                  acumAnterior = nuevoAcum;
+                }
+                return (
+                  <div>
+                    <h3 className="font-semibold text-sm text-slate-700 mb-2">🧾 Trazabilidad de Costo por Etapa</h3>
+                    <div className="space-y-2">
+                      {filas.map((f, idx) => (
+                        <div key={f.etapa} className="border rounded-lg p-3 bg-white">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-bold text-sm text-slate-800">{idx + 1}. {f.etapa}</span>
+                            <span className="text-xs text-slate-400">Promedio: <strong className="text-blue-700">{formatCurrency(f.promedio)}/hoja</strong></span>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-0.5 text-xs text-slate-600">
+                            {f.heredado != null && <div className="flex justify-between"><span>Costo heredado:</span><span className="font-semibold">{formatCurrency(f.heredado)}</span></div>}
+                            {f.detalle.map(([label, val]) => (
+                              <div key={label} className="flex justify-between"><span>{label}:</span><span className="font-semibold">{formatCurrency(val)}</span></div>
+                            ))}
+                          </div>
+                          <div className="mt-1.5 pt-1.5 border-t flex justify-between text-xs font-bold text-emerald-700">
+                            <span>Nuevo acumulado:</span><span>{formatCurrency(f.acumulado)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Línea de tiempo */}
               <div>
                 <h3 className="font-semibold text-sm text-slate-700 mb-2">🔗 Trazabilidad — Línea de Tiempo</h3>

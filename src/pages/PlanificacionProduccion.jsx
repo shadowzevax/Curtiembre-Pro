@@ -2074,7 +2074,7 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
                   <thead className="bg-slate-800 text-white">
                     <tr>
                       <th className="p-2 text-left">COLOR</th>
-                      {placasSel.map(p => <th key={p.id} className="p-2 text-center">{p.codigo || p.nombre}</th>)}
+                      {placasSel.map(p => <th key={p.id} className="p-2 text-center">{p.nombre || p.codigo}</th>)}
                       <th className="p-2 text-center">TOTAL</th>
                     </tr>
                   </thead>

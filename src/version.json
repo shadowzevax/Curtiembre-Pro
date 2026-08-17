@@ -1,6 +1,6 @@
 {
-  "version": "25",
-  "fecha": "2026-08-08",
-  "descripcion": "Procesos Externos - Recibir Proceso Externo: nuevo campo obligatorio Producto en Proceso de Destino, que consulta el Catalogo Maestro de Productos y solo muestra los clasificados como Productos en Proceso (buscable por codigo o nombre, sin poder crear productos nuevos desde esta pantalla); al confirmar la recepcion el inventario entra con el codigo del producto de destino elegido por el usuario en vez de un codigo generado automaticamente, conservando el mismo lote padre y sublote de origen; el historial de trazabilidad ahora registra explicitamente el producto de origen y el producto de destino de cada recepcion",
-  "advertencias": ""
+  "version": "26",
+  "fecha": "2026-08-17",
+  "descripcion": "--description",
+  "advertencias": "Unifica el costo acumulado y promedio por hoja entre Recepción, Limpieza, Curtido, Recurtido y Seguimiento General de Producción (antes Recepción omitía salada/transporte/descargue al sembrar el costo del lote)|Recepción ahora recalcula el costo total desde los campos base al guardar, evitando desincronización con el cache del formulario|Seguimiento General de Producción incorpora un desglose 'Trazabilidad de Costo por Etapa' (heredado + costos propios + nuevo acumulado/promedio) por lote|Al guardar una Recepción exitosamente el estado pasa automáticamente de Pendiente a Recepción Completada|Corrección retroactiva de los datos del lote L-2026-027 (costo acumulado y promedio en Recepción, Limpieza/Curtido y sublotes de Recurtido)|Matriz de captura de Solicitudes: el encabezado de columnas de placa ahora muestra el nombre comercial en vez del código"
 }

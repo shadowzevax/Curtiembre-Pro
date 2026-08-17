@@ -654,7 +654,9 @@ export default function ProcesoLimpieza() {
               // Costo Promedio Inicial por Hoja: viene de costo_promedio de InventarioEnProceso (generado en Recepción)
               const costoPromedioInicial = parseFloat(invRel?.costo_promedio) || 0;
               // Costo Acumulado Recepción = "Costo Total Recepción" del proceso de Recepción (heredado directamente)
-              const costoAcumRecepcion = parseFloat(currentItem?.costo_total_recepcion_heredado) || parseFloat(invRel?.costo_acumulado) || 0;
+              // Fuente única de verdad: costo_acumulado vivo en InventarioEnProceso (no el valor cacheado al abrir el formulario,
+              // que puede quedar desactualizado si el costo del lote se corrige después).
+              const costoAcumRecepcion = parseFloat(invRel?.costo_acumulado) || parseFloat(currentItem?.costo_total_recepcion_heredado) || 0;
 
               // ── Cálculo de costos de Limpieza (Remojo + Pelambre) ──
               const remojoFinalizado = currentItem?.estado_remojo === 'finalizado';

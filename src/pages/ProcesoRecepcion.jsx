@@ -187,13 +187,27 @@ export default function ProcesoRecepcion() {
 
     setIsSaving(true);
     try {
+      // Recalcular el costo total de recepción desde los campos base (no confiar en el cache
+      // de currentItem, que solo se sincroniza cuando el usuario edita los campos de costos operativos).
+      const hojasParaCosto = parseFloat(currentItem?.cantidad_total_lote_hojas) || 0;
+      const costoCompraTotalFinal = hojasParaCosto * (parseFloat(currentItem?.costo_promedio) || 0);
+      const costoTotalRecepcionFinal = costoCompraTotalFinal
+        + (parseFloat(currentItem?.costo_salada) || 0)
+        + (parseFloat(currentItem?.costo_transporte) || 0)
+        + (parseFloat(currentItem?.costo_descargue) || 0)
+        + (parseFloat(currentItem?.otros_costos_recepcion) || 0);
+      const costoPromedioPorHojaFinal = hojasParaCosto > 0 ? costoTotalRecepcionFinal / hojasParaCosto : 0;
+
       const dataToSave = {
         ...currentItem,
         sublotes: (currentItem.dividir_lote && Array.isArray(sublotes)) ? sublotes : [],
         numero_proceso: currentItem.codigo_lote,
         // Estado del lote: DIVIDIDO si tiene sublotes, EN_PROCESO si no
-        estado: currentItem.dividir_lote && sublotes.length > 0 ? 'dividido' : 'pendiente',
-        etapa_actual: 'recepcion'
+        estado: currentItem.dividir_lote && sublotes.length > 0 ? 'dividido' : 'recepcion_completada',
+        etapa_actual: 'recepcion',
+        costo_compra_total: costoCompraTotalFinal,
+        costo_total_recepcion: costoTotalRecepcionFinal,
+        costo_promedio_por_hoja_recepcion: costoPromedioPorHojaFinal
       };
 
       let procesoId;
@@ -227,9 +241,15 @@ export default function ProcesoRecepcion() {
         }
 
         // CREAR REGISTROS EN INVENTARIO EN PROCESO (tabla central)
+        // costo_acumulado siempre parte del costo TOTAL de recepción (compra + salada + transporte + descargue + otros),
+        // nunca solo del costo de compra — de lo contrario el costo por hoja queda subestimado en todas las etapas siguientes.
         if (currentItem.dividir_lote && sublotes.length > 0) {
           // Un registro por cada sublote — Estado: EN_PROCESO, Etapa: RECEPCION
+          // El costo acumulado inicial se reparte proporcionalmente según la cantidad de hojas de cada sublote.
+          const totalHojasSublotes = sublotes.reduce((s, sub) => s + (parseFloat(sub.cantidad) || 0), 0) || 1;
           for (const sublote of sublotes) {
+            const hojasSub = parseFloat(sublote.cantidad) || 0;
+            const proporcion = hojasSub / totalHojasSublotes;
             await InventarioEnProceso.create({
               codigo: currentItem.codigo_lote,
               descripcion: `${currentItem.descripcion_producto} — ${sublote.codigo}`,
@@ -240,10 +260,12 @@ export default function ProcesoRecepcion() {
               etapa_actual: 'recepcion',
               estado_proceso: 'piel_recibida',
               estado_actual: 'EN_PROCESO',
-              cantidad_hojas: parseFloat(sublote.cantidad) || 0,
-              cantidad_pieles: parseFloat(sublote.cantidad) || 0,
-              peso_actual: ((parseFloat(currentItem.peso_total) || 0) / (sublotes.length || 1)),
-              costo_acumulado: ((parseFloat(currentItem.costo_total) || 0) / (sublotes.length || 1)),
+              cantidad_hojas: hojasSub,
+              cantidad_hojas_original: hojasSub,
+              cantidad_pieles: hojasSub,
+              peso_actual: ((parseFloat(currentItem.peso_total) || 0) * proporcion),
+              costo_acumulado: costoTotalRecepcionFinal * proporcion,
+              costo_promedio: hojasSub > 0 ? (costoTotalRecepcionFinal * proporcion) / hojasSub : 0,
               fecha_ingreso_proceso: currentItem.fecha_inicio,
               proceso_origen_id: procesoId
             });
@@ -260,9 +282,11 @@ export default function ProcesoRecepcion() {
             estado_proceso: 'piel_recibida',
             estado_actual: 'EN_PROCESO',
             cantidad_hojas: currentItem.cantidad_total_lote_hojas || 0,
+            cantidad_hojas_original: currentItem.cantidad_total_lote_hojas || 0,
             cantidad_pieles: currentItem.cantidad_total_lote_pieles || 0,
             peso_actual: parseFloat(currentItem.peso_total) || 0,
-            costo_acumulado: parseFloat(currentItem.costo_total) || 0,
+            costo_acumulado: costoTotalRecepcionFinal,
+            costo_promedio: costoPromedioPorHojaFinal,
             fecha_ingreso_proceso: currentItem.fecha_inicio,
             proceso_origen_id: procesoId
           });
@@ -337,9 +361,9 @@ export default function ProcesoRecepcion() {
         <td>
           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
             item.estado === 'dividido' ? 'bg-orange-100 text-orange-700' :
-            item.estado === 'completado' ? 'bg-green-100 text-green-700' :
+            (item.estado === 'recepcion_completada' || item.estado === 'completado') ? 'bg-green-100 text-green-700' :
             'bg-blue-100 text-blue-700'
-          }`}>{item.dividir_lote ? 'DIVIDIDO' : (item.estado || 'pendiente').toUpperCase()}</span>
+          }`}>{item.dividir_lote ? 'DIVIDIDO' : (item.estado === 'recepcion_completada' ? 'Recepción Completada' : (item.estado || 'pendiente').toUpperCase())}</span>
         </td>
         <td>
           <div className="flex space-x-1">
