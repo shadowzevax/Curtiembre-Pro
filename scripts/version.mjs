@@ -30,10 +30,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { dumpSnapshot, restoreSnapshot, pruneSnapshots } from './db-snapshot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VERSION_FILE = path.join(ROOT, 'src', 'version.json');
-const KEEP = 5;
+// Los tags de código (git) no pesan casi nada: se guardan TODOS, para siempre.
+// Los snapshots de base de datos sí ocupan espacio en el repo, así que solo
+// se conservan los últimos KEEP_DB_SNAPSHOTS.
+const KEEP_DB_SNAPSHOTS = 15;
 
 function git(cmd, opts = {}) {
   return execSync(`git ${cmd}`, { cwd: ROOT, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], ...opts }).trim();
@@ -59,18 +63,19 @@ function writeVersion(v, descripcion, advertencias) {
   fs.writeFileSync(VERSION_FILE, JSON.stringify({ version: v, fecha, descripcion, advertencias: advertencias || '' }, null, 2) + '\n');
 }
 
-function pruneOldTags(tags) {
-  for (const old of tags.slice(KEEP)) {
-    try {
-      git(`tag -d ${old}`);
-      git(`push origin :refs/tags/${old}`);
-      console.log(`  (se eliminó la versión antigua ${old})`);
-    } catch { /* sin conexión o ya borrada */ }
-  }
-}
-
-function publicar(nueva, desc, advertencias) {
+async function publicar(nueva, desc, advertencias) {
   writeVersion(nueva, desc, advertencias);
+
+  // Snapshot de los datos ANTES de publicar el código, para que el snapshot
+  // de vN quede como el estado de datos al momento de lanzar esa versión.
+  let snapshotFile = null;
+  try {
+    snapshotFile = await dumpSnapshot(nueva);
+    pruneSnapshots(KEEP_DB_SNAPSHOTS);
+  } catch (e) {
+    console.log(`  ⚠️  No se pudo generar el snapshot de base de datos: ${e.message}`);
+  }
+
   git('add -A');
   const hayCambios = git('status --porcelain');
   if (!hayCambios) {
@@ -83,30 +88,30 @@ function publicar(nueva, desc, advertencias) {
   git('push origin main --follow-tags');
   console.log(`\n✅ Versión v${nueva} guardada y publicándose en https://curtiembre-pro.vercel.app`);
   console.log('   (el deploy tarda ~1 minuto)');
-  pruneOldTags(listVersionTags());
+  if (snapshotFile) console.log(`   Snapshot de datos: ${path.basename(snapshotFile)}`);
   return true;
 }
 
 // vN → vN+1 (cambio independiente y terminado)
-function guardar(descripcion, advertencias) {
+async function guardar(descripcion, advertencias) {
   const actual = String(readVersion().version);
   const enteroActual = Math.trunc(parseFloat(actual));
   const nueva = String(enteroActual + 1);
-  publicar(nueva, descripcion || `Version ${nueva}`, advertencias);
+  await publicar(nueva, descripcion || `Version ${nueva}`, advertencias);
 }
 
 // vN → vN.1, vN.1 → vN.2... (fase dentro del mismo requerimiento grande)
-function fase(descripcion, advertencias) {
+async function fase(descripcion, advertencias) {
   const actual = String(readVersion().version);
   const [enteroStr, decStr] = actual.split('.');
   const entero = parseInt(enteroStr, 10);
   const siguienteDecimal = (decStr ? parseInt(decStr, 10) : 0) + 1;
   const nueva = `${entero}.${siguienteDecimal}`;
-  publicar(nueva, descripcion || `Fase ${nueva}`, advertencias);
+  await publicar(nueva, descripcion || `Fase ${nueva}`, advertencias);
 }
 
 function listar() {
-  const tags = listVersionTags().slice(0, KEEP);
+  const tags = listVersionTags();
   if (!tags.length) {
     console.log('Aún no hay versiones guardadas.');
     return [];
@@ -150,23 +155,46 @@ async function restaurar(arg) {
     return;
   }
 
+  const versionTag = tag.slice(1); // "v20" -> "20"
+  const snapshotFile = path.join(ROOT, 'db-snapshots', `v${versionTag}.json.gz`);
+  const hayDatos = fs.existsSync(snapshotFile);
+
+  let restaurarDatos = false;
+  if (hayDatos) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const resp = await new Promise((res) => rl.question(
+      `\n¿Restaurar también los DATOS de la base a como estaban en ${tag}? Esto SOBREESCRIBE la base actual (se guarda un respaldo previo por si acaso). (s/N): `,
+      (a) => { rl.close(); res(a.trim().toLowerCase()); },
+    ));
+    restaurarDatos = resp === 's' || resp === 'si' || resp === 'sí';
+  } else {
+    console.log(`\n(No hay snapshot de datos guardado para ${tag}; solo se restaurará el código.)`);
+  }
+
   console.log(`\nRestaurando todo el proyecto al estado de ${tag}...`);
   // Trae el contenido exacto de esa versión sin borrar el historial
   git(`checkout ${tag} -- .`);
-  git('clean -fd -e node_modules -e .env -e migration/export -e .playwright-mcp');
+  git('clean -fd -e node_modules -e .env -e migration/export -e .playwright-mcp -e db-snapshots');
+
+  if (restaurarDatos) {
+    console.log('Restaurando datos de la base de datos...');
+    const resultado = await restoreSnapshot(versionTag);
+    console.log(`  ✅ Datos restaurados. Respaldo previo guardado en ${path.basename(resultado.respaldoPrevio)}.`);
+    console.log(`  Filas restauradas: ${JSON.stringify(resultado.filas)}`);
+  }
 
   // La restauración se guarda como una versión NUEVA (así siempre se puede volver)
   const enteroActual = Math.trunc(parseFloat(actual));
   const nueva = String(enteroActual + 1);
-  const ok = publicar(nueva, `Restauración de ${tag}`);
+  const ok = await publicar(nueva, `Restauración de ${tag}${restaurarDatos ? ' (código + datos)' : ' (solo código)'}`);
   if (ok) {
     console.log(`\n✅ Listo: la página quedó como en ${tag} (guardado como versión v${nueva}).`);
   }
 }
 
 const [, , comando, ...resto] = process.argv;
-if (comando === 'guardar') guardar(resto[0], resto[1]);
-else if (comando === 'fase') fase(resto[0], resto[1]);
+if (comando === 'guardar') await guardar(resto[0], resto[1]);
+else if (comando === 'fase') await fase(resto[0], resto[1]);
 else if (comando === 'listar') listar();
 else if (comando === 'restaurar') await restaurar(resto[0]);
 else {

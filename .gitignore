@@ -35,3 +35,7 @@ base44/.app.jsonc
 migration/export/
 .vercel
 .env*
+
+# Respaldos de seguridad automáticos creados justo antes de restaurar datos
+# (los snapshots vN.json.gz normales SÍ se versionan, estos no)
+db-snapshots/_pre-restore-*.json.gz
