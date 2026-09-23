@@ -47,21 +47,10 @@ const menuItems = [
             { title: "Recurtido", url: createPageUrl("ProcesoRecurtido"), icon: Settings },
             { title: "Procesos Externos", url: createPageUrl("ProcesosExternos"), icon: Settings },
             { title: "Acabado", url: createPageUrl("ProcesoAcabado"), icon: Settings },
-            { title: "Otros Costos de Producción", url: createPageUrl("ServiciosProduccion"), icon: Settings },
+            { title: "Otros procesos que realmente correspondan a producción", url: createPageUrl("ServiciosProduccion"), icon: Settings },
             { title: "Pintura", url: createPageUrl("Pintura"), icon: Settings },
             { title: "Costos Indirectos", url: createPageUrl("CostosIndirectos"), icon: Settings },
             { title: "Lote Detallado Consolidado", url: createPageUrl("LoteDetalladoConsolidado"), icon: Settings }
-        ]
-    },
-    {
-        title: "Procesos",
-        icon: Package,
-        roles: ["admin", "operario"],
-        subItems: [
-            { title: "Órdenes de Producción", url: createPageUrl("ProduccionOrdenes"), icon: Package },
-            { title: "Planificación", url: createPageUrl("ProduccionPlanificacion"), icon: Package },
-            { title: "Consumo de Insumos", url: createPageUrl("ProduccionConsumoInsumos"), icon: Package },
-            { title: "Reporte de Etapas", url: createPageUrl("ProduccionReporteEtapas"), icon: Package }
         ]
     },
     {
@@ -74,11 +63,11 @@ const menuItems = [
         ]
     },
     {
-        title: "Planificación y Control de Producción",
+        title: "Planificación y Control de Producción de Pintura",
         icon: Package,
         roles: ["admin", "operario"],
         subItems: [
-            { title: "Planificación y Control de Producción", url: createPageUrl("PlanificacionProduccion"), icon: Package }
+            { title: "Planificación y Control de Producción de Pintura", url: createPageUrl("PlanificacionProduccion"), icon: Package }
         ]
     },
     {
@@ -86,11 +75,19 @@ const menuItems = [
         icon: Users,
         roles: ["admin", "contador"],
         subItems: [
-            { title: "Caja", url: createPageUrl("FinanzasCaja"), icon: Calculator },
+            { title: "Caja General", url: createPageUrl("FinanzasCajaGeneral"), icon: Calculator },
+            { title: "Caja Menor", url: createPageUrl("FinanzasCajaMenor"), icon: Calculator },
             { title: "Bancos", url: createPageUrl("FinanzasBancos"), icon: Calculator },
+            { title: "Nequi", url: createPageUrl("FinanzasNequi"), icon: Calculator },
+            { title: "Ingresos", url: createPageUrl("FinanzasIngresos"), icon: Calculator },
+            { title: "Egresos", url: createPageUrl("FinanzasEgresos"), icon: Calculator },
             { title: "Cuentas por Cobrar", url: createPageUrl("FinanzasCuentasCobrar"), icon: Calculator },
             { title: "Cuentas por Pagar", url: createPageUrl("FinanzasCuentasPagar"), icon: Calculator },
-            { title: "Tesorería", url: createPageUrl("FinanzasTesoreria"), icon: Calculator },
+            { title: "Pagos a Proveedores", url: createPageUrl("FinanzasPagosProveedores"), icon: Calculator },
+            { title: "Cobros de Clientes", url: createPageUrl("FinanzasCobrosClientes"), icon: Calculator },
+            { title: "Anticipos", url: createPageUrl("FinanzasAnticipos"), icon: Calculator },
+            { title: "Movimiento entre Cuentas", url: createPageUrl("FinanzasMovimientoCuentas"), icon: Calculator },
+            { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator },
             { title: "Cuentas Bancarias (catálogo)", url: createPageUrl("CuentasBancarias"), icon: Calculator },
         ]
     },
@@ -386,10 +383,7 @@ export default function Layout({ children, currentPageName }) {
             'ProcesoCurtido': 'Proceso de Curtido',
             'ProcesoAcabado': 'Proceso de Acabado',
             'ProcesoRecurtido': 'Proceso de Recurtido',
-            'ProduccionOrdenes': 'Órdenes de Producción',
-            'ProduccionPlanificacion': 'Planificación de Producción',
-            'ProduccionConsumoInsumos': 'Consumo de Insumos',
-            'ProduccionReporteEtapas': 'Reporte de Etapas',
+            'PlanificacionProduccion': 'Planificación y Control de Producción de Pintura',
             'VentaProductos': 'Venta de Productos',
             'VentaServicios': 'Venta de Servicios',
             'ReciboCaja': 'Recibo de Caja',

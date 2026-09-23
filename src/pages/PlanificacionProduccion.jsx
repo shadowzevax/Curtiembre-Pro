@@ -673,7 +673,7 @@ export default function PlanificacionProduccion() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Planificación y Control de Producción</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Planificación y Control de Producción de Pintura</h1>
           <p className="text-sm text-slate-500">Gestión integral de solicitudes, órdenes, avances y entregas</p>
         </div>
         <Button variant="outline" onClick={() => setShowCatalogoModal(true)} className="text-xs">⚙ Catálogos</Button>
@@ -1808,129 +1808,81 @@ function MatrizIndividualModal({ solicitud, matriz, onClose }) {
 function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuero, placas, solicitudes, onSave }) {
   const [form, setForm] = useState({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
 
-  // ── Matriz de captura: Tipo de Acabado y Calibre son únicos para toda la
-  // solicitud (así lo pide el flujo real); Color va en filas, Placa en
-  // columnas, y cada celda es la cantidad de hojas de esa combinación. Los
-  // "items" internos (uno por celda > 0) se generan solos al Guardar.
-  const [tipoAcabadoId, setTipoAcabadoId] = useState("");
+  // ── Captura por líneas: cada línea es una combinación puntual de
+  // Color + Tipo de Acabado + Placa + Cantidad, elegida desde el modal
+  // "Agregar mediante tabla" (que consulta los catálogos de Inventarios).
+  // Calibre sigue siendo único para toda la solicitud.
   const [calibre, setCalibre] = useState("");
-  const [coloresSel, setColoresSel] = useState([]); // [{id, codigo_color, nombre_color}]
-  const [placasSel, setPlacasSel] = useState([]); // [{id, codigo, nombre}]
-  const [cantidades, setCantidades] = useState({}); // "colorId|placaId" -> string
-  const [colorABuscar, setColorABuscar] = useState("");
+  const [items, setItems] = useState([]); // [{tipo_cuero_id, codigo_tipo_acabado, tipo_cuero_nombre, color_id, codigo_color, nombre_color, placa_id, codigo_placa, placa_nombre, calibre, cantidad_hojas, observaciones}]
+  const [showAgregarTabla, setShowAgregarTabla] = useState(false);
 
   useEffect(() => {
     if (solicitud) {
       setForm({ ...solicitud });
-      const items = solicitud.items || [];
-      const primerItem = items[0] || {};
-      setTipoAcabadoId(primerItem.tipo_cuero_id || "");
-      setCalibre(primerItem.calibre || "");
-      const coloresMap = new Map();
-      const placasMap = new Map();
-      const cant = {};
-      items.forEach(it => {
-        if (it.color_id && !coloresMap.has(it.color_id)) coloresMap.set(it.color_id, { id: it.color_id, codigo_color: it.codigo_color, nombre_color: it.nombre_color });
-        if (it.placa_id && !placasMap.has(it.placa_id)) placasMap.set(it.placa_id, { id: it.placa_id, codigo: it.codigo_placa, nombre: it.placa_nombre });
-        if (it.color_id && it.placa_id) cant[`${it.color_id}|${it.placa_id}`] = String(it.cantidad_hojas || "");
-      });
-      setColoresSel([...coloresMap.values()]);
-      setPlacasSel([...placasMap.values()]);
-      setCantidades(cant);
+      const its = solicitud.items || [];
+      setCalibre(its[0]?.calibre || "");
+      setItems(its);
     } else {
       setForm({ fecha: today(), prioridad: "normal", fecha_compromiso: "", cliente_id: "", cliente_nombre: "", estado: "pendiente", observaciones: "", items: [] });
-      setTipoAcabadoId(""); setCalibre(""); setColoresSel([]); setPlacasSel([]); setCantidades({}); setColorABuscar("");
+      setCalibre(""); setItems([]);
     }
   }, [solicitud, open]);
 
-  const agregarColor = (colorId) => {
-    if (!colorId || coloresSel.some(c => c.id === colorId)) return;
-    const c = colores.find(x => x.id === colorId);
-    if (!c) return;
-    setColoresSel(prev => [...prev, { id: c.id, codigo_color: c.codigo_color, nombre_color: c.nombre_color }]);
-  };
-  const quitarColor = (colorId) => {
-    setColoresSel(prev => prev.filter(c => c.id !== colorId));
-    setCantidades(prev => { const next = { ...prev }; Object.keys(next).forEach(k => { if (k.startsWith(`${colorId}|`)) delete next[k]; }); return next; });
-  };
-  const togglePlaca = (p) => {
-    setPlacasSel(prev => prev.some(x => x.id === p.id) ? prev.filter(x => x.id !== p.id) : [...prev, { id: p.id, codigo: p.codigo, nombre: p.nombre }]);
+  const claveItem = (it) => `${it.color_id}|${it.tipo_cuero_id}|${it.placa_id}`;
+
+  const agregarLineasDesdeTabla = (nuevasLineas) => {
+    setItems(prev => [...prev, ...nuevasLineas.map(l => ({ ...l, calibre }))]);
+    setShowAgregarTabla(false);
   };
 
-  // Convierte la matriz (colores x placas) en el arreglo de "items" internos.
-  const construirItemsDesdeMatriz = () => {
-    const tipo = tiposCuero.find(t => t.id === tipoAcabadoId);
-    const items = [];
-    coloresSel.forEach(c => {
-      placasSel.forEach(p => {
-        const cant = parseFloat(cantidades[`${c.id}|${p.id}`]) || 0;
-        if (cant <= 0) return;
-        items.push({
-          tipo_cuero_id: tipoAcabadoId, codigo_tipo_acabado: tipo?.codigo || "", tipo_cuero_nombre: tipo?.nombre || "",
-          color_id: c.id, codigo_color: c.codigo_color, nombre_color: c.nombre_color,
-          placa_id: p.id, codigo_placa: p.codigo, placa_nombre: p.nombre,
-          calibre, cantidad_hojas: cant, observaciones: "",
-        });
-      });
-    });
-    return items;
+  const actualizarCantidadItem = (idx, valor) => {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, cantidad_hojas: parseFloat(valor) || 0 } : it));
+  };
+  const actualizarObservacionItem = (idx, valor) => {
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, observaciones: valor } : it));
+  };
+  const eliminarItem = (idx) => {
+    setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // ── Totales en vivo de la matriz (mientras se captura, sin guardar) ──
-  const totalesMatriz = React.useMemo(() => {
-    const porColor = {};
-    const porPlaca = {};
-    let totalHojas = 0;
-    coloresSel.forEach(c => {
-      placasSel.forEach(p => {
-        const cant = parseFloat(cantidades[`${c.id}|${p.id}`]) || 0;
-        porColor[c.id] = (porColor[c.id] || 0) + cant;
-        porPlaca[p.id] = (porPlaca[p.id] || 0) + cant;
-        totalHojas += cant;
-      });
-    });
-    return { porColor, porPlaca, totalHojas };
-  }, [coloresSel, placasSel, cantidades]);
-
-  // ── Resumen general (a partir de la matriz, en vivo) ──
+  // ── Resumen general en vivo, a partir de las líneas ──
   const resumen = React.useMemo(() => {
-    const porColor = coloresSel
-      .map(c => [c.nombre_color || c.codigo_color, totalesMatriz.porColor[c.id] || 0])
-      .filter(([, cant]) => cant > 0)
-      .sort((a, b) => a[0].localeCompare(b[0]));
-    const porPlaca = placasSel
-      .map(p => [p.nombre || p.codigo, totalesMatriz.porPlaca[p.id] || 0])
-      .filter(([, cant]) => cant > 0)
-      .sort((a, b) => a[0].localeCompare(b[0]));
-    return {
-      porColor, porPlaca,
-      totalRegistros: construirItemsDesdeMatriz().length,
-      totalColores: porColor.length,
-      totalPlacas: porPlaca.length,
-      totalHojas: totalesMatriz.totalHojas,
-    };
-  }, [coloresSel, placasSel, totalesMatriz]);
+    const porColorMap = new Map();
+    const porPlacaMap = new Map();
+    let totalHojas = 0;
+    items.forEach(it => {
+      const cant = parseFloat(it.cantidad_hojas) || 0;
+      const cKey = it.nombre_color || it.codigo_color || "—";
+      const pKey = it.placa_nombre || it.codigo_placa || "—";
+      porColorMap.set(cKey, (porColorMap.get(cKey) || 0) + cant);
+      porPlacaMap.set(pKey, (porPlacaMap.get(pKey) || 0) + cant);
+      totalHojas += cant;
+    });
+    const porColor = [...porColorMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const porPlaca = [...porPlacaMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return { porColor, porPlaca, totalRegistros: items.length, totalColores: porColor.length, totalPlacas: porPlaca.length, totalHojas };
+  }, [items]);
 
-  // ── Advertencias: campos obligatorios, colores/placas sin ninguna cantidad ──
+  // ── Advertencias ──
   const advertencias = React.useMemo(() => {
     const lista = [];
-    if (!tipoAcabadoId) lista.push("Falta seleccionar el Tipo de Acabado de la solicitud.");
     if (!calibre) lista.push("Falta seleccionar el Calibre de la solicitud.");
-    coloresSel.forEach(c => {
-      if ((totalesMatriz.porColor[c.id] || 0) <= 0) lista.push(`El color "${c.nombre_color}" no tiene ninguna cantidad registrada en la matriz — quítelo si no se va a usar.`);
-    });
-    placasSel.forEach(p => {
-      if ((totalesMatriz.porPlaca[p.id] || 0) <= 0) lista.push(`La placa "${p.nombre}" no tiene ninguna cantidad registrada en la matriz — quítela si no se va a usar.`);
+    items.forEach(it => {
+      if ((parseFloat(it.cantidad_hojas) || 0) <= 0) lista.push(`La línea "${it.nombre_color} / ${it.tipo_cuero_nombre} / ${it.placa_nombre}" no tiene ninguna cantidad registrada — quítela si no se va a usar.`);
     });
     return lista;
-  }, [tipoAcabadoId, calibre, coloresSel, placasSel, totalesMatriz]);
+  }, [calibre, items]);
 
   const handleSave = async () => {
     if (!form.cliente_id) { alert("Seleccione el Solicitante."); return; }
-    if (!tipoAcabadoId) { alert("Seleccione el Tipo de Acabado."); return; }
     if (!calibre) { alert("Seleccione el Calibre."); return; }
-    const itemsGenerados = construirItemsDesdeMatriz();
-    if (itemsGenerados.length === 0) { alert("Registre al menos una cantidad mayor a 0 en la matriz Color x Placa."); return; }
+    const itemsValidos = items.filter(it => (parseFloat(it.cantidad_hojas) || 0) > 0);
+    if (itemsValidos.length === 0) { alert("Agregue al menos una línea con cantidad mayor a 0 mediante el botón \"+ Agregar mediante tabla\"."); return; }
+
+    const confirmado = window.confirm(
+      `¿Desea confirmar y guardar esta solicitud?\n\nLíneas seleccionadas: ${itemsValidos.length}\nTotal hojas: ${itemsValidos.reduce((s, it) => s + (parseFloat(it.cantidad_hojas) || 0), 0)}`
+    );
+    if (!confirmado) return;
 
     let numero_solicitud = form.numero_solicitud;
     if (!solicitud) {
@@ -1939,9 +1891,8 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
       const maxNum = existentes.reduce((max, s) => { const n = parseInt(s.numero_solicitud?.split("-").pop() || "0"); return n > max ? n : max; }, 0);
       numero_solicitud = `SOL-${year}-${String(maxNum + 1).padStart(4, "0")}`;
     }
-    // Ordenar automáticamente por Color, Placa antes de guardar (Tipo de
-    // Acabado y Calibre ya son únicos para toda la solicitud)
-    const itemsOrdenados = itemsGenerados.sort((a, b) => {
+    // Ordenar automáticamente por Color, Placa antes de guardar
+    const itemsOrdenados = itemsValidos.map(it => ({ ...it, calibre })).sort((a, b) => {
       const co = (a.nombre_color || a.codigo_color || "").localeCompare(b.nombre_color || b.codigo_color || "");
       if (co !== 0) return co;
       return (a.placa_nombre || a.codigo_placa || "").localeCompare(b.placa_nombre || b.codigo_placa || "");
@@ -2001,18 +1952,11 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
             <Textarea value={form.observaciones} onChange={e => setForm(p => ({ ...p, observaciones: e.target.value }))} rows={2} />
           </div>
 
-          {/* Paso 1 (complemento): Tipo de Acabado y Calibre, únicos para toda la solicitud */}
+          {/* Calibre, único para toda la solicitud */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Tipo de Acabado *</Label>
-              <Select value={tipoAcabadoId} onValueChange={setTipoAcabadoId}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                <SelectContent>{tiposCuero.map(t => <SelectItem key={t.id} value={t.id}>{t.codigo} — {t.nombre}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>Calibre *</Label>
-              <Select value={calibre} onValueChange={setCalibre}>
+              <Select value={calibre} onValueChange={v => { setCalibre(v); setItems(prev => prev.map(it => ({ ...it, calibre: v }))); }}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="0.5">0.5</SelectItem>
@@ -2023,88 +1967,64 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
             </div>
           </div>
 
-          {/* Paso 2: Agregar Color (buscador) */}
+          {/* Líneas de la solicitud: Color + Tipo de Acabado + Placa + Cantidad,
+              alimentadas por el modal "Agregar mediante tabla" que consulta en
+              vivo los catálogos maestros de Inventarios (Colores, Tipos de
+              Acabado, Placas). No se digitan ni duplican catálogos aquí. */}
           <div>
-            <Label className="text-base font-semibold">Colores de la Solicitud</Label>
-            <div className="flex gap-2 mt-1">
-              <Select value={colorABuscar} onValueChange={v => { agregarColor(v); setColorABuscar(""); }}>
-                <SelectTrigger className="max-w-xs"><SelectValue placeholder="Buscar y agregar color..." /></SelectTrigger>
-                <SelectContent>
-                  {colores.filter(c => !coloresSel.some(cs => cs.id === c.id)).map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.codigo_color} — {c.nombre_color}</SelectItem>
-                  ))}
-                  {colores.filter(c => !coloresSel.some(cs => cs.id === c.id)).length === 0 && <SelectItem value="__none__" disabled>No hay más colores</SelectItem>}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-semibold">Líneas de la Solicitud</Label>
+              <Button type="button" size="sm" onClick={() => setShowAgregarTabla(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Agregar mediante tabla
+              </Button>
             </div>
-            {coloresSel.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {coloresSel.map(c => (
-                  <Badge key={c.id} className="bg-purple-100 text-purple-800 text-xs flex items-center gap-1">
-                    {c.nombre_color}
-                    <button type="button" onClick={() => quitarColor(c.id)} className="hover:text-red-600"><X className="w-3 h-3" /></button>
-                  </Badge>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Paso 3: Selección de Placas */}
-          <div>
-            <Label className="text-base font-semibold">Placas de la Solicitud</Label>
-            <div className="flex flex-wrap gap-3 mt-1 p-2 border rounded-lg bg-slate-50">
-              {placas.map(p => (
-                <label key={p.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input type="checkbox" checked={placasSel.some(x => x.id === p.id)} onChange={() => togglePlaca(p)} />
-                  {p.codigo} — {p.nombre}
-                </label>
-              ))}
-              {placas.length === 0 && <p className="text-xs text-slate-400">Sin placas registradas en el catálogo.</p>}
-            </div>
-          </div>
-
-          {/* Matriz de Captura: filas = colores, columnas = placas */}
-          <div>
-            <Label className="text-base font-semibold">Matriz de Captura (Color x Placa)</Label>
-            {coloresSel.length === 0 || placasSel.length === 0 ? (
-              <p className="text-xs text-slate-400 border rounded-lg p-3 mt-1">Agregue al menos un color y marque al menos una placa para capturar cantidades.</p>
+            {items.length === 0 ? (
+              <p className="text-xs text-slate-400 border rounded-lg p-3 mt-1">Sin líneas todavía. Use "+ Agregar mediante tabla" para seleccionar las combinaciones de Color, Tipo de Acabado y Placa que necesita.</p>
             ) : (
               <div className="border rounded-lg overflow-x-auto mt-1">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-800 text-white">
                     <tr>
                       <th className="p-2 text-left">COLOR</th>
-                      {placasSel.map(p => <th key={p.id} className="p-2 text-center">{p.nombre || p.codigo}</th>)}
-                      <th className="p-2 text-center">TOTAL</th>
+                      <th className="p-2 text-left">TIPO DE ACABADO</th>
+                      <th className="p-2 text-left">PLACA</th>
+                      <th className="p-2 text-center w-24">CANTIDAD</th>
+                      <th className="p-2 text-left">OBSERVACIÓN</th>
+                      <th className="p-2 text-center w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {coloresSel.map(c => (
-                      <tr key={c.id} className="border-t">
-                        <td className="p-1.5 font-semibold">{c.nombre_color}</td>
-                        {placasSel.map(p => (
-                          <td key={p.id} className="p-1 text-center w-20">
-                            <Input
-                              type="number" min="0"
-                              value={cantidades[`${c.id}|${p.id}`] ?? ""}
-                              onChange={e => setCantidades(prev => ({ ...prev, [`${c.id}|${p.id}`]: e.target.value }))}
-                              className="h-8 text-xs text-center"
-                            />
-                          </td>
-                        ))}
-                        <td className="p-1.5 text-center font-bold bg-slate-100">{totalesMatriz.porColor[c.id] || 0}</td>
+                    {items.map((it, idx) => (
+                      <tr key={`${claveItem(it)}-${idx}`} className="border-t">
+                        <td className="p-1.5 font-semibold">{it.nombre_color}</td>
+                        <td className="p-1.5">{it.tipo_cuero_nombre}</td>
+                        <td className="p-1.5">{it.placa_nombre}</td>
+                        <td className="p-1 text-center">
+                          <Input type="number" min="0" value={it.cantidad_hojas ?? ""} onChange={e => actualizarCantidadItem(idx, e.target.value)} className="h-8 text-xs text-center" />
+                        </td>
+                        <td className="p-1">
+                          <Input value={it.observaciones || ""} onChange={e => actualizarObservacionItem(idx, e.target.value)} className="h-8 text-xs" />
+                        </td>
+                        <td className="p-1 text-center">
+                          <button type="button" onClick={() => eliminarItem(idx)} className="text-red-600 hover:text-red-800"><X className="w-4 h-4" /></button>
+                        </td>
                       </tr>
                     ))}
-                    <tr className="bg-slate-100 font-bold border-t">
-                      <td className="p-1.5">TOTALES</td>
-                      {placasSel.map(p => <td key={p.id} className="p-1.5 text-center">{totalesMatriz.porPlaca[p.id] || 0}</td>)}
-                      <td className="p-1.5 text-center">{totalesMatriz.totalHojas}</td>
-                    </tr>
                   </tbody>
                 </table>
               </div>
             )}
           </div>
+
+          <AgregarPorTablaModal
+            open={showAgregarTabla}
+            onClose={() => setShowAgregarTabla(false)}
+            colores={colores}
+            tiposCuero={tiposCuero}
+            placas={placas}
+            existingItems={items}
+            onAgregar={agregarLineasDesdeTabla}
+          />
 
           {/* Totales y validación */}
           {resumen.totalRegistros > 0 && (
@@ -2151,6 +2071,169 @@ function SolicitudModal({ open, onClose, solicitud, clientes, colores, tiposCuer
         <div className="flex justify-end gap-2 pt-4 border-t">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={handleSave}><Save className="w-4 h-4 mr-1" /> Guardar</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── AgregarPorTablaModal ───
+// Tabla de selección masiva para "Nueva Solicitud": consulta en vivo los
+// catálogos maestros de Inventarios (Colores, Tipos de Acabado, Placas) —
+// solo registros activos — y arma líneas Color+TipoAcabado+Placa+Cantidad
+// mediante checkbox. No genera automáticamente todas las combinaciones
+// posibles (podrían ser miles): exige acotar con filtros/búsqueda antes de
+// mostrar filas cuando el universo filtrado es demasiado grande.
+const MAX_FILAS_TABLA = 300;
+
+function AgregarPorTablaModal({ open, onClose, colores, tiposCuero, placas, existingItems, onAgregar }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroTipoAcabado, setFiltroTipoAcabado] = useState("__todos__");
+  const [filtroPlaca, setFiltroPlaca] = useState("__todos__");
+  const [marcados, setMarcados] = useState({}); // "colorId|tipoId|placaId" -> cantidad (string)
+
+  useEffect(() => {
+    if (open) { setBusqueda(""); setFiltroTipoAcabado("__todos__"); setFiltroPlaca("__todos__"); setMarcados({}); }
+  }, [open]);
+
+  const coloresActivos = React.useMemo(() => (colores || []).filter(c => (c.estado ?? 'activo') === 'activo'), [colores]);
+  const tiposActivos = React.useMemo(() => (tiposCuero || []).filter(t => t.activo !== false), [tiposCuero]);
+  const placasActivas = React.useMemo(() => (placas || []).filter(p => p.activo !== false), [placas]);
+
+  const existentesSet = React.useMemo(() => new Set((existingItems || []).map(it => `${it.color_id}|${it.tipo_cuero_id}|${it.placa_id}`)), [existingItems]);
+
+  const texto = busqueda.trim().toLowerCase();
+  const tiposFiltrados = filtroTipoAcabado === "__todos__" ? tiposActivos : tiposActivos.filter(t => t.id === filtroTipoAcabado);
+  const placasFiltradas = filtroPlaca === "__todos__" ? placasActivas : placasActivas.filter(p => p.id === filtroPlaca);
+  const coloresFiltrados = texto
+    ? coloresActivos.filter(c => `${c.codigo_color} ${c.nombre_color}`.toLowerCase().includes(texto))
+    : coloresActivos;
+
+  // Universo filtrado (cruce solo de lo que pasó los filtros, nunca todo el catálogo sin filtrar)
+  const universoCompleto = coloresFiltrados.length * tiposFiltrados.length * placasFiltradas.length;
+  const hayFiltroActivo = !!texto || filtroTipoAcabado !== "__todos__" || filtroPlaca !== "__todos__";
+  const excedeLimite = universoCompleto > MAX_FILAS_TABLA;
+
+  const filas = React.useMemo(() => {
+    if (excedeLimite) return [];
+    const out = [];
+    coloresFiltrados.forEach(c => {
+      tiposFiltrados.forEach(t => {
+        placasFiltradas.forEach(p => {
+          const key = `${c.id}|${t.id}|${p.id}`;
+          out.push({ key, color: c, tipo: t, placa: p, yaExiste: existentesSet.has(key) });
+        });
+      });
+    });
+    return out;
+  }, [coloresFiltrados, tiposFiltrados, placasFiltradas, excedeLimite, existentesSet]);
+
+  const toggleFila = (key) => {
+    setMarcados(prev => {
+      const next = { ...prev };
+      if (key in next) delete next[key];
+      else next[key] = "1";
+      return next;
+    });
+  };
+  const setCantidadFila = (key, valor) => setMarcados(prev => ({ ...prev, [key]: valor }));
+
+  const seleccionadas = Object.entries(marcados).filter(([, cant]) => (parseFloat(cant) || 0) > 0);
+  const totalHojasSeleccion = seleccionadas.reduce((s, [, cant]) => s + (parseFloat(cant) || 0), 0);
+
+  const handleAgregarSeleccionadas = () => {
+    const nuevas = [];
+    for (const [key, cant] of seleccionadas) {
+      const fila = filas.find(f => f.key === key);
+      if (!fila || fila.yaExiste) continue;
+      nuevas.push({
+        tipo_cuero_id: fila.tipo.id, codigo_tipo_acabado: fila.tipo.codigo || "", tipo_cuero_nombre: fila.tipo.nombre || "",
+        color_id: fila.color.id, codigo_color: fila.color.codigo_color, nombre_color: fila.color.nombre_color,
+        placa_id: fila.placa.id, codigo_placa: fila.placa.codigo, placa_nombre: fila.placa.nombre,
+        cantidad_hojas: parseFloat(cant) || 0, observaciones: "",
+      });
+    }
+    if (nuevas.length === 0) { alert("Seleccione al menos una combinación con cantidad mayor a 0."); return; }
+    onAgregar(nuevas);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Agregar mediante tabla</DialogTitle></DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-xs text-slate-500">
+            Seleccione con el check las combinaciones de Color, Tipo de Acabado y Placa que necesita y registre la cantidad de hojas.
+            Estos catálogos se administran en Inventarios; los registros inactivos no aparecen aquí.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Input placeholder="Buscar por color (código o nombre)..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+            <Select value={filtroTipoAcabado} onValueChange={setFiltroTipoAcabado}>
+              <SelectTrigger><SelectValue placeholder="Tipo de Acabado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__todos__">Todos los tipos de acabado</SelectItem>
+                {tiposActivos.map(t => <SelectItem key={t.id} value={t.id}>{t.codigo} — {t.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filtroPlaca} onValueChange={setFiltroPlaca}>
+              <SelectTrigger><SelectValue placeholder="Placa" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__todos__">Todas las placas</SelectItem>
+                {placasActivas.map(p => <SelectItem key={p.id} value={p.id}>{p.codigo} — {p.nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center justify-between bg-slate-50 border rounded-lg p-2 text-xs">
+            <span>Líneas seleccionadas: <strong>{seleccionadas.length}</strong></span>
+            <span>Total hojas: <strong className="text-blue-700">{totalHojasSeleccion}</strong></span>
+          </div>
+
+          {excedeLimite ? (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 text-xs text-amber-800">
+              Hay {universoCompleto} combinaciones posibles con los filtros actuales — use la búsqueda por color, o los filtros de Tipo de Acabado / Placa, para acotar el resultado (máximo {MAX_FILAS_TABLA} filas a la vez).
+            </div>
+          ) : !hayFiltroActivo && filas.length === 0 ? (
+            <p className="text-xs text-slate-400 border rounded-lg p-3">No hay catálogos activos de Color, Tipo de Acabado y Placa para combinar.</p>
+          ) : (
+            <div className="border rounded-lg overflow-x-auto max-h-96 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-800 text-white sticky top-0">
+                  <tr>
+                    <th className="p-2 text-center w-10">✓</th>
+                    <th className="p-2 text-left">Color</th>
+                    <th className="p-2 text-left">Tipo de Acabado</th>
+                    <th className="p-2 text-left">Placa</th>
+                    <th className="p-2 text-center w-24">Cantidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filas.map(f => (
+                    <tr key={f.key} className={`border-t ${f.yaExiste ? 'opacity-40' : ''}`}>
+                      <td className="p-1.5 text-center">
+                        <input type="checkbox" disabled={f.yaExiste} checked={f.key in marcados} onChange={() => toggleFila(f.key)} />
+                      </td>
+                      <td className="p-1.5">{f.color.nombre_color}</td>
+                      <td className="p-1.5">{f.tipo.nombre}</td>
+                      <td className="p-1.5">{f.placa.nombre}</td>
+                      <td className="p-1 text-center">
+                        {f.yaExiste ? (
+                          <span className="text-slate-400">Ya en la solicitud</span>
+                        ) : (
+                          <Input type="number" min="0" disabled={!(f.key in marcados)} value={marcados[f.key] ?? ""} onChange={e => setCantidadFila(f.key, e.target.value)} className="h-7 text-xs text-center" />
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 pt-4 border-t">
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleAgregarSeleccionadas}>Agregar {seleccionadas.length > 0 ? `(${seleccionadas.length})` : ""} líneas</Button>
         </div>
       </DialogContent>
     </Dialog>

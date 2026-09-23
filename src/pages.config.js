@@ -102,10 +102,6 @@ import ProcesoCurtido from './pages/ProcesoCurtido';
 import ProcesoLimpieza from './pages/ProcesoLimpieza';
 import ProcesoRecepcion from './pages/ProcesoRecepcion';
 import ProcesoRecurtido from './pages/ProcesoRecurtido';
-import ProduccionConsumoInsumos from './pages/ProduccionConsumoInsumos';
-import ProduccionOrdenes from './pages/ProduccionOrdenes';
-import ProduccionPlanificacion from './pages/ProduccionPlanificacion';
-import ProduccionReporteEtapas from './pages/ProduccionReporteEtapas';
 import RHAsistencia from './pages/RHAsistencia';
 import RHEmpleados from './pages/RHEmpleados';
 import RHNomina from './pages/RHNomina';
@@ -129,11 +125,18 @@ import VentaProductos from './pages/VentaProductos';
 import SeguimientoProduccion from './pages/SeguimientoProduccion';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import FinanzasCaja from './pages/FinanzasCaja';
+import FinanzasCajaGeneral from './pages/FinanzasCajaGeneral';
+import FinanzasCajaMenor from './pages/FinanzasCajaMenor';
 import FinanzasBancos from './pages/FinanzasBancos';
+import FinanzasNequi from './pages/FinanzasNequi';
+import FinanzasIngresos from './pages/FinanzasIngresos';
+import FinanzasEgresos from './pages/FinanzasEgresos';
 import FinanzasCuentasCobrar from './pages/FinanzasCuentasCobrar';
 import FinanzasCuentasPagar from './pages/FinanzasCuentasPagar';
-import FinanzasTesoreria from './pages/FinanzasTesoreria';
+import FinanzasPagosProveedores from './pages/FinanzasPagosProveedores';
+import FinanzasCobrosClientes from './pages/FinanzasCobrosClientes';
+import FinanzasAnticipos from './pages/FinanzasAnticipos';
+import FinanzasMovimientoCuentas from './pages/FinanzasMovimientoCuentas';
 import LibroAuxiliarContable from './pages/LibroAuxiliarContable';
 import ComprobantesContables from './pages/ComprobantesContables';
 import ReportesAreaTesoreria from './pages/ReportesAreaTesoreria';
@@ -204,10 +207,6 @@ export const PAGES = {
     "ProcesoLimpieza": ProcesoLimpieza,
     "ProcesoRecepcion": ProcesoRecepcion,
     "ProcesoRecurtido": ProcesoRecurtido,
-    "ProduccionConsumoInsumos": ProduccionConsumoInsumos,
-    "ProduccionOrdenes": ProduccionOrdenes,
-    "ProduccionPlanificacion": ProduccionPlanificacion,
-    "ProduccionReporteEtapas": ProduccionReporteEtapas,
     "RHAsistencia": RHAsistencia,
     "RHEmpleados": RHEmpleados,
     "RHNomina": RHNomina,
@@ -231,11 +230,18 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "FinanzasCaja": FinanzasCaja,
+    "FinanzasCajaGeneral": FinanzasCajaGeneral,
+    "FinanzasCajaMenor": FinanzasCajaMenor,
     "FinanzasBancos": FinanzasBancos,
+    "FinanzasNequi": FinanzasNequi,
+    "FinanzasIngresos": FinanzasIngresos,
+    "FinanzasEgresos": FinanzasEgresos,
     "FinanzasCuentasCobrar": FinanzasCuentasCobrar,
     "FinanzasCuentasPagar": FinanzasCuentasPagar,
-    "FinanzasTesoreria": FinanzasTesoreria,
+    "FinanzasPagosProveedores": FinanzasPagosProveedores,
+    "FinanzasCobrosClientes": FinanzasCobrosClientes,
+    "FinanzasAnticipos": FinanzasAnticipos,
+    "FinanzasMovimientoCuentas": FinanzasMovimientoCuentas,
     "LibroAuxiliarContable": LibroAuxiliarContable,
     "ComprobantesContables": ComprobantesContables,
     "ReportesAreaTesoreria": ReportesAreaTesoreria,
