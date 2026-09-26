@@ -125,18 +125,12 @@ import VentaProductos from './pages/VentaProductos';
 import SeguimientoProduccion from './pages/SeguimientoProduccion';
 import VentaServicios from './pages/VentaServicios';
 import VerConsolidadoDetalle from './pages/VerConsolidadoDetalle';
-import FinanzasCajaGeneral from './pages/FinanzasCajaGeneral';
-import FinanzasCajaMenor from './pages/FinanzasCajaMenor';
+import FinanzasCaja from './pages/FinanzasCaja';
 import FinanzasBancos from './pages/FinanzasBancos';
-import FinanzasNequi from './pages/FinanzasNequi';
-import FinanzasIngresos from './pages/FinanzasIngresos';
-import FinanzasEgresos from './pages/FinanzasEgresos';
-import FinanzasCuentasCobrar from './pages/FinanzasCuentasCobrar';
-import FinanzasCuentasPagar from './pages/FinanzasCuentasPagar';
-import FinanzasPagosProveedores from './pages/FinanzasPagosProveedores';
-import FinanzasCobrosClientes from './pages/FinanzasCobrosClientes';
-import FinanzasAnticipos from './pages/FinanzasAnticipos';
-import FinanzasMovimientoCuentas from './pages/FinanzasMovimientoCuentas';
+import FinanzasOtrosMedios from './pages/FinanzasOtrosMedios';
+import FinanzasCuentasPorCobrar from './pages/FinanzasCuentasPorCobrar';
+import FinanzasCuentasPorPagar from './pages/FinanzasCuentasPorPagar';
+import FinanzasTesoreria from './pages/FinanzasTesoreria';
 import LibroAuxiliarContable from './pages/LibroAuxiliarContable';
 import ComprobantesContables from './pages/ComprobantesContables';
 import ReportesAreaTesoreria from './pages/ReportesAreaTesoreria';
@@ -230,18 +224,12 @@ export const PAGES = {
     "VentaProductos": VentaProductos,
     "VentaServicios": VentaServicios,
     "VerConsolidadoDetalle": VerConsolidadoDetalle,
-    "FinanzasCajaGeneral": FinanzasCajaGeneral,
-    "FinanzasCajaMenor": FinanzasCajaMenor,
+    "FinanzasCaja": FinanzasCaja,
     "FinanzasBancos": FinanzasBancos,
-    "FinanzasNequi": FinanzasNequi,
-    "FinanzasIngresos": FinanzasIngresos,
-    "FinanzasEgresos": FinanzasEgresos,
-    "FinanzasCuentasCobrar": FinanzasCuentasCobrar,
-    "FinanzasCuentasPagar": FinanzasCuentasPagar,
-    "FinanzasPagosProveedores": FinanzasPagosProveedores,
-    "FinanzasCobrosClientes": FinanzasCobrosClientes,
-    "FinanzasAnticipos": FinanzasAnticipos,
-    "FinanzasMovimientoCuentas": FinanzasMovimientoCuentas,
+    "FinanzasOtrosMedios": FinanzasOtrosMedios,
+    "FinanzasCuentasPorCobrar": FinanzasCuentasPorCobrar,
+    "FinanzasCuentasPorPagar": FinanzasCuentasPorPagar,
+    "FinanzasTesoreria": FinanzasTesoreria,
     "LibroAuxiliarContable": LibroAuxiliarContable,
     "ComprobantesContables": ComprobantesContables,
     "ReportesAreaTesoreria": ReportesAreaTesoreria,

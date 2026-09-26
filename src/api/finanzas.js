@@ -17,6 +17,18 @@ export const fin = {
 
 export const TIPO_CUENTA_POR_FORMA_PAGO = { efectivo: 'caja', banco: 'banco', otro_medio: 'otro_medio' };
 
+// Anula cualquier operación financiera (cobro, pago, ingreso, egreso, transferencia, ajuste,
+// nota, anticipo…). Solo administrador. No borra nada: genera el movimiento inverso.
+export async function anularOperacionFinanciera(operacionId, etiqueta) {
+  const motivo = window.prompt(`Anular ${etiqueta || 'esta operación'}.\n\nSe genera el movimiento inverso; no se borra nada.\n\nEscriba el motivo:`);
+  if (motivo === null) return false;
+  if (motivo.trim().length < 5) { alert('El motivo debe tener al menos 5 caracteres.'); return false; }
+  try {
+    await fin.post(`/operaciones/${operacionId}/anular`, { motivo: motivo.trim(), idempotency_key: nuevaLlave() });
+    return true;
+  } catch (e) { alert(`No se pudo anular:\n\n${e.message}`); return false; }
+}
+
 // Anula una venta o compra (solo administrador). Pide el motivo y devuelve true si se anuló.
 export async function anularDocumentoComercial(tipo, orden) {
   const nombre = orden.numero_id || `${orden.prefijo_documento || ''}-${orden.numero_documento || ''}`;

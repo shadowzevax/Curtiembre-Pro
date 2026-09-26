@@ -1,6 +1,6 @@
 import React from 'react';
-import ProximamentePage from '../components/common/ProximamentePage';
+import CuentaDineroModulo from '../components/finanzas/CuentaDineroModulo';
 
 export default function FinanzasBancos() {
-  return <ProximamentePage title="Bancos" description="Finanzas y Tesorería — cuentas y movimientos bancarios" />;
+  return <CuentaDineroModulo tipo="banco" titulo="Bancos" descripcion="Cuentas bancarias: configuración, movimientos y GMF (4x1000)" />;
 }
