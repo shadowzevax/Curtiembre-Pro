@@ -7,6 +7,7 @@ import * as C from './consultas.js';
 import * as S from './soportes.js';
 import { OPERACIONES } from './operaciones.js';
 import * as V from './comerciales.js';
+import * as I from './integraciones.js';
 
 const LECTURA = ['admin', 'contador'];
 
@@ -79,6 +80,14 @@ export async function handleFin(req, segs, auth) {
       }
       return anularOperacion(tx, ctx, { operacion_id: b, motivo: body.motivo, idempotency_key: body.idempotency_key });
     });
+  }
+
+  // ── Integraciones (B4): Costos Indirectos → Egreso, Procesos Externos → CxP ──
+  if (a === 'integraciones') {
+    if (b === 'costos-indirectos' && !c && method === 'GET') return withTx((tx) => I.costosIndirectosPendientes(tx));
+    if (b === 'costos-indirectos' && c === 'pagar' && method === 'POST') return withTx((tx) => I.pagarCostoIndirecto(tx, ctx, body));
+    if (b === 'procesos-externos' && !c && method === 'GET') return withTx((tx) => I.procesosExternosPendientes(tx));
+    if (b === 'procesos-externos' && c === 'sincronizar' && method === 'POST') return withTx((tx) => I.sincronizarProcesosExternos(tx, ctx));
   }
 
   // ── Soportes ──

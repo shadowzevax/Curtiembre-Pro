@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { fin } from '@/api/finanzas';
 import { formatCOP, formatFecha, mensajeError } from '../components/finanzas/utils';
 import { IngresoEgresoDialog, TransferenciaDialog } from '../components/finanzas/MovimientoDialogs';
+import IntegracionesPanel from '../components/finanzas/IntegracionesPanel';
 
 // Tesorería: centro de control de la posición financiera. No duplica movimientos: solo
 // consulta y consolida lo que ya generan Caja, Bancos, Otros medios, CxC y CxP.
@@ -90,6 +91,7 @@ export default function FinanzasTesoreria() {
               </table>
             </div>
           </div>
+          <IntegracionesPanel cuentas={cuentas} />
         </>
       )}
       <IngresoEgresoDialog open={dialogo === 'ingreso'} onClose={() => setDialogo(null)} tipo="ingreso" cuentas={cuentas} onGuardado={cargar} />

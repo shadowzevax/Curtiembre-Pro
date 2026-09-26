@@ -20,6 +20,7 @@ export const CuentaPorCobrar = makeEntity('CuentaPorCobrar');
 export const CuentaPorPagar = makeEntity('CuentaPorPagar');
 export const DocumentoInventario = makeEntity('DocumentoInventario');
 export const Empleado = makeEntity('Empleado');
+export const LiquidacionNomina = makeEntity('LiquidacionNomina');
 export const EntregaParcialPCP = makeEntity('EntregaParcialPCP');
 export const Insumo = makeEntity('Insumo');
 export const InventarioEnProceso = makeEntity('InventarioEnProceso');

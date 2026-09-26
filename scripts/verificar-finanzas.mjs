@@ -387,6 +387,46 @@ async function pruebasComerciales() {
   ok(desc.rows.length === 0, 'Ventas, compras, devoluciones y anulaciones dejan la contabilidad cuadrada');
 }
 
+async function pruebasIntegraciones() {
+  console.log('\n[B4] Integraciones (Nómina, Costos Indirectos, Procesos Externos)');
+  const INT = await import('../api/_lib/fin/integraciones.js');
+  const INV = await import('../api/_lib/fin/inventario.js');
+  const hoyF = core.hoyColombia();
+  const caja = await tx((t) => C.crearCuenta(t, admin, { tipo: 'caja', nombre: 'Caja B4', saldo_inicial: 1000000 }));
+
+  // Costos Indirectos: causación ya existe (protegido), el pago se hace desde Finanzas.
+  const costo = await tx((t) => INV.recCreate(t, admin, 'CostoIndirecto', { tipo_costo: 'otros_costos', nombre_servicio: 'Transporte de pieles',
+    fecha_servicio: hoyF, codigo_lote: 'LOTE-TEST', subtotal: 150000 }));
+  const pendientesAntes = await tx((t) => INT.costosIndirectosPendientes(t));
+  ok(pendientesAntes.some((c) => c.id === costo.id), 'El costo indirecto recién causado aparece como pendiente de pago');
+  const pago = await tx((t) => INT.pagarCostoIndirecto(t, contador, { costo_id: costo.id, cuenta_id: caja.id, fecha: hoyF, idempotency_key: key('ci') }));
+  ok(!pago.duplicada && (await tx((t) => core.saldoCuenta(t, caja.id))) === 850000, 'Pagar el costo indirecto genera el egreso y descuenta la caja (1.000.000 → 850.000)');
+  await falla(() => tx((t) => INT.pagarCostoIndirecto(t, contador, { costo_id: costo.id, cuenta_id: caja.id, fecha: hoyF, idempotency_key: key('ci2') })),
+    /ya está vinculado/, 'El mismo costo indirecto no se puede pagar dos veces');
+  const pendientesDespues = await tx((t) => INT.costosIndirectosPendientes(t));
+  ok(!pendientesDespues.some((c) => c.id === costo.id), 'Tras pagarlo, deja de aparecer como pendiente');
+
+  // Procesos Externos: se lee el módulo protegido tal cual, sin modificarlo.
+  const proceso = await tx((t) => INV.recCreate(t, admin, 'ProcesoExterno', { proveedor_nombre: 'Curtidos del Sur', cantidad_enviada: 100,
+    cantidad_recibida: 60, valor_total_servicio: 1000000, estado: 'recibido', fecha_recepcion: hoyF }));
+  const procPendientes = await tx((t) => INT.procesosExternosPendientes(t));
+  const pp = procPendientes.find((p) => p.id === proceso.id);
+  ok(pp && pp.valor_a_generar === 600000, `Proceso externo con 60/100 hojas recibidas genera CxP proporcional (600.000 de 1.000.000): ${pp?.valor_a_generar}`);
+  const sync1 = await tx((t) => INT.sincronizarProcesosExternos(t, admin));
+  ok(sync1.creadas === 1, 'La sincronización crea exactamente 1 cuenta por pagar para el proceso recibido');
+  const sync2 = await tx((t) => INT.sincronizarProcesosExternos(t, admin));
+  ok(sync2.creadas === 0, 'Sincronizar de nuevo no duplica la cuenta por pagar (idempotente)');
+  const cxpProceso = await tx((t) => C.listarObligaciones(t, { naturaleza: 'por_pagar' }));
+  ok(cxpProceso.some((o) => o.documento_modulo === 'ProcesoExterno' && o.valor_original === 600000), 'La CxP queda vinculada al ProcesoExterno de origen, sin modificar ese módulo');
+
+  // Nómina: el pago vía Egreso queda vinculado a la liquidación (simulado con OP directamente, la persistencia de LiquidacionNomina es UI).
+  const OP = await import('../api/_lib/fin/operaciones.js');
+  const cajaAntes = await tx((t) => core.saldoCuenta(t, caja.id));
+  const pagoNomina = await tx((t) => OP.egreso(t, contador, { cuenta_id: caja.id, fecha: hoyF, valor: 300000, categoria: 'nomina',
+    concepto: 'Nómina LIQ-001 · Juan Pérez', tercero_nombre: 'Juan Pérez', origen_modulo: 'LiquidacionNomina', origen_id: 'liq-test-1', idempotency_key: key('nom') }));
+  ok(!pagoNomina.duplicada && (await tx((t) => core.saldoCuenta(t, caja.id))) === cajaAntes - 300000, 'Pago de nómina registrado como egreso, vinculado a la liquidación de origen');
+}
+
 async function main() {
   console.log(`Esquema temporal: ${ESQUEMA} (se elimina al terminar)`);
   try {
@@ -394,6 +434,7 @@ async function main() {
     await pruebasBase();
     await pruebasOperaciones();
     await pruebasComerciales();
+    await pruebasIntegraciones();
     const extra = process.env.VERIF_EXTRA ? await import(process.env.VERIF_EXTRA) : null;
     if (extra?.default) await extra.default(util);
   } catch (e) {
