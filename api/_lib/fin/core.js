@@ -236,6 +236,23 @@ export async function aplicarAObligacion(tx, ctx, op, { obligacion_id, tipo, val
   return { aplicacion: row, obligacion: obl };
 }
 
+// El estado de pago de la venta/compra de origen se deriva de su cartera: así la lista de
+// Ventas y Compras siempre muestra pendiente / parcial / pagado según los abonos reales.
+export async function sincronizarEstadoPago(tx, obligacion_id) {
+  const o = await one(tx,
+    `SELECT o.*, o.valor_original - COALESCE((SELECT SUM(valor) FROM fin_aplicaciones a WHERE a.obligacion_id = o.id), 0) AS saldo,
+       COALESCE((SELECT SUM(valor) FROM fin_aplicaciones a WHERE a.obligacion_id = o.id AND a.valor > 0), 0) AS aplicado
+     FROM fin_obligaciones o WHERE o.id = $1`, [obligacion_id]);
+  if (!o || o.anulada || !['OrdenVenta', 'OrdenCompra'].includes(o.documento_modulo)) return;
+  const saldo = r2(o.saldo);
+  const estado = saldo <= 0.004 ? 'pagado' : r2(o.aplicado) > 0 ? 'parcial' : 'pendiente';
+  await tx.query(
+    `UPDATE records SET data = data || jsonb_build_object('estado_documento', $3::text, 'estado', $3::text, 'saldo_pendiente', $4::numeric),
+       updated_date = now()
+     WHERE entity = $1 AND id = $2 AND COALESCE(data->>'anulado', 'false') <> 'true'`,
+    [o.documento_modulo, o.documento_id, estado, saldo]);
+}
+
 // ── Contabilidad (sin plan de cuentas: cuenta_rol conceptual) ─────────────────
 
 export async function asiento(tx, ctx, op, lineas, { clave, fecha: f, documento_numero, modulo_origen, concepto, tercero_id,
@@ -327,6 +344,7 @@ export async function anularOperacion(tx, ctx, { operacion_id, motivo, idempoten
   }
 
   for (const o of obligaciones) await tx.query(`UPDATE fin_obligaciones SET anulada = true WHERE id = $1`, [o.id]);
+  for (const oblId of new Set(aplics.map((a) => a.obligacion_id))) await sincronizarEstadoPago(tx, oblId);
   await tx.query(`UPDATE fin_retenciones SET anulada = true WHERE operacion_id = $1`, [orig.id]);
   const docs = (await tx.query(`UPDATE fin_documentos SET estado = 'anulado' WHERE operacion_id = $1 RETURNING numero`, [orig.id])).rows;
 

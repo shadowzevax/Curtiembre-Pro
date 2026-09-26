@@ -6,6 +6,7 @@ import { requerirRol, anularOperacion } from './core.js';
 import * as C from './consultas.js';
 import * as S from './soportes.js';
 import { OPERACIONES } from './operaciones.js';
+import * as V from './comerciales.js';
 
 const LECTURA = ['admin', 'contador'];
 
@@ -57,9 +58,27 @@ export async function handleFin(req, segs, auth) {
     return withTx((tx) => fn(tx, ctx, body));
   }
 
+  // ── Ventas y Compras: documento + inventario + finanzas en una transacción ──
+  if (a === 'comercial' && (b === 'venta' || b === 'compra')) {
+    const [, , id, accion] = segs;
+    if (!id && method === 'POST') return withTx((tx) => V.registrarDocumento(tx, ctx, b, body));
+    if (id && !accion && method === 'PUT') return withTx((tx) => V.editarDocumento(tx, ctx, b, id, body));
+    if (id && accion === 'anular' && method === 'POST') return withTx((tx) => V.anularDocumento(tx, ctx, b, id, body));
+    if (id && accion === 'devolucion' && method === 'POST') return withTx((tx) => V.devolverDocumento(tx, ctx, b, id, body));
+    if (id && accion === 'devolucion' && segs[4] && segs[5] === 'anular' && method === 'POST') {
+      return withTx((tx) => V.anularDevolucion(tx, ctx, b, id, segs[4], body));
+    }
+  }
+
   // ── Anulación genérica de operaciones financieras ──
   if (a === 'operaciones' && b && c === 'anular' && method === 'POST') {
-    return withTx((tx) => anularOperacion(tx, ctx, { operacion_id: b, motivo: body.motivo, idempotency_key: body.idempotency_key }));
+    return withTx(async (tx) => {
+      const { rows } = await tx.query(`SELECT tipo_operacion FROM fin_operaciones WHERE id = $1`, [b]);
+      if (rows[0] && V.TIPOS_SOLO_POR_DOCUMENTO.includes(rows[0].tipo_operacion)) {
+        throw new HttpError(409, 'Esta operación afecta inventario: anúlela desde la venta, compra o devolución correspondiente');
+      }
+      return anularOperacion(tx, ctx, { operacion_id: b, motivo: body.motivo, idempotency_key: body.idempotency_key });
+    });
   }
 
   // ── Soportes ──

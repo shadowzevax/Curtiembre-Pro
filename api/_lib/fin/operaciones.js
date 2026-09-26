@@ -3,7 +3,7 @@
 import { HttpError } from '../util.js';
 import {
   r2, dinero, fecha as validarFecha, requerirRol, iniciarOperacion, finalizarOperacion, crearDocumento, registrarMovimiento,
-  crearObligacion, aplicarAObligacion, saldoObligacion, asiento, vincular, auditar,
+  crearObligacion, aplicarAObligacion, saldoObligacion, asiento, vincular, auditar, sincronizarEstadoPago,
 } from './core.js';
 
 const OPERAN = ['admin', 'contador'];
@@ -77,6 +77,7 @@ export async function cobro(tx, ctx, body) {
       { naturaleza: 'credito', cuenta_rol: 'cxc', valor: r2(valor + (ret?.valor || 0)) },
     ], { clave: `cobro:${op.id}`, fecha: f, documento_numero: doc.numero });
     await vincularConOrigen(tx, obl, doc);
+    await sincronizarEstadoPago(tx, obl.id);
     return { documento: { id: doc.id, numero: doc.numero }, saldo_pendiente: await saldoObligacion(tx, obl.id) };
   });
 }
@@ -110,6 +111,7 @@ export async function pago(tx, ctx, body) {
       { naturaleza: 'credito', cuenta_rol: 'retencion_por_pagar', valor: ret?.valor || 0 },
     ], { clave: `pago:${op.id}`, fecha: f, documento_numero: doc.numero });
     await vincularConOrigen(tx, obl, doc);
+    await sincronizarEstadoPago(tx, obl.id);
     return { documento: { id: doc.id, numero: doc.numero }, saldo_pendiente: await saldoObligacion(tx, obl.id) };
   });
 }
@@ -290,6 +292,7 @@ export async function cruceAnticipo(tx, ctx, body) {
       : [{ naturaleza: 'debito', cuenta_rol: 'cxp', valor }, { naturaleza: 'credito', cuenta_rol: 'anticipo_proveedores', valor }],
     { clave: `cruce:${op.id}`, fecha: f, documento_numero: doc.numero });
     await vincularConOrigen(tx, obl, doc);
+    await sincronizarEstadoPago(tx, obl.id);
     return { documento: { id: doc.id, numero: doc.numero }, saldo_pendiente: await saldoObligacion(tx, obl.id),
       saldo_anticipo: await saldoObligacion(tx, ant.id) };
   });
@@ -321,6 +324,7 @@ export async function nota(tx, ctx, body) {
     await asiento(tx, ctx, op, [{ naturaleza: 'debito', cuenta_rol: deb, valor }, { naturaleza: 'credito', cuenta_rol: cre, valor }],
       { clave: `nota:${op.id}`, fecha: f, documento_numero: doc.numero });
     await vincularConOrigen(tx, obl, doc);
+    await sincronizarEstadoPago(tx, obl.id);
     return { documento: { id: doc.id, numero: doc.numero }, saldo_pendiente: await saldoObligacion(tx, obl.id) };
   });
 }
@@ -343,6 +347,7 @@ export async function retencion(tx, ctx, body) {
       ? [{ naturaleza: 'debito', cuenta_rol: 'retencion_a_favor', valor: ret.valor }, { naturaleza: 'credito', cuenta_rol: 'cxc', valor: ret.valor }]
       : [{ naturaleza: 'debito', cuenta_rol: 'cxp', valor: ret.valor }, { naturaleza: 'credito', cuenta_rol: 'retencion_por_pagar', valor: ret.valor }],
     { clave: `ret:${op.id}`, fecha: f, documento_numero: obl.documento_numero });
+    await sincronizarEstadoPago(tx, obl.id);
     return { saldo_pendiente: await saldoObligacion(tx, obl.id) };
   });
 }

@@ -8,10 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, X, Save, Upload, CheckCircle2 } from 'lucide-react';
 import { UploadFile } from "@/integrations/Core";
 import ProductCreationModal from './ProductCreationModal';
-import { calcularCostoPromedioCompra, recalcularDesdeMovimientos } from '@/lib/costoPromedio';
 import ProductSelectorCell from './ProductSelectorCell';
 import NumericInput from './NumericInput';
-import { ProductoCatalogo, OrdenCompra, OrdenVenta, MovimientoInventario, Insumo, ProductoTerminado, MovimientoLibroDiario, Caja, CuentaBancaria } from '@/entities/all';
+import { ProductoCatalogo, OrdenCompra } from '@/entities/all';
+import { fin, nuevaLlave, TIPO_CUENTA_POR_FORMA_PAGO } from '@/api/finanzas';
 
 const formatCurrency = (amount) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount || 0);
 
@@ -40,8 +40,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
   const [proveedorSearch, setProveedorSearch] = useState('');
   const [showProveedorDropdown, setShowProveedorDropdown] = useState(false);
   const proveedorDropdownRef = useRef(null);
-  const [cajas, setCajas] = useState([]);
-  const [cuentasBancarias, setCuentasBancarias] = useState([]);
+  const [cuentasDinero, setCuentasDinero] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+  const llaveRef = useRef(nuevaLlave());
   const [showLotePopup, setShowLotePopup] = useState(false);
   const [loteData, setLoteData] = useState({ codigo_lote: '', estado_cuero: 'CRU' });
   const [lotesDisponibles, setLotesDisponibles] = useState([]);
@@ -65,13 +66,11 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
 
   const loadCuentas = async () => {
       try {
-          const [cajasData, bancosData, comprasData] = await Promise.all([
-              Caja.filter({ estado: 'activa' }),
-              CuentaBancaria.list(),
+          const [cuentasData, comprasData] = await Promise.all([
+              fin.get('/cuentas'),
               OrdenCompra.list()
           ]);
-          setCajas(cajasData);
-          setCuentasBancarias(bancosData);
+          setCuentasDinero(cuentasData);
           
           // Extraer códigos de lote únicos de compras con prefijo CH
           const lotes = comprasData
@@ -101,6 +100,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
   };
 
   useEffect(() => {
+    // Nueva llave de idempotencia por cada vez que se abre el formulario.
+    llaveRef.current = nuevaLlave();
     const initialFormState = {
         prefijo: tipoDocumento === 'compra' ? 'CH' : (tipoDocumento === 'venta' ? 'FV' : ''),
         tipo_item: tipoDocumento === 'compra' ? 'materia_prima' : '',
@@ -428,49 +429,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
       total: totals.totalNeto,
     };
 
-    // Generar número_id único basado en PREFIJO-AAAA-0001 para compras
-    if (tipoDocumento === 'compra' && !documento && finalData.prefijo) {
-        try {
-             const year = new Date().getFullYear();
-             const allCompras = await OrdenCompra.list();
-             const comprasConPrefijo = allCompras.filter(c => c.numero_id?.startsWith(`${finalData.prefijo}-${year}`));
-             const consecutivos = comprasConPrefijo.map(c => {
-               const match = c.numero_id?.match(/-\d{4}-(\d+)/);
-               return match ? parseInt(match[1]) : 0;
-             });
-             const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
-             finalData.numero_id = `${finalData.prefijo}-${year}-${String(nextConsecutivo).padStart(4, '0')}`;
-        } catch (e) {
-            console.error("Error generando numero_id", e);
-            const year = new Date().getFullYear();
-            finalData.numero_id = `${finalData.prefijo}-${year}-0001`;
-        }
-    }
-
-    // Generar número_id único para ventas
-    if (tipoDocumento === 'venta' && !documento && finalData.prefijo) {
-        try {
-             const year = new Date().getFullYear();
-             const allVentas = await OrdenVenta.list();
-             const ventasConPrefijo = allVentas.filter(v => v.numero_id?.startsWith(`${finalData.prefijo}-${year}`));
-             const consecutivos = ventasConPrefijo.map(v => {
-               const match = v.numero_id?.match(/-\d{4}-(\d+)/);
-               return match ? parseInt(match[1]) : 0;
-             });
-             const nextConsecutivo = consecutivos.length > 0 ? Math.max(...consecutivos) + 1 : 1;
-             finalData.numero_id = `${finalData.prefijo}-${year}-${String(nextConsecutivo).padStart(4, '0')}`;
-        } catch (e) {
-            console.error("Error generando numero_id ventas", e);
-            const year = new Date().getFullYear();
-            finalData.numero_id = `${finalData.prefijo}-${year}-0001`;
-        }
-    }
-    
-    // Generar código de lote si no existe (solo para compras de materia prima)
-    if (tipoDocumento === 'compra' && finalData.afecta_inventario && !finalData.codigo_lote_inventario && finalData.prefijo === 'CH') {
-        // Auto-generar código de lote solo para compras de hojas/materia prima
-        finalData.codigo_lote_inventario = `LOTE-${Date.now()}`;
-    }
+    // El número (PREFIJO-AAAA-NNNN) y el código de lote los asigna el servidor al guardar.
 
     // Validación eliminada - permitir cualquier fecha
 
@@ -484,8 +443,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
         }
 
         if (finalData.condicion_pago === 'contado') {
-            if (finalData.forma_pago === 'efectivo' && !finalData.cuenta_destino_id) {
-                alert('⚠️ CONTADO con pago en EFECTIVO requiere seleccionar una Caja.');
+            if (!finalData.cuenta_destino_id) {
+                alert('⚠️ Seleccione la caja, cuenta bancaria u otro medio por donde se hace el pago.');
                 return;
             }
         }
@@ -509,8 +468,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                 alert('⚠️ El Valor Pagado no puede ser mayor al Total Neto.');
                 return;
             }
-            if (finalData.forma_pago === 'efectivo' && !finalData.cuenta_destino_id) {
-                alert('⚠️ MIXTO con pago en EFECTIVO requiere seleccionar una Caja.');
+            if (!finalData.cuenta_destino_id) {
+                alert('⚠️ Seleccione la caja, cuenta bancaria u otro medio por donde se hace el pago.');
                 return;
             }
             finalData.saldo_pendiente = totalNeto - pagado;
@@ -528,8 +487,8 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
         }
 
         if (finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') {
-            if (finalData.forma_pago === 'efectivo' && !finalData.cuenta_destino_id) {
-                alert('⚠️ Pago en EFECTIVO requiere seleccionar una Caja.');
+            if (!finalData.cuenta_destino_id) {
+                alert('⚠️ Seleccione la caja, cuenta bancaria u otro medio por donde se hace el pago.');
                 return;
             }
         }
@@ -555,610 +514,30 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
     }
     // ────────────────────────────────────────────────────────────────────────
 
-    // Guardar la orden primero
+    // ── Guardar en el servidor: documento + inventario + finanzas en UNA transacción ──
+    // (antes el navegador cerraba la ventana y seguía guardando por partes en segundo plano)
+    if (guardando) return;
+    setGuardando(true);
     try {
-        const savedOrder = await onSubmit(finalData);
-        if (!savedOrder) return; // onSubmit retornó null (ej: duplicado)
-        const orderId = savedOrder?.id || finalData.id;
-
-        // Cerrar modal y notificar éxito para que el padre recargue la tabla
-        onOpenChange(false);
-        if (onSuccess) onSuccess({
-          message: "Documento guardado",
-          description: `${finalData.numero_id || finalData.numero_documento} registrado correctamente.`,
-        });
-
-    // REVERTIR MOVIMIENTOS ANTIGUOS SI ES EDICIÓN
-    if (documento && tipoDocumento === 'compra' && finalData.afecta_inventario) {
-        try {
-            // Buscar y eliminar movimientos antiguos de esta compra
-            const movimientosAntiguos = await MovimientoInventario.filter({ 
-                referencia: `${documento.prefijo_documento}-${documento.numero_documento}` 
-            });
-            
-            for (const mov of movimientosAntiguos) {
-                // Revertir el stock del producto ANTES de eliminar
-                if (mov.insumo_id) {
-                    try {
-                        // Buscar directamente por ID en cada entidad
-                        let entityType = null;
-                        let currentItemData = null;
-                        
-                        // Intentar en ProductoTerminado (pieles)
-                        const itemsPT = await ProductoTerminado.filter({ id: mov.insumo_id });
-                        if (itemsPT.length > 0) {
-                            currentItemData = itemsPT[0];
-                            entityType = ProductoTerminado;
-                        }
-                        
-                        // Si no, intentar en Insumo (insumos químicos)
-                        if (!currentItemData) {
-                            const itemsInsumo = await Insumo.filter({ id: mov.insumo_id });
-                            if (itemsInsumo.length > 0) {
-                                currentItemData = itemsInsumo[0];
-                                entityType = Insumo;
-                            }
-                        }
-                        
-                        if (entityType && currentItemData) {
-                            // Recalcular stock Y costo promedio reproduciendo los movimientos
-                            // restantes (excluyendo el que se va a borrar), para que el costo
-                            // promedio quede exactamente como si esta compra nunca hubiera existido.
-                            const todosMovimientos = await MovimientoInventario.filter({ insumo_id: mov.insumo_id });
-                            const restantes = todosMovimientos.filter(m => m.id !== mov.id);
-                            const { stock: stockSinEsteMovimiento, costoPromedio } = recalcularDesdeMovimientos(restantes);
-
-                            await entityType.update(currentItemData.id, {
-                                stock_actual: stockSinEsteMovimiento,
-                                costo_promedio: costoPromedio
-                            });
-
-                            console.log(`✅ Stock/costo revertidos para ${currentItemData.codigo}: Stock=${stockSinEsteMovimiento}, Costo=${costoPromedio}`);
-                        }
-                    } catch (err) {
-                        console.error('Error revirtiendo stock:', err);
-                    }
-                }
-                
-                // Ahora sí eliminar el movimiento
-                await MovimientoInventario.delete(mov.id);
-            }
-            console.log('✅ Movimientos antiguos eliminados');
-        } catch (e) {
-            console.error('Error revirtiendo movimientos:', e);
-        }
-    }
-
-    if (documento && tipoDocumento === 'venta') {
-        try {
-            // Buscar y eliminar movimientos antiguos de esta venta
-            const movimientosAntiguos = await MovimientoInventario.filter({ 
-                referencia: `${documento.prefijo_documento}-${documento.numero_documento}` 
-            });
-            
-            for (const mov of movimientosAntiguos) {
-                await MovimientoInventario.delete(mov.id);
-                
-                // Revertir el stock (sumar porque era salida negativa)
-                if (mov.insumo_id) {
-                    const catalogoItem = await ProductoCatalogo.filter({ codigo: mov.insumo_id });
-                    if (catalogoItem.length > 0) {
-                        const cat = catalogoItem[0].categoria;
-                        let entityType = null;
-                        let currentItemData = null;
-                        
-                        if (cat === 'materia_prima') {
-                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                        } else if (cat === 'insumos_quimicos') {
-                            const items = await Insumo.filter({ id: mov.insumo_id });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
-                        } else if (cat === 'productos_terminados') {
-                            const items = await ProductoTerminado.filter({ id: mov.insumo_id });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                        }
-                        
-                        if (entityType && currentItemData) {
-                            const stockActual = currentItemData.stock_actual || 0;
-                            await entityType.update(currentItemData.id, {
-                                stock_actual: stockActual - (mov.cantidad || 0) // Revertir: si era -10, sumamos 10
-                            });
-                        }
-                    }
-                }
-            }
-            console.log('✅ Movimientos de venta antiguos revertidos');
-        } catch (e) {
-            console.error('Error revirtiendo movimientos de venta:', e);
-        }
-    }
-
-    // DESPUÉS actualizar inventario (solo si la orden se guardó exitosamente)
-    if (tipoDocumento === 'compra' && finalData.afecta_inventario) {
-        for (const item of finalData.items) {
-             let currentItemData = null;
-             let entityType = null;
-
-             try {
-                 // BUSCAR PRODUCTO POR CÓDIGO: consultar catálogo para obtener categoría,
-                 // luego buscar en la entidad de inventario correspondiente SOLO por código.
-                 if (item.codigo) {
-                    const catalogoItem = await ProductoCatalogo.filter({ codigo: item.codigo });
-                    if (catalogoItem.length > 0) {
-                        const cat = catalogoItem[0].categoria;
-
-                        if (cat === 'materia_prima') {
-                            const items = await ProductoTerminado.filter({ codigo: item.codigo });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                        } else if (cat === 'insumos_quimicos') {
-                            const items = await Insumo.filter({ codigo: item.codigo });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
-                        } else if (cat === 'productos_terminados') {
-                            const items = await ProductoTerminado.filter({ codigo: item.codigo });
-                            if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                        }
-                    }
-                 }
-
-                 if (entityType && currentItemData) {
-                     // Obtener todos los movimientos actuales (ya sin los viejos si estamos editando)
-                     const movimientos = await MovimientoInventario.filter({ insumo_id: currentItemData.id });
-                     const stockActual = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-
-                     const cantidadCompra = parseFloat(item.cantidad) || 0;
-                     const costoUnitarioCompra = parseFloat(item.precio_unitario) || 0;
-
-                     const nuevoStock = stockActual + cantidadCompra;
-
-                     // Costo promedio ponderado correcto: se parte del costo promedio VIGENTE
-                     // aplicado al stock actual (no de la suma histórica de todas las entradas,
-                     // que queda inflada cuando parte de ese stock ya fue consumido/vendido).
-                     const nuevoCostoPromedio = calcularCostoPromedioCompra(
-                         stockActual, currentItemData.costo_promedio, cantidadCompra, costoUnitarioCompra
-                     );
-
-                     // Crear Movimiento de Entrada PRIMERO (con el costo unitario de la compra)
-                     await MovimientoInventario.create({
-                         tipo_movimiento: 'entrada',
-                         insumo_id: currentItemData.id,
-                         cantidad: cantidadCompra,
-                         costo_unitario: costoUnitarioCompra,
-                         fecha_movimiento: finalData.fecha_orden,
-                         referencia: `${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                         observaciones: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                         usuario_id: 'system'
-                     });
-
-                     // Actualizar entidad con nuevo costo promedio y stock
-                     await entityType.update(currentItemData.id, {
-                         costo_promedio: nuevoCostoPromedio,
-                         stock_actual: nuevoStock
-                     });
-
-                     console.log(`✅ Inventario actualizado para ${item.codigo}: Stock=${nuevoStock}, Costo Promedio=${nuevoCostoPromedio}`);
-                 } else {
-                      console.warn(`⚠️ No se encontró producto en inventario para código: ${item.codigo}`);
-                 }
-
-                 // ─── SINCRONIZACIÓN POR CATEGORÍA DEL CATÁLOGO (siempre, independiente de entityType) ───
-                 // Se ejecuta para TODOS los items de compra nueva, según categoria en CatálogoProductos
-                 if (!documento && item.codigo) {
-                     try {
-                         const catItems = await ProductoCatalogo.filter({ codigo: item.codigo });
-                         if (catItems.length > 0) {
-                             const catalogoData = catItems[0];
-                             const cat = catalogoData.categoria;
-                             const cantidadCompra = parseFloat(item.cantidad) || 0;
-                             const refDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
-
-                             if (cat === 'productos_en_proceso') {
-                                 // → Inventario Productos en Proceso
-                                 const { InventarioEnProceso } = await import('@/entities/all');
-                                 await InventarioEnProceso.create({
-                                     codigo: item.codigo,
-                                     descripcion: item.descripcion || catalogoData.descripcion || '',
-                                     codigo_lote: finalData.codigo_lote_inventario || refDoc,
-                                     origen_modulo: 'compras',
-                                     etapa_actual: 'recepcion',
-                                     estado_proceso: 'piel_recibida',
-                                     estado_actual: 'disponible',
-                                     cantidad_hojas: cantidadCompra,
-                                     fecha_ingreso_proceso: finalData.fecha_emision_documento || finalData.fecha_orden,
-                                     submodulo_origen: finalData.prefijo || 'compras',
-                                 });
-                                 console.log(`✅ Sincronizado en Inventario Productos en Proceso: ${item.codigo}`);
-                             }
-                             // insumos_quimicos → ya actualizado en Insumo arriba
-                             // materia_prima    → ya actualizado en ProductoTerminado arriba
-                             // productos_terminados → ya actualizado en ProductoTerminado arriba
-                         }
-                     } catch (err) {
-                         console.error('Error en sincronización por categoría:', err);
-                     }
-                 }
-                 // ─────────────────────────────────────────────────────────────────────────────────────
-
-             } catch (err) {
-                 console.error("❌ Error actualizando inventario para item", item.codigo, err);
-             }
-        }
-    }
-
-    // Actualizar estado del documento según condición de pago en compras
-    if (tipoDocumento === 'compra') {
-        if (finalData.condicion_pago === 'contado' && finalData.valor_pagado === finalData.total) {
-            finalData.estado_documento = 'pagado';
-        } else if (finalData.condicion_pago === 'credito') {
-            finalData.estado_documento = 'pendiente';
-        } else if (finalData.condicion_pago === 'mixto' && finalData.valor_pagado > 0) {
-            finalData.estado_documento = 'parcial';
-        }
-    }
-
-    // AUTOMATIZACIÓN: Generar Recibo de Caja o Comprobante de Egreso si es contado
-    if ((finalData.condicion_pago === 'contado' || finalData.condicion_pago === 'mixto') && finalData.valor_pagado > 0) {
-        try {
-            if (tipoDocumento === 'venta') {
-                const clienteNombre = terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '');
-                const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
-
-                // Generar MovimientoCaja si pago en efectivo
-                if (finalData.forma_pago === 'efectivo' && finalData.cuenta_destino_id) {
-                    const { MovimientoCaja } = await import('@/entities/all');
-                    // Verificar duplicado por documento_origen_id
-                    const existentes = await MovimientoCaja.filter({ documento_origen_id: orderId, documento_origen_tipo: 'OrdenVenta' });
-                    if (existentes.length === 0) {
-                        // Calcular saldo resultante sumando todos los movimientos anteriores de esa caja
-                        const movsPrevios = await MovimientoCaja.filter({ caja_id: finalData.cuenta_destino_id });
-                        const saldoPrevio = movsPrevios.reduce((acc, m) => {
-                            return acc + (m.tipo_movimiento === 'entrada' ? (parseFloat(m.valor) || 0) : -(parseFloat(m.valor) || 0));
-                        }, 0);
-                        const saldoResultante = saldoPrevio + (parseFloat(finalData.valor_pagado) || 0);
-
-                        await MovimientoCaja.create({
-                            caja_id: finalData.cuenta_destino_id,
-                            nombre_caja: finalData.cuenta_destino_nombre || '',
-                            fecha: finalData.fecha_emision_documento || finalData.fecha_orden,
-                            tipo_movimiento: 'entrada',
-                            concepto: `Venta ${noIdDoc} - ${clienteNombre}`,
-                            documento_origen_tipo: 'OrdenVenta',
-                            documento_origen_id: orderId,
-                            responsable: clienteNombre,
-                            valor: parseFloat(finalData.valor_pagado) || 0,
-                            saldo_resultante: saldoResultante,
-                            observacion: `Ingreso por venta ${noIdDoc}`,
-                            usuario_creacion: 'sistema'
-                        });
-                        console.log('✅ MovimientoCaja ENTRADA generado para venta');
-                    }
-                } else if (finalData.forma_pago !== 'efectivo' && finalData.cuenta_destino_id) {
-                    // Pago bancario → MovimientoBancario
-                    const { MovimientoBancario, CuentaBancaria: CB } = await import('@/entities/all');
-                    const cuentasData = await CB.filter({ id: finalData.cuenta_destino_id });
-                    if (cuentasData.length > 0) {
-                        const cuenta = cuentasData[0];
-                        const nuevoSaldo = (cuenta.saldo_actual || 0) + (parseFloat(finalData.valor_pagado) || 0);
-                        await CB.update(cuenta.id, { saldo_actual: nuevoSaldo });
-                        await MovimientoBancario.create({
-                            cuenta_id: cuenta.id,
-                            fecha: finalData.fecha_emision_documento || finalData.fecha_orden,
-                            tipo_movimiento: 'ingreso',
-                            concepto: `Venta ${noIdDoc} - ${clienteNombre}`,
-                            tercero_nombre: clienteNombre,
-                            valor: parseFloat(finalData.valor_pagado) || 0,
-                            saldo_posterior: nuevoSaldo,
-                            documento_origen_tipo: 'OrdenVenta',
-                            documento_origen_id: orderId,
-                            es_automatico: true
-                        });
-                    }
-                }
-
-                // Generar Cuenta por Cobrar para mixto (saldo pendiente)
-                if (finalData.condicion_pago === 'mixto' && finalData.saldo_pendiente > 0) {
-                    const { CuentaPorCobrar } = await import('@/entities/all');
-                    const existentesCpc = await CuentaPorCobrar.filter({ documento_origen_id: orderId });
-                    if (existentesCpc.length === 0) {
-                        await CuentaPorCobrar.create({
-                            id_cuenta: `CPC-${Date.now()}`,
-                            cliente_id: finalData.cliente_id,
-                            cliente_nombre: clienteNombre,
-                            cliente_nit: finalData.cc_nit_cliente || '',
-                            tipo_documento: finalData.tipo_documento_venta || finalData.tipo_documento,
-                            numero_documento: noIdDoc,
-                            documento_origen_id: orderId,
-                            modulo_origen: 'ventas',
-                            fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
-                            fecha_vencimiento: finalData.fecha_vencimiento,
-                            valor_total: finalData.saldo_pendiente,
-                            valor_cobrado: 0,
-                            saldo_pendiente: finalData.saldo_pendiente,
-                            estado: 'pendiente',
-                            historial_cobros: []
-                        });
-                        console.log('✅ CuentaPorCobrar (saldo mixto) generada automáticamente');
-                    }
-                }
-
-                console.log('✅ Automatización de venta contado/mixto completada');
-            } else {
-                // Generar Comprobante de Egreso automáticamente
-                const { ComprobanteEgreso } = await import('@/entities/all');
-                const lastComprobantes = await ComprobanteEgreso.list('-created_date', 1);
-                const nextNum = lastComprobantes.length > 0 ? parseInt(lastComprobantes[0].numero_comprobante || '0') + 1 : 1;
-
-                await ComprobanteEgreso.create({
-                    numero_comprobante: String(nextNum).padStart(6, '0'),
-                    fecha: finalData.fecha_orden,
-                    tipo_egreso: 'compra',
-                    tercero_id: finalData.proveedor_id || '',
-                    tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
-                    concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                    valor: finalData.valor_pagado,
-                    medio_pago: finalData.forma_pago || 'efectivo',
-                    cuenta_origen_id: finalData.cuenta_destino_id || '',
-                    cuenta_origen_nombre: finalData.cuenta_destino_nombre || 'CAJA GENERAL',
-                    compra_id: orderId,
-                    generado_automaticamente: true,
-                    observaciones: `Generado automáticamente por compra ${finalData.condicion_pago}`
-                });
-
-                // Actualizar saldo de caja o cuenta bancaria (restar)
-                if (finalData.forma_pago === 'efectivo' && finalData.cuenta_destino_id) {
-                    const { Caja, MovimientoCaja } = await import('@/entities/all');
-                    const cajasData = await Caja.filter({ id: finalData.cuenta_destino_id });
-                    if (cajasData && cajasData.length > 0) {
-                        const caja = cajasData[0];
-                        const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
-                        const proveedorNombre = terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || '');
-                        // Verificar duplicado
-                        const existentesMovCaja = await MovimientoCaja.filter({ documento_origen_id: orderId, documento_origen_tipo: 'OrdenCompra' });
-                        if (existentesMovCaja.length === 0) {
-                            const movsPrevios = await MovimientoCaja.filter({ caja_id: caja.id });
-                            const saldoPrevio = movsPrevios.reduce((acc, m) => {
-                                return acc + (m.tipo_movimiento === 'entrada' ? (parseFloat(m.valor) || 0) : -(parseFloat(m.valor) || 0));
-                            }, caja.saldo_inicial || 0);
-                            const nuevoSaldo = saldoPrevio - (parseFloat(finalData.valor_pagado) || 0);
-                            await Caja.update(caja.id, { saldo_actual: nuevoSaldo });
-                            await MovimientoCaja.create({
-                                caja_id: caja.id,
-                                nombre_caja: caja.nombre,
-                                fecha: finalData.fecha_emision_documento || finalData.fecha_orden,
-                                tipo_movimiento: 'salida',
-                                concepto: `Compra ${noIdDoc} - ${proveedorNombre}`,
-                                documento_origen_tipo: 'OrdenCompra',
-                                documento_origen_id: orderId,
-                                responsable: proveedorNombre,
-                                valor: parseFloat(finalData.valor_pagado) || 0,
-                                saldo_resultante: nuevoSaldo,
-                                observacion: `Egreso por compra ${noIdDoc}`,
-                                usuario_creacion: 'sistema'
-                            });
-                            console.log('✅ MovimientoCaja SALIDA generado para compra');
-                        }
-                    }
-                } else if (finalData.forma_pago === 'banco' && finalData.cuenta_destino_id) {
-                    const { CuentaBancaria, MovimientoBancario } = await import('@/entities/all');
-                    const cuentasData = await CuentaBancaria.filter({ id: finalData.cuenta_destino_id });
-                    if (cuentasData && cuentasData.length > 0) {
-                        const cuenta = cuentasData[0];
-                        const nuevoSaldo = (cuenta.saldo_actual || 0) - finalData.valor_pagado;
-                        await CuentaBancaria.update(cuenta.id, { saldo_actual: nuevoSaldo });
-                        await MovimientoBancario.create({
-                            cuenta_id: cuenta.id,
-                            fecha: finalData.fecha_orden,
-                            tipo_movimiento: 'egreso',
-                            concepto: `Compra ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                            tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || ''),
-                            valor: finalData.valor_pagado,
-                            saldo_posterior: nuevoSaldo
-                        });
-                    }
-                }
-
-                console.log('✅ Comprobante de Egreso generado automáticamente');
-            }
-        } catch (e) {
-            console.error('Error generando documento automático:', e);
-        }
-    }
-
-    // GENERAR CUENTA POR COBRAR si es venta a crédito (puro)
-    if (tipoDocumento === 'venta' && !documento && finalData.condicion_pago === 'credito' && finalData.saldo_pendiente > 0) {
-        try {
-            const { CuentaPorCobrar } = await import('@/entities/all');
-            const existentesCpc = await CuentaPorCobrar.filter({ documento_origen_id: orderId });
-            if (existentesCpc.length === 0) {
-                const clienteNombre = terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '');
-                const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
-                await CuentaPorCobrar.create({
-                    id_cuenta: `CPC-${Date.now()}`,
-                    cliente_id: finalData.cliente_id,
-                    cliente_nombre: clienteNombre,
-                    cliente_nit: finalData.cc_nit_cliente || '',
-                    tipo_documento: finalData.tipo_documento_venta || finalData.tipo_documento,
-                    numero_documento: noIdDoc,
-                    documento_origen_id: orderId,
-                    modulo_origen: 'ventas',
-                    fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
-                    fecha_vencimiento: finalData.fecha_vencimiento,
-                    valor_total: finalData.saldo_pendiente,
-                    valor_cobrado: 0,
-                    saldo_pendiente: finalData.saldo_pendiente,
-                    estado: 'pendiente',
-                    historial_cobros: []
-                });
-                console.log('✅ CuentaPorCobrar CRÉDITO generada automáticamente');
-            }
-        } catch (e) {
-            console.error('Error generando cuenta por cobrar:', e);
-        }
-    }
-
-    // GENERAR CUENTA POR PAGAR si es compra a crédito o mixto
-    if (tipoDocumento === 'compra' && !documento && (finalData.condicion_pago === 'credito' || finalData.condicion_pago === 'mixto') && finalData.saldo_pendiente > 0) {
-        try {
-            const { CuentaPorPagar } = await import('@/entities/all');
-            // Verificar duplicado por documento_origen_id
-            const existentesCpp = await CuentaPorPagar.filter({ documento_origen_id: orderId });
-            if (existentesCpp.length === 0) {
-                const proveedor = terceros.find(p => p.id === finalData.proveedor_id);
-                const noIdDoc = finalData.numero_id || `${finalData.prefijo_documento}-${finalData.numero_documento}`;
-                await CuentaPorPagar.create({
-                    id_cuenta: `CPP-${Date.now()}`,
-                    proveedor_id: finalData.proveedor_id,
-                    proveedor_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (proveedor?.nombre || ''),
-                    proveedor_nit: proveedor?.numero_identificacion || proveedor?.nit || '',
-                    tipo_documento: finalData.tipo_documento_proveedor,
-                    numero_documento: noIdDoc,
-                    documento_origen_id: orderId,
-                    modulo_origen: 'compras',
-                    condicion_pago: finalData.condicion_pago,
-                    fecha_documento: finalData.fecha_emision_documento || finalData.fecha_orden,
-                    fecha_vencimiento: finalData.fecha_vencimiento,
-                    valor_total: finalData.total,
-                    valor_pagado: finalData.condicion_pago === 'mixto' ? (parseFloat(finalData.valor_pagado) || 0) : 0,
-                    saldo_pendiente: finalData.saldo_pendiente,
-                    estado: 'pendiente',
-                    historial_pagos: []
-                });
-                console.log('✅ Cuenta por Pagar generada automáticamente para compra ' + finalData.condicion_pago);
-            }
-        } catch (e) {
-            console.error('Error generando cuenta por pagar:', e);
-        }
-    }
-
-    // Generar Asiento Contable Automático
-    try {
-        const { AsientoContable } = await import('@/entities/all');
-        const lastAsientos = await AsientoContable.list('-created_date', 1);
-        const nextNum = lastAsientos.length > 0 ? parseInt(lastAsientos[0].numero_asiento || '0') + 1 : 1;
-
-        const detalle = [];
-        
-        if (tipoDocumento === 'venta') {
-            // Débito: Caja o Cuentas por Cobrar
-            detalle.push({
-                cuenta_codigo: finalData.condicion_pago === 'contado' ? '1105' : '1305',
-                cuenta_nombre: finalData.condicion_pago === 'contado' ? 'Caja' : 'Cuentas por Cobrar',
-                debe: finalData.total,
-                haber: 0,
-                tercero_id: finalData.cliente_id || '',
-                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '')
-            });
-            // Crédito: Ingresos por Ventas
-            detalle.push({
-                cuenta_codigo: '4135',
-                cuenta_nombre: 'Ingresos por Ventas',
-                debe: 0,
-                haber: finalData.total,
-                tercero_id: finalData.cliente_id || '',
-                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.cliente_id)?.nombre || '')
-            });
-        } else {
-            // Débito: Inventario o Gastos
-            detalle.push({
-                cuenta_codigo: finalData.afecta_inventario ? '1435' : '5135',
-                cuenta_nombre: finalData.afecta_inventario ? 'Inventarios' : 'Gastos',
-                debe: finalData.total,
-                haber: 0,
-                tercero_id: finalData.proveedor_id || '',
-                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || '')
-            });
-            // Crédito: Caja o Cuentas por Pagar
-            detalle.push({
-                cuenta_codigo: finalData.condicion_pago === 'contado' ? '1105' : '2205',
-                cuenta_nombre: finalData.condicion_pago === 'contado' ? 'Caja' : 'Cuentas por Pagar',
-                debe: 0,
-                haber: finalData.total,
-                tercero_id: finalData.proveedor_id || '',
-                tercero_nombre: terceroPersonalizado ? finalData.tercero_personalizado : (terceros.find(t => t.id === finalData.proveedor_id)?.nombre || '')
-            });
-        }
-
-        await AsientoContable.create({
-            numero_asiento: String(nextNum).padStart(6, '0'),
-            fecha: finalData.fecha_orden,
-            tipo_asiento: 'movimiento',
-            descripcion: `${tipoDocumento === 'venta' ? 'Venta' : 'Compra'} ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-            origen_modulo: tipoDocumento === 'venta' ? 'ventas' : 'compras',
-            referencia_origen_id: orderId,
-            detalle,
-            total_debe: finalData.total,
-            total_haber: finalData.total,
-            estado: 'contabilizado',
-            observaciones: 'Generado automáticamente'
-        });
-
-        console.log('✅ Asiento contable generado automáticamente');
-        } catch (e) {
-        console.error('Error generando asiento contable:', e);
-        }
-
-        } catch (error) {
-        console.error('Error al guardar:', error);
-        alert(`Error al guardar: ${error.message}`);
-        return;
-        }
-
-    // Lógica de actualización de Inventario para VENTAS (Salidas) - corre en background
-    if (tipoDocumento === 'venta') {
-        for (const item of finalData.items) {
-             try {
-                 let currentItemData = null;
-                 let entityType = null;
-
-                 // BUSCAR POR CÓDIGO: consultar catálogo para obtener categoría,
-                 // luego buscar en la entidad de inventario correspondiente SOLO por código.
-                 if (item.codigo) {
-                     const catalogoItem = await ProductoCatalogo.filter({ codigo: item.codigo });
-                     if (catalogoItem.length > 0) {
-                         const cat = catalogoItem[0].categoria;
-                         
-                         if (cat === 'materia_prima') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
-                             if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                         } else if (cat === 'insumos_quimicos') {
-                             const items = await Insumo.filter({ codigo: item.codigo });
-                             if (items.length > 0) { currentItemData = items[0]; entityType = Insumo; }
-                         } else if (cat === 'productos_terminados') {
-                             const items = await ProductoTerminado.filter({ codigo: item.codigo });
-                             if (items.length > 0) { currentItemData = items[0]; entityType = ProductoTerminado; }
-                         }
-                     }
-                 }
-
-                 if (entityType && currentItemData) {
-                     // Obtener Stock Actual desde movimientos
-                     const movimientos = await MovimientoInventario.filter({ insumo_id: currentItemData.id }); 
-                     const stockActual = movimientos.reduce((sum, m) => sum + (parseFloat(m.cantidad) || 0), 0);
-                     const cantidadVenta = parseFloat(item.cantidad) || 0;
-                     const costoPromedioMovimiento = parseFloat(currentItemData.costo_promedio) || 0;
-
-                     // Registrar Movimiento de Salida (NEGATIVO)
-                     await MovimientoInventario.create({
-                         tipo_movimiento: 'salida',
-                         insumo_id: currentItemData.id,
-                         cantidad: -cantidadVenta,
-                         costo_unitario: costoPromedioMovimiento, 
-                         fecha_movimiento: finalData.fecha_orden,
-                         referencia: `${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                         observaciones: `Venta ${finalData.prefijo_documento}-${finalData.numero_documento}`,
-                         usuario_id: 'system'
-                     });
-                     
-                     // Actualizar stock
-                     await entityType.update(currentItemData.id, {
-                         stock_actual: stockActual - cantidadVenta
-                     });
-                     
-                     console.log(`✅ Venta registrada para ${item.codigo}: Stock=${stockActual - cantidadVenta}`);
-                 }
-             } catch (err) {
-                 console.error("❌ Error actualizando inventario para item (venta)", item.codigo, err);
-             }
-        }
+      const res = documento
+        ? await fin.put(`/comercial/${tipoDocumento}/${documento.id}`, { documento: finalData })
+        : await fin.post(`/comercial/${tipoDocumento}`, {
+            idempotency_key: llaveRef.current,
+            documento: finalData,
+            cuenta_id: finalData.cuenta_destino_id || undefined,
+          });
+      const docs = (res.documentos || []).map(d => d.numero).join(', ');
+      onOpenChange(false);
+      if (onSuccess) onSuccess({
+        message: "Documento guardado",
+        description: `${res.numero_id || ''} registrado correctamente${docs ? ` · ${docs}` : ''}.`,
+      });
+      if (res.advertencias?.length) alert('Guardado con advertencias:\n\n• ' + res.advertencias.join('\n• '));
+    } catch (error) {
+      console.error('Error al guardar:', error);
+      alert('No se guardó el documento:\n\n' + error.message);
+    } finally {
+      setGuardando(false);
     }
   };
   
@@ -1184,6 +563,13 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
           <DialogDescription>
             Complete la información para registrar el documento.
           </DialogDescription>
+          {documento && (
+            <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              {documento.anulado || documento.estado_documento === 'anulado'
+                ? 'Este documento está ANULADO: no se puede modificar.'
+                : 'Documento ya registrado: solo se pueden modificar observaciones, soportes y datos de referencia. Para cambiar productos, cantidades, precios, pago, tercero o fechas, anúlelo y regístrelo de nuevo (o use una devolución).'}
+            </div>
+          )}
         </DialogHeader>
         <form onSubmit={handleFinalSubmit} onKeyDown={handleKeyDown} className="flex flex-col h-full overflow-hidden">
           <div className="overflow-y-auto pr-6 space-y-4 flex-grow">
@@ -1608,11 +994,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                              {(formData.condicion_pago === 'contado' || formData.condicion_pago === 'mixto') && (
                                  <div>
                                     <Label className="font-bold">Forma de Pago *</Label>
-                                    <Select value={formData.forma_pago} onValueChange={v => handleInputChange('forma_pago', v)}>
+                                    <Select value={formData.forma_pago} onValueChange={v => { handleInputChange('forma_pago', v); handleInputChange('cuenta_destino_id', ''); handleInputChange('cuenta_destino_nombre', ''); }}>
                                         <SelectTrigger><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="efectivo">EFECTIVO</SelectItem>
                                             <SelectItem value="banco">BANCO</SelectItem>
+                                            <SelectItem value="otro_medio">OTRO MEDIO (Nequi…)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                  </div>
@@ -1620,45 +1007,30 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                          </div>
 
                          {/* Campos condicionales según forma de pago */}
-                         {(formData.condicion_pago === 'contado' || formData.condicion_pago === 'mixto') && (
-                             <div>
-                                 {formData.forma_pago === 'efectivo' ? (
-                                     <div>
-                                         <Label className="font-bold">Caja * (Obligatorio para Efectivo)</Label>
-                                         <Select value={formData.cuenta_destino_id} onValueChange={v => {
-                                             const caja = cajas.find(c => c.id === v);
-                                             handleInputChange('cuenta_destino_id', v);
-                                             handleInputChange('cuenta_destino_nombre', caja ? caja.nombre : '');
-                                         }}>
-                                             <SelectTrigger><SelectValue placeholder="Seleccionar caja" /></SelectTrigger>
-                                             <SelectContent>
-                                                 {cajas.map(c => (
-                                                     <SelectItem key={c.id} value={c.id}>{c.caja_id ? `${c.caja_id} - ` : ''}{c.nombre}</SelectItem>
-                                                 ))}
-                                             </SelectContent>
-                                         </Select>
-                                     </div>
-                                 ) : formData.forma_pago === 'banco' ? (
-                                     <div>
-                                         <Label className="font-bold">Cuenta Bancaria *</Label>
-                                         <Select value={formData.cuenta_destino_id} onValueChange={v => {
-                                             const cuenta = cuentasBancarias.find(c => c.id === v);
-                                             handleInputChange('cuenta_destino_id', v);
-                                             handleInputChange('cuenta_destino_nombre', cuenta ? `${cuenta.banco} - ${cuenta.numero_cuenta}` : '');
-                                         }}>
-                                             <SelectTrigger><SelectValue placeholder="Seleccionar cuenta" /></SelectTrigger>
-                                             <SelectContent>
-                                                 {cuentasBancarias.map(c => (
-                                                     <SelectItem key={c.id} value={c.id}>
-                                                         {c.banco} - {c.numero_cuenta}
-                                                     </SelectItem>
-                                                 ))}
-                                             </SelectContent>
-                                         </Select>
-                                     </div>
-                                 ) : null}
-                             </div>
-                         )}
+                         {(formData.condicion_pago === 'contado' || formData.condicion_pago === 'mixto') && (() => {
+                             // Cuentas del módulo financiero (cajas, bancos y otros medios como Nequi).
+                             const tipoCuenta = TIPO_CUENTA_POR_FORMA_PAGO[formData.forma_pago] || 'caja';
+                             const opciones = cuentasDinero.filter(c => c.tipo === tipoCuenta);
+                             const etiqueta = { caja: 'Caja', banco: 'Cuenta bancaria', otro_medio: 'Medio de pago (Nequi u otro)' }[tipoCuenta];
+                             return (
+                                 <div>
+                                     <Label className="font-bold">{etiqueta} *</Label>
+                                     <Select value={formData.cuenta_destino_id} onValueChange={v => {
+                                         const cuenta = opciones.find(c => c.id === v);
+                                         handleInputChange('cuenta_destino_id', v);
+                                         handleInputChange('cuenta_destino_nombre', cuenta ? cuenta.nombre : '');
+                                     }}>
+                                         <SelectTrigger><SelectValue placeholder={`Seleccionar ${etiqueta.toLowerCase()}`} /></SelectTrigger>
+                                         <SelectContent>
+                                             {opciones.map(c => (
+                                                 <SelectItem key={c.id} value={c.id}>{c.nombre}{c.numero ? ` · ${c.numero}` : ''}</SelectItem>
+                                             ))}
+                                             {opciones.length === 0 && <SelectItem value="__sin_cuentas__" disabled>No hay cuentas de este tipo configuradas en Finanzas</SelectItem>}
+                                         </SelectContent>
+                                     </Select>
+                                 </div>
+                             );
+                         })()}
 
                          <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                              <div>
@@ -1696,16 +1068,11 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                      
                      {tipoDocumento === 'compra' && (
                        <div>
-                         <Label className="font-bold">Estado del Documento *</Label>
-                         <Select value={formData.estado_documento || 'pendiente'} onValueChange={v => handleInputChange('estado_documento', v)}>
-                           <SelectTrigger><SelectValue /></SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="pendiente">PENDIENTE</SelectItem>
-                             <SelectItem value="pagado">PAGADO</SelectItem>
-                             <SelectItem value="parcial">PARCIAL</SelectItem>
-                             <SelectItem value="anulado">ANULADO</SelectItem>
-                           </SelectContent>
-                         </Select>
+                         <Label className="font-bold">Estado del Documento</Label>
+                         <div className="h-10 px-3 flex items-center rounded-md border bg-gray-100 text-sm font-semibold uppercase">
+                           {documento ? (formData.estado_documento || 'pendiente') : 'Se calcula al guardar'}
+                         </div>
+                         <p className="text-xs text-gray-500 mt-1">Se calcula solo según los pagos (pendiente, parcial o pagado). Para anular use el botón Anular de la lista.</p>
                        </div>
                      )}
                     <div><Label>Soportes</Label>
@@ -1734,7 +1101,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t mt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit"><Save className="w-4 h-4 mr-2" />Guardar</Button>
+            <Button type="submit" disabled={guardando}><Save className="w-4 h-4 mr-2" />{guardando ? 'Guardando…' : 'Guardar'}</Button>
           </div>
         </form>
       </DialogContent>

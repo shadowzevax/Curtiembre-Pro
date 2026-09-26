@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { OrdenCompra, Insumo, Tercero } from "@/entities/all";
-import { recalcularDesdeMovimientos } from '@/lib/costoPromedio';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, Eye, Paperclip, RotateCcw } from "lucide-react";
+import { Plus, Search, Edit, Ban, Eye, Paperclip, RotateCcw } from "lucide-react";
+import { anularDocumentoComercial } from "@/api/finanzas";
 import DataTable from "../components/common/DataTable";
 import PageHeader from "../components/common/PageHeader";
 import DocumentoComercialForm from "../components/common/DocumentoComercialForm";
@@ -165,79 +165,10 @@ export default function CompraInsumos() {
     }
   };
 
-  const handleDelete = async (ordenId) => {
-    if (!window.confirm("¿Está seguro de que desea eliminar esta orden de compra?")) return;
-    try {
-      const orden = ordenes.find(o => o.id === ordenId);
-      if (!orden) return;
-
-      // IMPORTANTE: Eliminar movimientos de inventario asociados ANTES de eliminar la compra
-      if (orden.afecta_inventario) {
-        const MovimientoInventario = (await import('@/entities/all')).MovimientoInventario;
-        const ProductoCatalogo = (await import('@/entities/all')).ProductoCatalogo;
-        const Insumo = (await import('@/entities/all')).Insumo;
-        const ProductoTerminado = (await import('@/entities/all')).ProductoTerminado;
-        
-        const movimientosAEliminar = await MovimientoInventario.filter({ 
-          referencia: `${orden.prefijo_documento}-${orden.numero_documento}` 
-        });
-        
-        console.log(`🔍 Encontrados ${movimientosAEliminar.length} movimientos a eliminar`);
-        
-        for (const mov of movimientosAEliminar) {
-          if (mov.insumo_id) {
-            try {
-              // Buscar el producto en las entidades correctas
-              let entityType = null;
-              let currentItemData = null;
-              
-              const itemsPT = await ProductoTerminado.filter({ id: mov.insumo_id });
-              if (itemsPT && itemsPT.length > 0) {
-                currentItemData = itemsPT[0];
-                entityType = ProductoTerminado;
-              }
-              
-              if (!currentItemData) {
-                const itemsInsumo = await Insumo.filter({ id: mov.insumo_id });
-                if (itemsInsumo && itemsInsumo.length > 0) {
-                  currentItemData = itemsInsumo[0];
-                  entityType = Insumo;
-                }
-              }
-              
-              if (entityType && currentItemData) {
-                // Recalcular stock Y costo promedio reproduciendo los movimientos restantes
-                // (sin este), para que el costo promedio quede correcto (no inflado).
-                const todosMovimientos = await MovimientoInventario.filter({ insumo_id: mov.insumo_id });
-                const restantes = todosMovimientos.filter(m => m.id !== mov.id);
-                const { stock: stockSinEsteMovimiento, costoPromedio: nuevoCostoPromedio } = recalcularDesdeMovimientos(restantes);
-
-                await entityType.update(currentItemData.id, {
-                  stock_actual: stockSinEsteMovimiento,
-                  costo_promedio: nuevoCostoPromedio
-                });
-
-                console.log(`✅ Stock actualizado para ${currentItemData.codigo}: Stock=${stockSinEsteMovimiento}, Costo=${nuevoCostoPromedio}`);
-              }
-            } catch (err) {
-              console.error('Error actualizando stock:', err);
-            }
-          }
-          
-          // Eliminar el movimiento
-          await MovimientoInventario.delete(mov.id);
-          console.log(`✅ Movimiento ${mov.id} eliminado`);
-        }
-      }
-
-      // Ahora sí eliminar la orden de compra
-      await OrdenCompra.delete(ordenId);
-      loadData();
-      alert("Orden de compra eliminada con éxito.");
-    } catch (error) {
-      console.error("Error deleting order:", error);
-      alert("Error al eliminar la orden de compra: " + error.message);
-    }
+  // Una compra no se elimina: se anula. Antes, eliminar una compra borraba los movimientos de
+  // inventario de TODAS las compras con la misma referencia (p. ej. FC-001, compartida por 13 compras).
+  const handleAnular = async (orden) => {
+    if (await anularDocumentoComercial('compra', orden)) loadData();
   };
 
   const handleShowDetails = (orden) => {
@@ -301,14 +232,14 @@ export default function CompraInsumos() {
       <td className="px-4 py-2 text-sm">{formatDate(orden.fecha_emision_documento || orden.fecha_orden)}</td>
       <td className="px-4 py-2 text-sm">{getProveedorNombre(orden.proveedor_id)}</td>
       <td className="px-4 py-2 text-sm font-medium">{formatCurrency(orden.total)}</td>
-      <td className="px-4 py-2 text-sm"><Badge>{orden.estado}</Badge></td>
+      <td className="px-4 py-2 text-sm"><Badge className={(orden.anulado || orden.estado_documento === 'anulado') ? 'bg-red-100 text-red-700' : ''}>{((orden.estado_documento || orden.estado || '') + '').toUpperCase() || '—'}</Badge></td>
       <td className="px-4 py-2 text-sm">{orden.soportes && orden.soportes.length > 0 ? <span className="text-emerald-600 font-medium">{orden.soportes.length} archivo(s)</span> : <span className="text-gray-400">Sin soportes</span>}</td>
       <td className="px-4 py-2 text-sm">
         <div className="flex space-x-1">
           <Button variant="ghost" size="icon" onClick={() => handleShowDetails(orden)} title="Ver detalle"><Eye className="w-4 h-4" /></Button>
           <Button variant="ghost" size="icon" onClick={() => handleShowSoportes(orden)} title="Ver Soportes" disabled={!orden.soportes || orden.soportes.length === 0}><Paperclip className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => handleOpenModal(orden)} title="Editar"><Edit className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => handleDelete(orden.id)} title="Eliminar"><Trash2 className="w-4 h-4 text-red-500" /></Button>
+          {!(orden.anulado || orden.estado_documento === 'anulado') && <Button variant="ghost" size="icon" onClick={() => handleOpenModal(orden)} title="Editar"><Edit className="w-4 h-4" /></Button>}
+          {!(orden.anulado || orden.estado_documento === 'anulado') && <Button variant="ghost" size="icon" onClick={() => handleAnular(orden)} title="Anular"><Ban className="w-4 h-4 text-red-500" /></Button>}
         </div>
       </td>
     </tr>

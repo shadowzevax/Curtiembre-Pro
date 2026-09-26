@@ -12,6 +12,12 @@ import { uploadFile, serveFile } from './files.js';
 import { handleTelegramWebhook } from './telegram.js';
 import { handleFin } from './fin/router.js';
 
+const ESCRITURA_SOLO_POR_MOTOR = new Set([
+  'OrdenVenta', 'OrdenCompra',
+  'Caja', 'CuentaBancaria', 'MovimientoCaja', 'MovimientoBancario', 'CuentaPorCobrar', 'CuentaPorPagar', 'ReciboCaja',
+  'ComprobanteEgreso', 'AsientoContable', 'TransferenciaCaja', 'TransferenciaInterna', 'ArqueoCaja',
+]);
+
 function parseQueryFilter(q) {
   if (!q) return undefined;
   try {
@@ -81,6 +87,11 @@ export async function handleApi(req, res, segments) {
   // ---- Entidades genéricas ----
   if (root === 'entities' && a) {
     const entity = checkEntityName(a);
+    // Desde el módulo financiero (v30), ventas, compras y dinero solo se escriben por /api/fin:
+    // así nadie puede crear, modificar ni borrar movimientos por fuera del motor.
+    if (method !== 'GET' && ESCRITURA_SOLO_POR_MOTOR.has(entity)) {
+      throw new HttpError(403, `${entity} se registra únicamente desde el módulo correspondiente (motor financiero).`);
+    }
     if (!b && method === 'GET') {
       return listRecords(entity, {
         query: parseQueryFilter(req.query.q),

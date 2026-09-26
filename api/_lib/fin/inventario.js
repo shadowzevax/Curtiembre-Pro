@@ -28,11 +28,11 @@ export async function recGet(tx, entity, id, { lock = false } = {}) {
   return rows[0] ? recordFromRow(rows[0]) : null;
 }
 
-export async function recCreate(tx, ctx, entity, data) {
+export async function recCreate(tx, ctx, entity, data, { id } = {}) {
   const { id: _i, created_date: _c, updated_date: _u, created_by: _b, ...limpio } = data;
   const { rows } = await tx.query(
     `INSERT INTO records (id, entity, data, created_by) VALUES ($1,$2,$3::jsonb,$4) RETURNING *`,
-    [newId(), entity, JSON.stringify(limpio), ctx.usuario]
+    [id || newId(), entity, JSON.stringify(limpio), ctx.usuario]
   );
   return recordFromRow(rows[0]);
 }

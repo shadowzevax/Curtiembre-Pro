@@ -275,12 +275,125 @@ async function pruebasOperaciones() {
   ok(desc.rows.length === 0, 'Cada operación deja registros contables cuadrados (débitos = créditos)');
 }
 
+async function pruebasComerciales() {
+  console.log('\n[A4] Ventas y Compras conectadas al motor');
+  const V = await import('../api/_lib/fin/comerciales.js');
+  const OP = await import('../api/_lib/fin/operaciones.js');
+  const INV = await import('../api/_lib/fin/inventario.js');
+  const hoy = core.hoyColombia();
+  const caja = await tx((t) => C.crearCuenta(t, admin, { tipo: 'caja', nombre: 'Caja A4', saldo_inicial: 0 }));
+  const cajaVacia = await tx((t) => C.crearCuenta(t, admin, { tipo: 'caja', nombre: 'Caja vacía A4', saldo_inicial: 0 }));
+  const { cli, prov } = await tx(async (t) => {
+    await INV.recCreate(t, admin, 'ProductoCatalogo', { codigo: 'PT-1', categoria: 'productos_terminados', descripcion: 'Cuero napa' });
+    await INV.recCreate(t, admin, 'ProductoTerminado', { codigo: 'PT-1', descripcion: 'Cuero napa', stock_actual: 0, costo_promedio: 0 });
+    await INV.recCreate(t, admin, 'ProductoCatalogo', { codigo: 'IN-1', categoria: 'insumos_quimicos', descripcion: 'Anilina' });
+    await INV.recCreate(t, admin, 'Insumo', { codigo: 'IN-1', descripcion: 'Anilina', stock_actual: 0, costo_promedio: 0 });
+    return { cli: await INV.recCreate(t, admin, 'Tercero', { nombre: 'Cliente A4' }), prov: await INV.recCreate(t, admin, 'Tercero', { nombre: 'Proveedor A4' }) };
+  });
+  const stock = (codigo, entidad = 'ProductoTerminado') => tx(async (t) => (await INV.recFind(t, entidad, { codigo }))[0]);
+  const contar = (entidad) => tx(async (t) => (await t.query(`SELECT count(*)::int n FROM records WHERE entity = $1`, [entidad])).rows[0].n);
+  const item = (codigo, cantidad, precio, iva = 0, rete = 0) => ({ codigo, descripcion: codigo, cantidad, precio_unitario: precio, iva, retefuente: rete });
+
+  // Compra a crédito: inventario + CxP en una sola operación.
+  const c1 = await tx((t) => V.registrarDocumento(t, contador, 'compra', { idempotency_key: key('c'), documento: {
+    prefijo: 'CI', prefijo_documento: 'FC', numero_documento: '777', proveedor_id: prov.id, fecha_orden: hoy, fecha_vencimiento: hoy,
+    condicion_pago: 'credito', afecta_inventario: true, items: [item('PT-1', 10, 1000, 0.19)] } }));
+  const pt = await stock('PT-1');
+  ok(/^CI-\d{4}-0001$/.test(c1.numero_id) && c1.total === 11900 && c1.saldo === 11900 && pt.stock_actual === 10 && pt.costo_promedio === 1000,
+    `Compra a crédito ${c1.numero_id}: stock 0 → 10, costo promedio 1.000, CxP 11.900 (con IVA)`);
+
+  // Atomicidad con inventario: si falla el pago, no queda ni la compra ni el inventario.
+  const compras = await contar('OrdenCompra');
+  await falla(() => tx((t) => V.registrarDocumento(t, contador, 'compra', { idempotency_key: key('c'), cuenta_id: cajaVacia.id, documento: {
+    prefijo: 'CI', prefijo_documento: 'FC', numero_documento: '778', proveedor_id: prov.id, fecha_orden: hoy, condicion_pago: 'contado',
+    afecta_inventario: true, items: [item('PT-1', 5, 1000)] } })), /Saldo insuficiente/, 'Compra de contado sin dinero en la caja se rechaza');
+  ok((await contar('OrdenCompra')) === compras && (await stock('PT-1')).stock_actual === 10,
+    'Tras el rechazo no quedó ni la compra ni el inventario (todo o nada, incluido el inventario)');
+
+  // Venta mixta.
+  const kv = key('v');
+  const v1 = await tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: kv, cuenta_id: caja.id, documento: {
+    prefijo: 'FV', prefijo_documento: 'FV', numero_documento: '', cliente_id: cli.id, fecha_orden: hoy, fecha_vencimiento: hoy,
+    condicion_pago: 'mixto', valor_pagado: 5000, forma_pago: 'efectivo', items: [item('PT-1', 3, 5000)] } }));
+  ok(v1.total === 15000 && v1.saldo === 10000 && v1.estado === 'parcial' && (await stock('PT-1')).stock_actual === 7
+    && (await tx((t) => core.saldoCuenta(t, caja.id))) === 5000 && v1.documentos[0].numero.startsWith('RC-'),
+    `Venta mixta ${v1.numero_id}: stock 10 → 7, abono 5.000 a la caja con ${v1.documentos[0].numero}, CxC 10.000, estado PARCIAL`);
+  const v1b = await tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: kv, cuenta_id: caja.id, documento: {
+    prefijo: 'FV', cliente_id: cli.id, fecha_orden: hoy, fecha_vencimiento: hoy, condicion_pago: 'mixto', valor_pagado: 5000, items: [item('PT-1', 3, 5000)] } }));
+  ok(v1b.duplicada && v1b.orden_id === v1.orden_id && (await stock('PT-1')).stock_actual === 7, 'Doble clic en Guardar: una sola venta y un solo descuento de inventario');
+  await falla(() => tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: key('v'), documento: {
+    prefijo: 'FV', cliente_id: cli.id, fecha_orden: hoy, fecha_vencimiento: hoy, condicion_pago: 'credito', items: [item('PT-1', 20, 5000)] } })),
+  /Stock insuficiente/, 'Vender más de lo que hay en inventario se rechaza');
+
+  // Edición limitada.
+  await falla(() => tx((t) => V.editarDocumento(t, contador, 'venta', v1.orden_id, { documento: { items: [item('PT-1', 4, 5000)] } })),
+    /no se puede cambiar/, 'Editar cantidades de una venta ya registrada se rechaza (se anula o se devuelve)');
+  await tx((t) => V.editarDocumento(t, contador, 'venta', v1.orden_id, { documento: { observaciones: 'Entregado en planta', items: [item('PT-1', 3, 5000)] } }));
+  ok((await tx((t) => INV.recGet(t, 'OrdenVenta', v1.orden_id))).observaciones === 'Entregado en planta', 'Editar observaciones sí está permitido');
+
+  // Devolución parcial.
+  const dv = await tx((t) => V.devolverDocumento(t, contador, 'venta', v1.orden_id, { lineas: [{ codigo: 'PT-1', cantidad: 1 }], motivo: 'hoja defectuosa', idempotency_key: key('d') }));
+  const oblV = v1.obligacion_id;
+  ok(dv.aplicado_a_cartera === 5000 && (await stock('PT-1')).stock_actual === 8 && (await tx((t) => core.saldoObligacion(t, oblV))) === 5000,
+    `Devolución ${dv.documento.numero} de 1 hoja: stock 7 → 8 y la CxC baja 5.000`);
+  await falla(() => tx((t) => V.anularDocumento(t, admin, 'venta', v1.orden_id, { motivo: 'error en la venta', idempotency_key: key('an') })),
+    /devoluciones vigentes/, 'Una venta con devoluciones vigentes no se anula sin anular primero la devolución');
+  await tx((t) => V.anularDevolucion(t, admin, 'venta', v1.orden_id, dv.documento.numero, { motivo: 'devolución mal registrada', idempotency_key: key('ad') }));
+  ok((await stock('PT-1')).stock_actual === 7 && (await tx((t) => core.saldoObligacion(t, oblV))) === 10000,
+    'Anular la devolución devuelve el stock a 7 y la CxC a 10.000');
+
+  // Cobro posterior y anulación encadenada.
+  const cb = await tx((t) => OP.cobro(t, contador, { obligacion_id: oblV, cuenta_id: caja.id, valor: 10000, idempotency_key: key('cb') }));
+  ok((await tx((t) => INV.recGet(t, 'OrdenVenta', v1.orden_id))).estado_documento === 'pagado', 'Al cobrar el saldo, la venta pasa sola a PAGADO');
+  await falla(() => tx((t) => V.anularDocumento(t, admin, 'venta', v1.orden_id, { motivo: 'error en la venta', idempotency_key: key('an') })),
+    /abonos posteriores/, 'No se anula una venta con cobros posteriores vigentes');
+  await falla(() => tx(async (t) => {
+    const { rows } = await t.query(`SELECT tipo_operacion FROM fin_operaciones WHERE id = $1`, [v1.operacion_id]);
+    if (V.TIPOS_SOLO_POR_DOCUMENTO.includes(rows[0].tipo_operacion)) throw new Error('afecta inventario: anúlela desde la venta');
+  }), /afecta inventario/, 'La anulación genérica no acepta ventas (debe hacerse desde el documento, para revertir el inventario)');
+  await tx((t) => core.anularOperacion(t, admin, { operacion_id: cb.operacion_id, motivo: 'cobro duplicado', idempotency_key: key('an') }));
+  ok((await tx((t) => INV.recGet(t, 'OrdenVenta', v1.orden_id))).estado_documento === 'parcial', 'Al anular el cobro, la venta vuelve a PARCIAL');
+  await falla(() => tx((t) => V.anularDocumento(t, contador, 'venta', v1.orden_id, { motivo: 'error en la venta', idempotency_key: key('an') })),
+    /permiso/, 'Solo el administrador anula ventas');
+  const an = await tx((t) => V.anularDocumento(t, admin, 'venta', v1.orden_id, { motivo: 'error en la venta', idempotency_key: key('an') }));
+  const vAn = await tx((t) => INV.recGet(t, 'OrdenVenta', v1.orden_id));
+  ok(an.movimientos_inventario_revertidos === 1 && (await stock('PT-1')).stock_actual === 10 && vAn.estado_documento === 'anulado'
+    && (await tx((t) => core.saldoCuenta(t, caja.id))) === 0,
+  'Anular la venta: el stock vuelve a 10, la caja devuelve el abono, la venta queda ANULADA (no se borra)');
+  const aud = await tx((t) => t.query(`SELECT count(*)::int n FROM fin_auditoria WHERE accion = 'inventario:eliminar_movimiento'`));
+  ok(aud.rows[0].n >= 1, 'Cada movimiento de inventario revertido quedó copiado completo en la bitácora');
+
+  // Compra cuya mercancía ya se vendió.
+  const c2 = await tx((t) => V.registrarDocumento(t, contador, 'compra', { idempotency_key: key('c'), documento: {
+    prefijo: 'CI', prefijo_documento: 'FC', numero_documento: '900', proveedor_id: prov.id, fecha_orden: hoy, fecha_vencimiento: hoy,
+    condicion_pago: 'credito', afecta_inventario: true, items: [item('IN-1', 2, 3000)] } }));
+  await tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: key('v'), documento: {
+    prefijo: 'FV', cliente_id: cli.id, fecha_orden: hoy, fecha_vencimiento: hoy, condicion_pago: 'credito', items: [item('IN-1', 2, 4000)] } }));
+  await falla(() => tx((t) => V.anularDocumento(t, admin, 'compra', c2.orden_id, { motivo: 'error en la compra', idempotency_key: key('an') })),
+    /ya fue consumida o vendida/, 'No se anula una compra cuya mercancía ya se vendió (el stock quedaría negativo)');
+
+  // Documentos anteriores al motor con referencia compartida (caso real FC-001).
+  const legado = await tx(async (t) => {
+    const a = await INV.recCreate(t, admin, 'OrdenCompra', { prefijo_documento: 'FC', numero_documento: '001', afecta_inventario: true, numero_id: 'CH-2025-0001', total: 100 });
+    await INV.recCreate(t, admin, 'OrdenCompra', { prefijo_documento: 'FC', numero_documento: '001', afecta_inventario: true, numero_id: 'CH-2025-0002', total: 100 });
+    await INV.recCreate(t, admin, 'MovimientoInventario', { tipo_movimiento: 'entrada', insumo_id: 'x', cantidad: 1, referencia: 'FC-001' });
+    return a;
+  });
+  await falla(() => tx((t) => V.anularDocumento(t, admin, 'compra', legado.id, { motivo: 'prueba de referencia', idempotency_key: key('an') })),
+    /la comparten 2 documentos/, 'Documento antiguo con referencia compartida (como FC-001): se bloquea en vez de borrar inventario ajeno');
+
+  const desc = await tx((t) => t.query(
+    `SELECT operacion_id FROM fin_mov_contables GROUP BY operacion_id HAVING sum(CASE WHEN naturaleza = 'debito' THEN valor ELSE -valor END) <> 0`));
+  ok(desc.rows.length === 0, 'Ventas, compras, devoluciones y anulaciones dejan la contabilidad cuadrada');
+}
+
 async function main() {
   console.log(`Esquema temporal: ${ESQUEMA} (se elimina al terminar)`);
   try {
     await prepararEsquema();
     await pruebasBase();
     await pruebasOperaciones();
+    await pruebasComerciales();
     const extra = process.env.VERIF_EXTRA ? await import(process.env.VERIF_EXTRA) : null;
     if (extra?.default) await extra.default(util);
   } catch (e) {
