@@ -5,6 +5,7 @@ import { ensureFinSchema } from './schema.js';
 import { requerirRol, anularOperacion } from './core.js';
 import * as C from './consultas.js';
 import * as S from './soportes.js';
+import { OPERACIONES } from './operaciones.js';
 
 const LECTURA = ['admin', 'contador'];
 
@@ -47,6 +48,13 @@ export async function handleFin(req, segs, auth) {
   if (a === 'relacionados' && method === 'GET') {
     if (!q.modulo || !q.id) throw new HttpError(400, 'Faltan modulo e id');
     return withTx((tx) => C.relacionadosDeOrigen(tx, q.modulo, q.id));
+  }
+
+  // ── Operaciones financieras (cobro, pago, ingreso, egreso, transferencia, ajuste…) ──
+  if (a === 'operaciones' && b && !c && method === 'POST') {
+    const fn = OPERACIONES[b];
+    if (!fn) throw new HttpError(404, `Operación desconocida: ${b}`);
+    return withTx((tx) => fn(tx, ctx, body));
   }
 
   // ── Anulación genérica de operaciones financieras ──

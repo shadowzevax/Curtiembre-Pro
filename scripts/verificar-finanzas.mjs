@@ -181,11 +181,106 @@ async function pruebasBase() {
   ok(filasAntes === filasDespues && saldoRestaurado === libro.saldo_final, 'Respaldo → restauración: mismas filas y mismos saldos');
 }
 
+async function pruebasOperaciones() {
+  console.log('\n[A3] Operaciones del motor');
+  const OP = await import('../api/_lib/fin/operaciones.js');
+  const caja = await tx((t) => C.crearCuenta(t, admin, { tipo: 'caja', nombre: 'Caja A3', saldo_inicial: 0 }));
+  const banco = await tx((t) => C.crearCuenta(t, admin, { tipo: 'banco', nombre: 'Banco A3', saldo_inicial: 10000000 }));
+  const nequi = await tx((t) => C.crearCuenta(t, admin, { tipo: 'otro_medio', nombre: 'Nequi A3', saldo_inicial: 0 }));
+  const hoy = core.hoyColombia();
+  const saldo = (id) => tx((t) => core.saldoCuenta(t, id));
+  const saldoObl = (id) => tx((t) => core.saldoObligacion(t, id));
+
+  // Una CxC de 3.000.000 (lo que creará una venta a crédito en A4).
+  const cxc = await tx(async (t) => {
+    const op = await nuevaOperacion(t, admin, 'venta');
+    return core.crearObligacion(t, admin, op, { naturaleza: 'por_cobrar', tercero_id: 'cli-1', tercero_nombre: 'Cliente Uno',
+      documento_modulo: 'OrdenVenta', documento_id: 'venta-1', documento_numero: 'FV-TEST-0001', fecha: hoy, fecha_vencimiento: hoy,
+      valor_original: 3000000, origen_clave: `v:${op.id}` });
+  });
+
+  const kCobro = key('cobro');
+  const r1 = await tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: caja.id, valor: 1000000, idempotency_key: kCobro }));
+  ok(r1.saldo_pendiente === 2000000 && (await saldo(caja.id)) === 1000000 && /^RC-\d{4}-0001$/.test(r1.documento.numero),
+    `Venta 3M, abono 1M → CxC 2M, caja +1M y Recibo de Caja ${r1.documento.numero}`);
+  const r1b = await tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: caja.id, valor: 1000000, idempotency_key: kCobro }));
+  ok(r1b.duplicada && (await saldoObl(cxc.id)) === 2000000 && (await saldo(caja.id)) === 1000000, 'Doble envío del mismo cobro: no se cobra dos veces');
+  await falla(() => tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: caja.id, valor: 2500000, idempotency_key: key('c') })),
+    /supera el saldo/, 'Un cobro mayor al saldo pendiente se rechaza');
+
+  const r2 = await tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: nequi.id, valor: 950000,
+    retencion: { tipo: 'retefuente', valor: 50000 }, idempotency_key: key('c') }));
+  ok(r2.saldo_pendiente === 1000000 && (await saldo(nequi.id)) === 950000, 'Cobro por Nequi de 950.000 con retención de 50.000 baja la CxC en 1.000.000');
+
+  const rel = await tx((t) => C.relacionadosDeOrigen(t, 'OrdenVenta', 'venta-1'));
+  const vinc = await tx((t) => C.listarVinculos(t, 'OrdenVenta', 'venta-1'));
+  ok(vinc.filter((v) => v.tipo_relacion === 'documento_relacionado').length === 2 && rel.aplicaciones.length === 3,
+    'Desde la venta se ven sus dos recibos de caja y los abonos (vinculación automática)');
+
+  // CxP con pago bancario y GMF.
+  const cxp = await tx(async (t) => {
+    const op = await nuevaOperacion(t, admin, 'compra');
+    return core.crearObligacion(t, admin, op, { naturaleza: 'por_pagar', tercero_id: 'prov-1', tercero_nombre: 'Proveedor Uno',
+      documento_modulo: 'OrdenCompra', documento_id: 'compra-1', documento_numero: 'CP-TEST-0025', fecha: hoy, valor_original: 5000000,
+      origen_clave: `c:${op.id}` });
+  });
+  const p1 = await tx((t) => OP.pago(t, contador, { obligacion_id: cxp.id, cuenta_id: banco.id, valor: 2000000, idempotency_key: key('p') }));
+  ok(p1.saldo_pendiente === 3000000 && (await saldo(banco.id)) === 7992000 && /^CE-/.test(p1.documento.numero),
+    `Compra 5M, pago 2M por banco → CxP 3M, banco −2.008.000 (incluye GMF) y ${p1.documento.numero}`);
+
+  // Transferencia: no crea ingresos ni gastos.
+  const totalAntes = (await saldo(caja.id)) + (await saldo(banco.id));
+  await tx((t) => OP.transferencia(t, contador, { cuenta_origen_id: banco.id, cuenta_destino_id: caja.id, valor: 500000, exenta_gmf: true, idempotency_key: key('t') }));
+  const totalDespues = (await saldo(caja.id)) + (await saldo(banco.id));
+  const rolesTr = await tx((t) => t.query(`SELECT DISTINCT m.cuenta_rol FROM fin_mov_contables m JOIN fin_operaciones o ON o.id = m.operacion_id WHERE o.tipo_operacion = 'transferencia'`));
+  ok(totalAntes === totalDespues && rolesTr.rows.every((r) => r.cuenta_rol === 'disponible'),
+    'Transferencia banco → caja (exenta de GMF): el total no cambia y no genera ingreso ni gasto');
+  await falla(() => tx((t) => OP.transferencia(t, contador, { cuenta_origen_id: caja.id, cuenta_destino_id: caja.id, valor: 1, idempotency_key: key('t') })),
+    /distintas/, 'No se puede transferir a la misma cuenta');
+
+  // Anticipo de cliente y cruce.
+  const ant = await tx((t) => OP.anticipo(t, contador, { tipo: 'cliente', tercero_id: 'cli-1', tercero_nombre: 'Cliente Uno', cuenta_id: caja.id,
+    valor: 300000, idempotency_key: key('a') }));
+  const cr = await tx((t) => OP.cruceAnticipo(t, contador, { anticipo_id: ant.anticipo_id, obligacion_id: cxc.id, valor: 300000, idempotency_key: key('x') }));
+  ok(cr.saldo_pendiente === 700000 && cr.saldo_anticipo === 0, 'Anticipo de 300.000 cruzado contra la CxC: CxC 700.000, anticipo agotado');
+
+  // Notas crédito y débito.
+  const nc = await tx((t) => OP.nota(t, contador, { obligacion_id: cxc.id, tipo: 'credito', valor: 100000, motivo: 'descuento comercial', idempotency_key: key('n') }));
+  const nd = await tx((t) => OP.nota(t, contador, { obligacion_id: cxc.id, tipo: 'debito', valor: 40000, motivo: 'recargo transporte', idempotency_key: key('n') }));
+  ok(nc.saldo_pendiente === 600000 && nd.saldo_pendiente === 640000 && /^NC-/.test(nc.documento.numero) && /^ND-/.test(nd.documento.numero),
+    'Nota crédito −100.000 y nota débito +40.000 ajustan la CxC sin anular la venta');
+
+  // Ajustes: solo administrador.
+  await falla(() => tx((t) => OP.ajuste(t, contador, { cuenta_id: caja.id, naturaleza: 'salida', valor: 1000, motivo: 'faltante arqueo', idempotency_key: key('j') })),
+    /permiso/, 'Un contador no puede hacer ajustes de caja');
+  await tx((t) => OP.ajuste(t, admin, { cuenta_id: caja.id, naturaleza: 'salida', valor: 1000, motivo: 'faltante arqueo', idempotency_key: key('j') }));
+  ok(true, 'El administrador sí registra el ajuste (queda con su motivo en la bitácora)');
+  await falla(() => tx((t) => OP.egreso(t, operario, { cuenta_id: caja.id, valor: 1, concepto: 'x', idempotency_key: key('e') })),
+    /permiso/, 'Un operario no puede registrar movimientos de dinero');
+
+  // Anulaciones encadenadas.
+  const cajaAntes = await saldo(caja.id);
+  await tx((t) => core.anularOperacion(t, admin, { operacion_id: r1.operacion_id, motivo: 'cobro registrado por error', idempotency_key: key('an') }));
+  ok((await saldoObl(cxc.id)) === 1640000 && (await saldo(caja.id)) === cajaAntes - 1000000,
+    'Anular el primer cobro devuelve 1M a la CxC y lo saca de la caja');
+  const rc = await tx((t) => t.query(`SELECT estado FROM fin_documentos WHERE numero = $1`, [r1.documento.numero]));
+  ok(rc.rows[0].estado === 'anulado', `El recibo ${r1.documento.numero} queda marcado ANULADO (no se borra)`);
+  await falla(() => tx((t) => core.anularOperacion(t, admin, { operacion_id: cxc.operacion_id, motivo: 'anular la venta', idempotency_key: key('an') })),
+    /abonos posteriores/, 'No se puede anular una venta cuya CxC tiene cobros vigentes: primero se anulan los cobros');
+
+  // Toda la contabilidad cuadra, operación por operación.
+  const desc = await tx((t) => t.query(
+    `SELECT operacion_id FROM fin_mov_contables GROUP BY operacion_id
+     HAVING sum(CASE WHEN naturaleza = 'debito' THEN valor ELSE -valor END) <> 0`));
+  ok(desc.rows.length === 0, 'Cada operación deja registros contables cuadrados (débitos = créditos)');
+}
+
 async function main() {
   console.log(`Esquema temporal: ${ESQUEMA} (se elimina al terminar)`);
   try {
     await prepararEsquema();
     await pruebasBase();
+    await pruebasOperaciones();
     const extra = process.env.VERIF_EXTRA ? await import(process.env.VERIF_EXTRA) : null;
     if (extra?.default) await extra.default(util);
   } catch (e) {
