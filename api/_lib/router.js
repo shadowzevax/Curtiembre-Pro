@@ -10,6 +10,7 @@ import {
 } from './entities.js';
 import { uploadFile, serveFile } from './files.js';
 import { handleTelegramWebhook } from './telegram.js';
+import { handleFin } from './fin/router.js';
 
 function parseQueryFilter(q) {
   if (!q) return undefined;
@@ -64,6 +65,9 @@ export async function handleApi(req, res, segments) {
 
   // Todo lo demás requiere sesión
   const auth = getAuthUser(req);
+
+  // ---- Motor financiero (transacciones, saldos calculados, permisos por rol) ----
+  if (root === 'fin') return handleFin(req, segments.slice(1), auth);
 
   // ---- Usuarios (entidad especial User) ----
   if (root === 'users') {
