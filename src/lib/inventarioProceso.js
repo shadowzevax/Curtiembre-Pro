@@ -180,6 +180,67 @@ export function disponibleReal(item, reservaPropiaAIncluir = 0) {
   return Math.max(0, stock - reservado + (parseFloat(reservaPropiaAIncluir) || 0));
 }
 
+// ── Costo real de un lote (para reportes de costos y rentabilidad) ─────────
+// Hallazgo de la investigación previa a esto: el costo de Acabado
+// (`costo_total_acabado` en ProcesoProduccion) nunca se suma al `costo_acumulado`
+// de ningún InventarioEnProceso — a diferencia de Recurtido, que sí lo hereda
+// correctamente (ver `sincronizarInventarioEnProceso` en ProcesoRecurtido.jsx).
+// Por eso el costo acumulado que ya guarda cada partida (recepción+limpieza+
+// curtido+recurtido) está bien, pero le falta sumar Acabado y los Costos
+// Indirectos (mano de obra, maquinaria, otros) para ser el costo real del lote.
+//
+// Esta función no modifica ningún dato: solo lee y suma, para no arriesgar el
+// costo ya calculado y guardado por Producción (que otras pantallas sí usan).
+
+/** Código del lote padre y de todas sus partidas (recursivo, por si una partida se vuelve a dividir). */
+function familiaDeLote(codigoLotePadre, allInvProceso) {
+  const codigos = [codigoLotePadre];
+  let agregado = true;
+  while (agregado) {
+    agregado = false;
+    for (const it of allInvProceso) {
+      if (it.codigo_lote_padre && codigos.includes(it.codigo_lote_padre) && !codigos.includes(it.codigo_lote)) {
+        codigos.push(it.codigo_lote);
+        agregado = true;
+      }
+    }
+  }
+  return codigos;
+}
+
+/**
+ * Costo real total de un lote (identificado por el código del lote padre, el que
+ * se recibió): recepción + limpieza + curtido + recurtido (ya correctamente
+ * heredado partida a partida) + Acabado + Costos Indirectos de todo el árbol del lote.
+ */
+export function costoTotalDeLote(codigoLotePadre, allInvProceso = [], allProcesosProduccion = [], costosIndirectos = []) {
+  const familia = familiaDeLote(codigoLotePadre, allInvProceso);
+
+  // Recepción+limpieza+curtido+recurtido: solo las hojas de la familia (padre e
+  // hijos) que ya NO tienen hijos propios (evita sumar dos veces lo heredado).
+  const nodos = familia.map((c) => allInvProceso.find((i) => i.codigo_lote === c)).filter(Boolean);
+  const hojas = nodos.filter((n) => !tieneHijos(n, allInvProceso));
+  const costoBase = hojas.reduce((s, n) => s + (parseFloat(n.costo_acumulado) || 0), 0);
+
+  const costoAcabado = allProcesosProduccion
+    .filter((p) => p.tipo_proceso === 'acabado' && familia.includes(p.codigo_lote))
+    .reduce((s, p) => s + (parseFloat(p.costo_total_acabado) || 0), 0);
+
+  const costoIndirecto = costosIndirectos
+    .filter((c) => familia.includes(c.codigo_lote))
+    .reduce((s, c) => s + (parseFloat(c.subtotal ?? c.valor_total) || 0), 0);
+
+  const totalHojasOriginal = totalOriginalLote(nodos.find((n) => n.codigo_lote === codigoLotePadre) || nodos[0]);
+
+  return {
+    costo_base: costoBase,
+    costo_acabado: costoAcabado,
+    costo_indirecto: costoIndirecto,
+    costo_total: costoBase + costoAcabado + costoIndirecto,
+    costo_por_hoja: totalHojasOriginal > 0 ? (costoBase + costoAcabado + costoIndirecto) / totalHojasOriginal : 0,
+  };
+}
+
 /**
  * Igual que calcularConsumoFIFO pero respetando las reservas de otros
  * pedidos: nunca ofrece hojas que ya están reservadas por otro pedido.

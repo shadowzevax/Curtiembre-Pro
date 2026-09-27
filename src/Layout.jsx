@@ -113,6 +113,10 @@ const menuItems = [
             { title: "Libro Mayor", url: createPageUrl("LibroMayor"), icon: Calculator },
             { title: "Libro Auxiliar Contable", url: createPageUrl("LibroAuxiliarContable"), icon: Calculator },
             { title: "Comprobantes Contables", url: createPageUrl("ComprobantesContables"), icon: Calculator },
+            { title: "Configuración Contable", url: createPageUrl("ContabilidadConfiguracion"), icon: Calculator },
+            { title: "Cierres Contables", url: createPageUrl("ContabilidadCierres"), icon: Calculator },
+            { title: "Saldos y Balances", url: createPageUrl("ContabilidadSaldosBalances"), icon: Calculator },
+            { title: "Impuestos y Retenciones", url: createPageUrl("ContabilidadImpuestosRetenciones"), icon: Calculator },
         ]
     },
     {
@@ -120,12 +124,16 @@ const menuItems = [
         icon: TrendingUp,
         roles: ["admin", "contador", "operario"],
         subItems: [
-            { title: "Área de Tesorería", url: createPageUrl("ReportesAreaTesoreria"), icon: TrendingUp },
-            { title: "Área de Cuentas por Cobrar", url: createPageUrl("ReportesAreaCuentasCobrar"), icon: TrendingUp },
-            { title: "Área de Cuentas por Pagar", url: createPageUrl("ReportesAreaCuentasPagar"), icon: TrendingUp },
-            { title: "Área de Inventarios", url: createPageUrl("ReportesAreaInventarios"), icon: TrendingUp },
-            { title: "Área de Producción", url: createPageUrl("ReportesAreaProduccion"), icon: TrendingUp },
-            { title: "Área Comercial y Financiera", url: createPageUrl("ReportesAreaComercial"), icon: TrendingUp },
+            { title: "Reportes Generales", url: createPageUrl("ReportesAreaGenerales"), icon: TrendingUp },
+            { title: "Finanzas y Tesorería", url: createPageUrl("ReportesAreaTesoreria"), icon: TrendingUp },
+            { title: "Compras", url: createPageUrl("ReportesAreaCompras"), icon: TrendingUp },
+            { title: "Ventas", url: createPageUrl("ReportesAreaVentas"), icon: TrendingUp },
+            { title: "Inventarios", url: createPageUrl("ReportesAreaInventarios"), icon: TrendingUp },
+            { title: "Producción", url: createPageUrl("ReportesAreaProduccion"), icon: TrendingUp },
+            { title: "Pedidos y Producción de Pintura", url: createPageUrl("ReportesAreaPintura"), icon: TrendingUp },
+            { title: "Contabilidad", url: createPageUrl("ReportesAreaContabilidad"), icon: TrendingUp },
+            { title: "Clientes y Proveedores", url: createPageUrl("ReportesAreaClientesProveedores"), icon: TrendingUp },
+            { title: "Indicadores y Resumen Gerencial", url: createPageUrl("ReportesAreaIndicadores"), icon: TrendingUp },
         ]
     },
     {

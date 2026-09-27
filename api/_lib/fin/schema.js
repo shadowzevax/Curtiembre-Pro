@@ -2,7 +2,7 @@ import { getSql } from '../db.js';
 import { withTx } from './pool.js';
 
 // Versión del esquema financiero. Subirla cuando cambie FIN_SCHEMA_SQL.
-export const FIN_SCHEMA_VERSION = 1;
+export const FIN_SCHEMA_VERSION = 2;
 
 // Dinero en numeric(18,2): nunca punto flotante. Todas las sentencias son idempotentes.
 export const FIN_SCHEMA_SQL = [
@@ -174,6 +174,38 @@ export const FIN_SCHEMA_SQL = [
   )`,
   `CREATE INDEX IF NOT EXISTS fin_soportes_doc_idx ON fin_soportes (documento_modulo, documento_id)`,
 
+  `CREATE TABLE IF NOT EXISTS fin_conciliaciones (
+    id text PRIMARY KEY,
+    cuenta_id text NOT NULL REFERENCES fin_cuentas_dinero(id),
+    periodo_anio int NOT NULL, periodo_mes int NOT NULL CHECK (periodo_mes BETWEEN 1 AND 12),
+    fecha_corte date NOT NULL,
+    saldo_extracto numeric(18,2) NOT NULL DEFAULT 0,
+    saldo_sistema numeric(18,2),
+    diferencia numeric(18,2),
+    estado text NOT NULL DEFAULT 'en_proceso' CHECK (estado IN ('en_proceso','conciliada','con_diferencias')),
+    responsable text,
+    observaciones text,
+    usuario text,
+    created_date timestamptz NOT NULL DEFAULT now(),
+    cerrada_en timestamptz, cerrada_por text
+  )`,
+  `CREATE INDEX IF NOT EXISTS fin_concil_cuenta_idx ON fin_conciliaciones (cuenta_id, periodo_anio, periodo_mes)`,
+
+  `CREATE TABLE IF NOT EXISTS fin_conciliacion_lineas (
+    id text PRIMARY KEY,
+    conciliacion_id text NOT NULL REFERENCES fin_conciliaciones(id),
+    fecha date NOT NULL,
+    descripcion text,
+    referencia text,
+    naturaleza text NOT NULL CHECK (naturaleza IN ('entrada','salida')),
+    valor numeric(18,2) NOT NULL CHECK (valor > 0),
+    movimiento_id text REFERENCES fin_movimientos_dinero(id),
+    estado text NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','conciliada','ignorada')),
+    usuario text,
+    created_date timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS fin_concil_linea_concil_idx ON fin_conciliacion_lineas (conciliacion_id)`,
+
   // cuenta_rol = cuenta conceptual (caja, cxc, ingreso_ventas...). Cuando exista el plan de
   // cuentas, fin_parametrizacion_contable traduce cada rol a su cuenta contable.
   `CREATE TABLE IF NOT EXISTS fin_mov_contables (
@@ -262,7 +294,8 @@ export const FIN_SCHEMA_SQL = [
      RETURN NEW;
    END $$`,
   ...['fin_cuentas_dinero', 'fin_operaciones', 'fin_documentos', 'fin_movimientos_dinero', 'fin_obligaciones',
-    'fin_aplicaciones', 'fin_retenciones', 'fin_mov_contables', 'fin_auditoria'].flatMap((t) => [
+    'fin_aplicaciones', 'fin_retenciones', 'fin_mov_contables', 'fin_auditoria',
+    'fin_conciliaciones', 'fin_conciliacion_lineas'].flatMap((t) => [
     `CREATE OR REPLACE TRIGGER ${t}_no_delete BEFORE DELETE ON ${t} FOR EACH ROW EXECUTE FUNCTION fin_proteger()`,
     `CREATE OR REPLACE TRIGGER ${t}_no_truncate BEFORE TRUNCATE ON ${t} FOR EACH STATEMENT EXECUTE FUNCTION fin_proteger()`,
   ]),
@@ -288,6 +321,7 @@ export const FIN_TABLES = [
   'fin_meta', 'fin_parametros', 'fin_parametrizacion_contable', 'fin_terceros_config', 'fin_periodos',
   'fin_cuentas_dinero', 'fin_consecutivos', 'fin_operaciones', 'fin_documentos', 'fin_movimientos_dinero',
   'fin_obligaciones', 'fin_aplicaciones', 'fin_retenciones', 'fin_vinculos', 'fin_soportes',
+  'fin_conciliaciones', 'fin_conciliacion_lineas',
   'fin_mov_contables', 'fin_auditoria',
 ];
 

@@ -10,7 +10,7 @@ import { anularDocumentoComercial } from "@/api/finanzas";
 import DataTable from "../components/common/DataTable";
 import PageHeader from "../components/common/PageHeader";
 import DocumentoComercialForm from "../components/common/DocumentoComercialForm";
-import SoporteViewer from "../components/common/SoporteViewer";
+import DocumentosSoportesModal from "../components/finanzas/DocumentosSoportesModal";
 import OrdenDetalle from "../components/compras/OrdenDetalle";
 import SuccessToast from "../components/common/SuccessToast";
 
@@ -47,8 +47,7 @@ export default function CompraInsumos() {
   const [editingOrder, setEditingOrder] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showSoporteViewer, setShowSoporteViewer] = useState(false);
-  const [soportesToShow, setSoportesToShow] = useState([]);
+  const [showDocumentosSoportes, setShowDocumentosSoportes] = useState(false);
   const [noProveedoresMsg] = useState("⚠️ No hay proveedores disponibles. Debe registrar un tercero como proveedor en Administración > Terceros.");
   
   const [filters, setFilters] = useState(initialFilters);
@@ -178,8 +177,7 @@ export default function CompraInsumos() {
 
   const handleShowSoportes = (orden) => {
     setSelectedOrder(orden);
-    setSoportesToShow(orden.soportes || []);
-    setShowSoporteViewer(true);
+    setShowDocumentosSoportes(true);
   };
 
   const handleExportCSV = () => {
@@ -220,7 +218,7 @@ export default function CompraInsumos() {
   };
 
   const tableHeaders = [
-    "No. ID", "Prefijo", "Tipo Item", "No. Doc. Proveedor", "Fecha Emisión", "Proveedor", "Valor", "Estado", "Soportes", "Acciones"
+    "No. ID", "Prefijo", "Tipo Item", "No. Doc. Proveedor", "Fecha Emisión", "Proveedor", "Valor", "Estado", "Acciones"
   ];
 
   const renderRow = (orden) => (
@@ -233,11 +231,10 @@ export default function CompraInsumos() {
       <td className="px-4 py-2 text-sm">{getProveedorNombre(orden.proveedor_id)}</td>
       <td className="px-4 py-2 text-sm font-medium">{formatCurrency(orden.total)}</td>
       <td className="px-4 py-2 text-sm"><Badge className={(orden.anulado || orden.estado_documento === 'anulado') ? 'bg-red-100 text-red-700' : ''}>{((orden.estado_documento || orden.estado || '') + '').toUpperCase() || '—'}</Badge></td>
-      <td className="px-4 py-2 text-sm">{orden.soportes && orden.soportes.length > 0 ? <span className="text-emerald-600 font-medium">{orden.soportes.length} archivo(s)</span> : <span className="text-gray-400">Sin soportes</span>}</td>
       <td className="px-4 py-2 text-sm">
         <div className="flex space-x-1">
           <Button variant="ghost" size="icon" onClick={() => handleShowDetails(orden)} title="Ver detalle"><Eye className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" onClick={() => handleShowSoportes(orden)} title="Ver Soportes" disabled={!orden.soportes || orden.soportes.length === 0}><Paperclip className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => handleShowSoportes(orden)} title="Documentos y Soportes"><Paperclip className="w-4 h-4" /></Button>
           {!(orden.anulado || orden.estado_documento === 'anulado') && <Button variant="ghost" size="icon" onClick={() => handleOpenModal(orden)} title="Editar"><Edit className="w-4 h-4" /></Button>}
           {!(orden.anulado || orden.estado_documento === 'anulado') && <Button variant="ghost" size="icon" onClick={() => handleAnular(orden)} title="Anular"><Ban className="w-4 h-4 text-red-500" /></Button>}
         </div>
@@ -317,14 +314,12 @@ export default function CompraInsumos() {
           onOpenChange={setShowDetailModal}
         />
       )}
-      {showSoporteViewer && (
-        <SoporteViewer 
-            open={showSoporteViewer}
-            onOpenChange={setShowSoporteViewer}
-            soportes={soportesToShow}
-            orden={selectedOrder}
-        />
-      )}
+      <DocumentosSoportesModal
+          open={showDocumentosSoportes}
+          onClose={() => setShowDocumentosSoportes(false)}
+          modulo="OrdenCompra"
+          documento={selectedOrder}
+      />
 
       {successToast && (
         <SuccessToast

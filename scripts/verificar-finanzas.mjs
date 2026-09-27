@@ -427,6 +427,152 @@ async function pruebasIntegraciones() {
   ok(!pagoNomina.duplicada && (await tx((t) => core.saldoCuenta(t, caja.id))) === cajaAntes - 300000, 'Pago de nómina registrado como egreso, vinculado a la liquidación de origen');
 }
 
+async function pruebasSoportes() {
+  console.log('\n[B5] Documentos y Soportes');
+  const S = await import('../api/_lib/fin/soportes.js');
+
+  await falla(() => tx((t) => S.solicitarSubida(t, admin, { documento_id: '1', tipo_soporte: 'otro', nombre: 'a.txt', mime: 'text/plain', tamano: 10 })),
+    /documento al que pertenece/, 'Sin documento_modulo, rechaza la solicitud de subida');
+  await falla(() => tx((t) => S.solicitarSubida(t, admin, { documento_modulo: 'OrdenVenta', documento_id: '1', tipo_soporte: 'otro', nombre: 'a.exe', mime: 'application/x-msdownload', tamano: 10 })),
+    /Tipo de archivo no permitido/, 'Rechaza un tipo MIME no permitido (.exe)');
+  await falla(() => tx((t) => S.solicitarSubida(t, admin, { documento_modulo: 'OrdenVenta', documento_id: '1', tipo_soporte: 'otro', nombre: 'a.txt', mime: 'text/plain', tamano: 11 * 1024 * 1024 })),
+    /supera el tamaño máximo/, 'Rechaza un archivo que supera el máximo configurado (10 MB)');
+
+  const contenido = Buffer.from('Prueba automática de verificación B5.');
+  const { id, upload_url } = await tx((t) => S.solicitarSubida(t, admin, {
+    documento_modulo: 'OrdenVenta', documento_id: 'verif-doc-1', tipo_soporte: 'otro', nombre: 'verificacion.txt', mime: 'text/plain', tamano: contenido.length,
+  }));
+  ok(typeof upload_url === 'string' && upload_url.startsWith('https://'), 'Genera una URL firmada de subida hacia R2');
+  const put = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: contenido });
+  ok(put.ok, `La subida directa a R2 con la URL firmada responde OK (status ${put.status})`);
+  const confirmado = await tx((t) => S.confirmarSubida(t, admin, id));
+  ok(confirmado.estado === 'activo' && Number(confirmado.tamano) === contenido.length, 'Confirmar la subida verifica el archivo en R2 (HeadObject) y lo marca activo');
+
+  const listado1 = await tx((t) => S.listarSoportes(t, { documento_modulo: 'OrdenVenta', documento_id: 'verif-doc-1' }));
+  ok(listado1.some((s) => s.id === id), 'El soporte confirmado aparece al listar los soportes del documento');
+
+  const { url } = await tx((t) => S.urlDescarga(t, id, { descargar: true }));
+  ok(typeof url === 'string' && url.startsWith('https://'), 'Genera una URL firmada de descarga');
+
+  await tx((t) => S.eliminarSoporte(t, admin, id, 'prueba automática'));
+  const listado2 = await tx((t) => S.listarSoportes(t, { documento_modulo: 'OrdenVenta', documento_id: 'verif-doc-1' }));
+  ok(!listado2.some((s) => s.id === id), 'Tras eliminarlo, deja de aparecer en el listado (borrado lógico)');
+  await falla(() => tx((t) => S.eliminarSoporte(t, admin, id, 'segundo intento')), /no existe o ya fue eliminado/, 'No se puede eliminar dos veces el mismo soporte');
+}
+
+async function pruebasConciliacion() {
+  console.log('\n[B6] Conciliación Bancaria');
+  const OP = await import('../api/_lib/fin/operaciones.js');
+  const CN = await import('../api/_lib/fin/conciliacion.js');
+  const hoyF = core.hoyColombia();
+  const banco = await tx((t) => C.crearCuenta(t, admin, { tipo: 'banco', nombre: 'Banco B6', saldo_inicial: 1000000, saldo_inicial_confirmado: true, aplica_gmf: false }));
+
+  await tx((t) => OP.ingreso(t, contador, { cuenta_id: banco.id, fecha: hoyF, valor: 300000, categoria: 'otros_ingresos', concepto: 'Consignación cliente', idempotency_key: key('ing') }));
+  await tx((t) => OP.egreso(t, contador, { cuenta_id: banco.id, fecha: hoyF, valor: 100000, categoria: 'gasto_general', concepto: 'Pago de servicios', idempotency_key: key('egr') }));
+  const saldoTrasMovs = await tx((t) => core.saldoCuenta(t, banco.id));
+  ok(saldoTrasMovs === 1200000, `Saldo del sistema tras los dos movimientos: ${saldoTrasMovs} (esperado 1.200.000)`);
+
+  await falla(() => tx((t) => CN.crearConciliacion(t, contador, { cuenta_id: banco.id, periodo_anio: 2026, periodo_mes: 13, saldo_extracto: 1200000 })),
+    /Período inválido/, 'Rechaza un mes de período inválido (13)');
+  // El extracto real del banco sí incluye la cuota de manejo (aún no registrada en el sistema): 1.185.000.
+  const concil = await tx((t) => CN.crearConciliacion(t, contador, { cuenta_id: banco.id, periodo_anio: 2026, periodo_mes: 9, fecha_corte: hoyF, saldo_extracto: 1185000 }));
+  await falla(() => tx((t) => CN.crearConciliacion(t, contador, { cuenta_id: banco.id, periodo_anio: 2026, periodo_mes: 9, saldo_extracto: 1200000 })),
+    /ya hay una conciliación en proceso/i, 'No se abre dos veces la misma cuenta y período mientras una siga en proceso');
+
+  const imp = await tx((t) => CN.importarLineas(t, contador, concil.id, [
+    { fecha: hoyF, descripcion: 'Consignación cliente', valor: 300000, naturaleza: 'entrada' },
+    { fecha: hoyF, descripcion: 'Pago de servicios', valor: 100000, naturaleza: 'salida' },
+    { fecha: hoyF, descripcion: 'Cuota de manejo no registrada', valor: 15000, naturaleza: 'salida' },
+  ]));
+  ok(imp.insertadas === 3, 'Importa las 3 líneas del extracto de prueba');
+
+  const sug = await tx((t) => CN.sugerirCoincidencias(t, concil.id));
+  ok(sug.sugeridas === 2, `Sugiere coincidencia automática para las 2 líneas con movimiento exacto (obtenido: ${sug.sugeridas})`);
+
+  const detalleTrasSugerir = await tx((t) => CN.detalleConciliacion(t, concil.id));
+  const lConsig = detalleTrasSugerir.lineas.find((l) => l.descripcion === 'Consignación cliente');
+  const lServicios = detalleTrasSugerir.lineas.find((l) => l.descripcion === 'Pago de servicios');
+  const lCuota = detalleTrasSugerir.lineas.find((l) => l.descripcion === 'Cuota de manejo no registrada');
+  ok(!!lConsig.movimiento_id, 'La línea de la consignación queda con un movimiento sugerido');
+  ok(!lCuota.movimiento_id, 'La línea sin equivalente en el sistema no recibe sugerencia');
+
+  await falla(() => tx((t) => CN.cerrarConciliacion(t, contador, concil.id)), /sin conciliar ni marcar/, 'No se cierra con líneas pendientes');
+
+  const confirmadaConsig = await tx((t) => CN.confirmarLinea(t, contador, lConsig.id, null));
+  await falla(() => tx((t) => CN.confirmarLinea(t, contador, lServicios.id, confirmadaConsig.movimiento_id)), /otra cuenta|ya quedó conciliado/, 'No se puede confirmar dos líneas contra el mismo movimiento');
+  await tx((t) => CN.confirmarLinea(t, contador, lServicios.id, null));
+  await tx((t) => CN.ignorarLinea(t, contador, lCuota.id, 'Cuota de manejo pendiente de registrar en Tesorería'));
+
+  const cerrada = await tx((t) => CN.cerrarConciliacion(t, contador, concil.id));
+  ok(cerrada.estado === 'con_diferencias' && cerrada.diferencia === -15000,
+    `Cierra con diferencia de -15.000 por la cuota de manejo no registrada (estado: ${cerrada.estado}, diferencia: ${cerrada.diferencia})`);
+
+  await falla(() => tx((t) => CN.ignorarLinea(t, contador, lCuota.id, 'de nuevo')), /ya está cerrada/, 'No se modifican líneas de una conciliación ya cerrada');
+  await falla(() => tx((t) => CN.reabrirConciliacion(t, contador, concil.id, 'motivo')), /no tiene permiso/, 'Solo un administrador puede reabrir una conciliación cerrada');
+  await falla(() => tx((t) => CN.reabrirConciliacion(t, admin, concil.id, 'x')), /obligatorio/, 'Reabrir exige un motivo con sentido (mínimo 5 caracteres)');
+  const reabierta = await tx((t) => CN.reabrirConciliacion(t, admin, concil.id, 'Se registrará la cuota de manejo faltante'));
+  ok(reabierta.estado === 'en_proceso' && reabierta.diferencia === null, 'Reabrir vuelve la conciliación a en_proceso y limpia el resultado del cierre anterior');
+
+  const sinConciliarTrasCierre = await tx((t) => CN.movimientosSinConciliar(t, banco.id));
+  ok(!sinConciliarTrasCierre.some((m) => m.id === confirmadaConsig.movimiento_id), 'Un movimiento ya conciliado no vuelve a aparecer como pendiente de conciliar');
+}
+
+async function pruebasReportes() {
+  console.log('\n[B7] Motor de reportes (lectura genérica de documentos)');
+  const hoyF = core.hoyColombia();
+  const caja = await tx((t) => C.crearCuenta(t, admin, { tipo: 'caja', nombre: 'Caja B7', saldo_inicial: 500000 }));
+  const OP = await import('../api/_lib/fin/operaciones.js');
+  await tx((t) => OP.ingreso(t, contador, { cuenta_id: caja.id, fecha: hoyF, valor: 70000, categoria: 'otros_ingresos', concepto: 'Prueba B7', idempotency_key: key('rep') }));
+
+  const todos = await tx((t) => C.listarDocumentos(t, {}));
+  ok(todos.length > 0, `Sin filtros, lista todos los documentos del esquema (${todos.length})`);
+  const soloCIN = await tx((t) => C.listarDocumentos(t, { tipo: 'CIN' }));
+  ok(soloCIN.length > 0 && soloCIN.every((d) => d.tipo === 'CIN'), 'Filtra por tipo de documento (CIN)');
+  const porFecha = await tx((t) => C.listarDocumentos(t, { tipo: 'CIN', desde: hoyF, hasta: hoyF }));
+  ok(porFecha.some((d) => d.concepto === 'Prueba B7'), 'Filtra por rango de fechas y encuentra el documento recién creado');
+  const fueraDeRango = await tx((t) => C.listarDocumentos(t, { tipo: 'CIN', desde: '1900-01-01', hasta: '1900-01-02' }));
+  ok(fueraDeRango.length === 0, 'Un rango de fechas sin documentos devuelve una lista vacía');
+}
+
+async function pruebasGerencial() {
+  console.log('\n[C2] Indicadores y Resumen Gerencial');
+  const G = await import('../api/_lib/fin/gerencial.js');
+  const hoyF = core.hoyColombia();
+  const hace10 = new Date(); hace10.setDate(hace10.getDate() - 10);
+  const fechaVencida = hace10.toISOString().slice(0, 10);
+
+  const cxc = await tx(async (t) => {
+    const op = await nuevaOperacion(t, admin, 'venta');
+    return core.crearObligacion(t, admin, op, { naturaleza: 'por_cobrar', tercero_id: 'ger-cli-1', tercero_nombre: 'Cliente Gerencial',
+      documento_modulo: 'OrdenVenta', documento_id: 'ger-venta-1', documento_numero: 'FV-GER-0001', fecha: fechaVencida,
+      fecha_vencimiento: fechaVencida, valor_original: 500000, origen_clave: `ger-cxc:${op.id}` });
+  });
+  const cxp = await tx(async (t) => {
+    const op = await nuevaOperacion(t, admin, 'compra');
+    return core.crearObligacion(t, admin, op, { naturaleza: 'por_pagar', tercero_id: 'ger-prov-1', tercero_nombre: 'Proveedor Gerencial',
+      documento_modulo: 'OrdenCompra', documento_id: 'ger-compra-1', documento_numero: 'CP-GER-0001', fecha: fechaVencida,
+      fecha_vencimiento: fechaVencida, valor_original: 300000, origen_clave: `ger-cxp:${op.id}` });
+  });
+
+  const resumen = await tx((t) => G.resumenGerencial(t));
+  ok(resumen.cartera.vencida >= 500000, `El resumen refleja la cartera vencida recién creada (vencida: ${resumen.cartera.vencida})`);
+  ok(resumen.obligaciones.vencida >= 300000, `El resumen refleja la obligación vencida recién creada (vencida: ${resumen.obligaciones.vencida})`);
+  ok(resumen.alertas.some((a) => a.tipo === 'cartera_vencida'), 'Genera una alerta de cartera vencida');
+  ok(resumen.alertas.some((a) => a.tipo === 'obligaciones_vencidas'), 'Genera una alerta de obligaciones vencidas');
+  ok(typeof resumen.posicion_neta === 'number', 'La posición neta es un número calculado (disponible + cartera − obligaciones)');
+
+  const flujo = await tx((t) => G.flujoCajaProyectado(t, { semanas: 4 }));
+  ok(flujo.semanas.length === 4, 'El flujo de caja proyectado devuelve el número de semanas solicitado');
+  ok(flujo.sin_fecha_vencimiento && typeof flujo.saldo_inicial === 'number', 'El flujo de caja informa el saldo inicial y cuántas cuentas quedan sin fecha de vencimiento');
+  ok(flujo.semanas[0].desde > fechaVencida, 'La primera semana proyectada empieza hoy: una cuenta ya vencida (10 días atrás) queda fuera de cualquier semana, nunca se cuenta como entrada futura');
+
+  const rentabilidad = await tx((t) => G.rentabilidadClientes(t));
+  const filaCliente = rentabilidad.find((r) => r.tercero_id === 'ger-cli-1');
+  ok(filaCliente && filaCliente.facturado === 500000 && filaCliente.pendiente === 500000, 'Rentabilidad de clientes suma correctamente lo facturado y lo pendiente por cliente');
+
+  await falla(() => tx((t) => G.notificarTelegram(t, operario, 'prueba')), /no tiene permiso/, 'Un operario no puede enviar notificaciones por Telegram (no llega a intentar el envío real)');
+}
+
 async function main() {
   console.log(`Esquema temporal: ${ESQUEMA} (se elimina al terminar)`);
   try {
@@ -435,6 +581,10 @@ async function main() {
     await pruebasOperaciones();
     await pruebasComerciales();
     await pruebasIntegraciones();
+    await pruebasSoportes();
+    await pruebasConciliacion();
+    await pruebasReportes();
+    await pruebasGerencial();
     const extra = process.env.VERIF_EXTRA ? await import(process.env.VERIF_EXTRA) : null;
     if (extra?.default) await extra.default(util);
   } catch (e) {

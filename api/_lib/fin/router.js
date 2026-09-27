@@ -8,6 +8,8 @@ import * as S from './soportes.js';
 import { OPERACIONES } from './operaciones.js';
 import * as V from './comerciales.js';
 import * as I from './integraciones.js';
+import * as CN from './conciliacion.js';
+import * as G from './gerencial.js';
 
 const LECTURA = ['admin', 'contador'];
 
@@ -45,6 +47,7 @@ export async function handleFin(req, segs, auth) {
   }
 
   // ── Documentos, vínculos y trazabilidad ──
+  if (a === 'documentos' && !b && method === 'GET') return withTx((tx) => C.listarDocumentos(tx, { tipo: q.tipo, desde: q.desde, hasta: q.hasta }));
   if (a === 'documentos' && b && method === 'GET') return withTx((tx) => C.obtenerDocumento(tx, b));
   if (a === 'vinculos' && method === 'GET') return withTx((tx) => C.listarVinculos(tx, q.modulo, q.id));
   if (a === 'relacionados' && method === 'GET') {
@@ -100,6 +103,31 @@ export async function handleFin(req, segs, auth) {
   }
   if (a === 'almacen' && b === 'uso' && method === 'GET') return withTx((tx) => S.usoAlmacen(tx));
 
+  // ── Conciliación bancaria (B6) ──
+  if (a === 'conciliacion') {
+    const [, id, sub, lineaId, accionLinea] = segs;
+    if (!id && method === 'GET') return withTx((tx) => CN.listarConciliaciones(tx, { cuenta_id: q.cuenta_id }));
+    if (!id && method === 'POST') return withTx((tx) => CN.crearConciliacion(tx, ctx, body));
+    if (id && !sub && method === 'GET') return withTx((tx) => CN.detalleConciliacion(tx, id));
+    if (id && sub === 'importar' && method === 'POST') return withTx((tx) => CN.importarLineas(tx, ctx, id, body.lineas));
+    if (id && sub === 'sugerir' && method === 'POST') return withTx((tx) => CN.sugerirCoincidencias(tx, id));
+    if (id && sub === 'sin-conciliar' && method === 'GET') return withTx(async (tx) => {
+      const d = await CN.detalleConciliacion(tx, id);
+      return CN.movimientosSinConciliar(tx, d.cuenta_id, { desde: q.desde, hasta: q.hasta });
+    });
+    if (id && sub === 'cerrar' && method === 'POST') return withTx((tx) => CN.cerrarConciliacion(tx, ctx, id));
+    if (id && sub === 'reabrir' && method === 'POST') return withTx((tx) => CN.reabrirConciliacion(tx, ctx, id, body.motivo));
+    if (id && sub === 'lineas' && lineaId && accionLinea === 'confirmar' && method === 'POST') {
+      return withTx((tx) => CN.confirmarLinea(tx, ctx, lineaId, body.movimiento_id));
+    }
+    if (id && sub === 'lineas' && lineaId && accionLinea === 'desconciliar' && method === 'POST') {
+      return withTx((tx) => CN.desconciliarLinea(tx, ctx, lineaId));
+    }
+    if (id && sub === 'lineas' && lineaId && accionLinea === 'ignorar' && method === 'POST') {
+      return withTx((tx) => CN.ignorarLinea(tx, ctx, lineaId, body.motivo));
+    }
+  }
+
   // ── Bitácora, períodos y parámetros ──
   if (a === 'auditoria' && method === 'GET') return withTx((tx) => C.listarAuditoria(tx, ctx, q));
   if (a === 'periodos') {
@@ -107,9 +135,36 @@ export async function handleFin(req, segs, auth) {
     if (b === 'cerrar' && method === 'POST') return withTx((tx) => C.cerrarPeriodo(tx, ctx, body));
     if (b && c === 'reabrir' && method === 'POST') return withTx((tx) => C.reabrirPeriodo(tx, ctx, b, body.motivo));
   }
-  if (a === 'parametros' && method === 'GET') {
-    return withTx(async (tx) => (await tx.query('SELECT clave, valor, descripcion FROM fin_parametros ORDER BY clave')).rows);
+  if (a === 'parametros') {
+    if (!b && method === 'GET') return withTx((tx) => C.listarParametros(tx));
+    if (b && method === 'PUT') return withTx((tx) => C.actualizarParametro(tx, ctx, b, body.valor));
   }
+
+  // ── Configuración Contable (B7) ──
+  if (a === 'parametrizacion-contable') {
+    if (!b && method === 'GET') return withTx((tx) => C.listarParametrizacionContable(tx));
+    if (b && method === 'PUT') return withTx((tx) => C.asignarCuentaContable(tx, ctx, b, body.cuenta_contable_id));
+  }
+  if (a === 'terceros-config') {
+    if (!b && method === 'GET') return withTx((tx) => C.listarTercerosConfig(tx));
+    if (b && method === 'PUT') return withTx((tx) => C.configurarTercero(tx, ctx, b, body));
+  }
+
+  // ── Reportes (C1): movimientos sin conciliar, sin necesidad de una conciliación abierta ──
+  if (a === 'movimientos-sin-conciliar' && method === 'GET') {
+    return withTx((tx) => CN.movimientosSinConciliar(tx, q.cuenta_id, { desde: q.desde, hasta: q.hasta }));
+  }
+
+  // ── Indicadores y Resumen Gerencial (C2, solo lectura salvo notificar) ──
+  if (a === 'gerencial' && b === 'resumen' && method === 'GET') return withTx((tx) => G.resumenGerencial(tx));
+  if (a === 'gerencial' && b === 'flujo-caja' && method === 'GET') return withTx((tx) => G.flujoCajaProyectado(tx, { semanas: q.semanas ? Number(q.semanas) : undefined }));
+  if (a === 'gerencial' && b === 'rentabilidad-clientes' && method === 'GET') return withTx((tx) => G.rentabilidadClientes(tx));
+  if (a === 'gerencial' && b === 'notificar' && method === 'POST') return withTx((tx) => G.notificarTelegram(tx, ctx, body.texto));
+
+  // ── Saldos y Balances, Impuestos y Retenciones (B7, solo lectura) ──
+  if (a === 'saldos-cuenta-rol' && method === 'GET') return withTx((tx) => C.saldosPorCuentaRol(tx, { desde: q.desde, hasta: q.hasta }));
+  if (a === 'retenciones' && method === 'GET') return withTx((tx) => C.listarRetenciones(tx, { rol: q.rol, tipo: q.tipo, desde: q.desde, hasta: q.hasta }));
+
   if (a === 'yo' && method === 'GET') return ctx;
 
   throw new HttpError(404, 'Ruta de Finanzas no encontrada');

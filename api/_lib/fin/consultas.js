@@ -139,6 +139,15 @@ export async function detalleObligacion(tx, id) {
 
 // ── Documentos, vínculos y operaciones ──────────────────────────────────────
 
+// Lectura genérica para reportes (B7): documentos del motor por tipo y rango de fechas.
+export async function listarDocumentos(tx, { tipo, desde, hasta } = {}) {
+  const { rows } = await tx.query(
+    `SELECT * FROM fin_documentos
+     WHERE ($1::text IS NULL OR tipo = $1) AND ($2::date IS NULL OR fecha >= $2) AND ($3::date IS NULL OR fecha <= $3)
+     ORDER BY fecha, created_date`, [tipo || null, desde || null, hasta || null]);
+  return rows.map((d) => ({ ...d, valor: r2(d.valor) }));
+}
+
 export async function obtenerDocumento(tx, numero) {
   const { rows } = await tx.query(`SELECT * FROM fin_documentos WHERE numero = $1`, [numero]);
   if (!rows[0]) throw new HttpError(404, `El documento ${numero} no existe`);
@@ -229,4 +238,87 @@ export async function reabrirPeriodo(tx, ctx, id, motivo) {
 
 export async function listarPeriodos(tx) {
   return (await tx.query(`SELECT * FROM fin_periodos ORDER BY desde DESC`)).rows;
+}
+
+// ── Configuración Contable (B7): cuentas conceptuales, parámetros y condiciones por tercero.
+// No exige un plan de cuentas real todavía (decisión del usuario); solo deja el código o
+// nombre de la futura cuenta contable guardado por cada cuenta_rol, listo para cuando exista.
+
+export async function listarParametrizacionContable(tx) {
+  const { rows } = await tx.query(
+    `SELECT DISTINCT cuenta_rol FROM fin_mov_contables
+     UNION SELECT cuenta_rol FROM fin_parametrizacion_contable ORDER BY cuenta_rol`);
+  const { rows: config } = await tx.query(`SELECT * FROM fin_parametrizacion_contable`);
+  const porRol = Object.fromEntries(config.map((c) => [c.cuenta_rol, c]));
+  return rows.map((r) => ({ cuenta_rol: r.cuenta_rol, cuenta_contable_id: porRol[r.cuenta_rol]?.cuenta_contable_id || null,
+    updated_date: porRol[r.cuenta_rol]?.updated_date || null }));
+}
+
+export async function asignarCuentaContable(tx, ctx, cuenta_rol, cuenta_contable_id) {
+  requerirRol(ctx, ['admin'], 'configurar la parametrización contable');
+  if (!cuenta_rol) throw new HttpError(400, 'Falta la cuenta conceptual (cuenta_rol)');
+  const { rows } = await tx.query(
+    `INSERT INTO fin_parametrizacion_contable (cuenta_rol, cuenta_contable_id, updated_date) VALUES ($1,$2,now())
+     ON CONFLICT (cuenta_rol) DO UPDATE SET cuenta_contable_id = EXCLUDED.cuenta_contable_id, updated_date = now() RETURNING *`,
+    [cuenta_rol, cuenta_contable_id || null]);
+  await auditar(tx, ctx, { accion: 'parametrizacion:asignar', entidad: 'fin_parametrizacion_contable', entidad_id: cuenta_rol, despues: rows[0] });
+  return rows[0];
+}
+
+export async function listarParametros(tx) {
+  return (await tx.query(`SELECT clave, valor, descripcion FROM fin_parametros ORDER BY clave`)).rows;
+}
+
+export async function actualizarParametro(tx, ctx, clave, valor) {
+  requerirRol(ctx, ['admin'], 'configurar parámetros financieros');
+  const { rows } = await tx.query(
+    `UPDATE fin_parametros SET valor = $2::jsonb, updated_date = now() WHERE clave = $1 RETURNING *`, [clave, JSON.stringify(valor)]);
+  if (!rows[0]) throw new HttpError(404, 'El parámetro no existe');
+  await auditar(tx, ctx, { accion: 'parametro:actualizar', entidad: 'fin_parametros', entidad_id: clave, despues: rows[0] });
+  return rows[0];
+}
+
+export async function configurarTercero(tx, ctx, tercero_id, { plazo_dias, cupo_credito, bloqueo_automatico }) {
+  requerirRol(ctx, ['admin'], 'configurar condiciones de cartera por tercero');
+  if (!tercero_id) throw new HttpError(400, 'Falta el tercero');
+  const { rows } = await tx.query(
+    `INSERT INTO fin_terceros_config (tercero_id, plazo_dias, cupo_credito, bloqueo_automatico, updated_date, updated_by)
+     VALUES ($1,$2,$3,$4,now(),$5)
+     ON CONFLICT (tercero_id) DO UPDATE SET plazo_dias = EXCLUDED.plazo_dias, cupo_credito = EXCLUDED.cupo_credito,
+       bloqueo_automatico = EXCLUDED.bloqueo_automatico, updated_date = now(), updated_by = EXCLUDED.updated_by
+     RETURNING *`,
+    [tercero_id, plazo_dias || null, cupo_credito || null, !!bloqueo_automatico, ctx.usuario]);
+  await auditar(tx, ctx, { accion: 'tercero_config:actualizar', entidad: 'fin_terceros_config', entidad_id: tercero_id, despues: rows[0] });
+  return rows[0];
+}
+
+export async function listarTercerosConfig(tx) {
+  return (await tx.query(`SELECT * FROM fin_terceros_config ORDER BY updated_date DESC`)).rows;
+}
+
+// ── Saldos y Balances (B7): balance de comprobación por cuenta conceptual (cuenta_rol),
+// mientras no exista un plan de cuentas real. Consulta fin_mov_contables, que ya generan
+// todas las operaciones; no duplica información (requerimiento 6.22).
+
+export async function saldosPorCuentaRol(tx, { desde, hasta } = {}) {
+  const { rows } = await tx.query(
+    `SELECT cuenta_rol,
+            COALESCE(SUM(valor) FILTER (WHERE naturaleza = 'debito'), 0) AS debitos,
+            COALESCE(SUM(valor) FILTER (WHERE naturaleza = 'credito'), 0) AS creditos
+     FROM fin_mov_contables
+     WHERE estado = 'confirmado' AND ($1::date IS NULL OR fecha >= $1) AND ($2::date IS NULL OR fecha <= $2)
+     GROUP BY cuenta_rol ORDER BY cuenta_rol`, [desde || null, hasta || null]);
+  return rows.map((r) => ({ cuenta_rol: r.cuenta_rol, debitos: r2(r.debitos), creditos: r2(r.creditos), saldo: r2(Number(r.debitos) - Number(r.creditos)) }));
+}
+
+// ── Impuestos y Retenciones (B7, solo control): consulta fin_retenciones, que ya genera
+// el motor en cobros y pagos. No duplica lo que existe en Compras y Ventas.
+
+export async function listarRetenciones(tx, { rol, tipo, desde, hasta } = {}) {
+  const { rows } = await tx.query(
+    `SELECT * FROM fin_retenciones
+     WHERE ($1::text IS NULL OR rol = $1) AND ($2::text IS NULL OR tipo = $2)
+       AND ($3::date IS NULL OR fecha >= $3) AND ($4::date IS NULL OR fecha <= $4)
+     ORDER BY fecha DESC`, [rol || null, tipo || null, desde || null, hasta || null]);
+  return rows.map((r) => ({ ...r, base: r.base != null ? r2(r.base) : null, valor: r2(r.valor) }));
 }

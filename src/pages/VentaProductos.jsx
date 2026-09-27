@@ -11,7 +11,7 @@ import { Plus, Edit, Ban, Paperclip, FileText, Eye, Search, RotateCcw } from "lu
 import { anularDocumentoComercial } from "@/api/finanzas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import DocumentoComercialForm from "../components/common/DocumentoComercialForm";
-import SoporteViewer from "../components/common/SoporteViewer";
+import DocumentosSoportesModal from "../components/finanzas/DocumentosSoportesModal";
 import CuentaCobroView from "../components/ventas/CuentaCobroView";
 import RemisionView from "../components/ventas/RemisionView";
 
@@ -38,8 +38,7 @@ export default function VentaProductos() {
     const [showForm, setShowForm] = useState(false);
     const [editingOrder, setEditingOrder] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [showSoporteViewer, setShowSoporteViewer] = useState(false);
-    const [soportesToShow, setSoportesToShow] = useState([]);
+    const [showDocumentosSoportes, setShowDocumentosSoportes] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [viewMode, setViewMode] = useState(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
@@ -135,8 +134,7 @@ export default function VentaProductos() {
 
     const handleShowSoportes = (orden) => {
         setSelectedOrder(orden);
-        setSoportesToShow(orden.soportes || []);
-        setShowSoporteViewer(true);
+        setShowDocumentosSoportes(true);
     };
 
     const handleShowDetails = (orden) => {
@@ -153,7 +151,7 @@ export default function VentaProductos() {
     const handlePrint = () => window.print();
     const getTotalGeneral = () => filteredOrdenes.reduce((sum, orden) => sum + (orden.total || 0), 0);
 
-    const tableHeaders = ["Documento #", "Fecha", "Cliente", "Valor Total", "Estado", "Soportes", "Acciones"];
+    const tableHeaders = ["Documento #", "Fecha", "Cliente", "Valor Total", "Estado", "Acciones"];
     const renderRow = (orden) => (
         <tr key={orden.id}>
             <td>{orden.prefijo_documento}-{orden.numero_documento}</td>
@@ -161,7 +159,6 @@ export default function VentaProductos() {
             <td>{getClienteNombre(orden.cliente_id)}</td>
             <td>{formatCurrency(orden.total)}</td>
             <td><Badge className={(orden.anulado || orden.estado_documento === 'anulado') ? 'bg-red-100 text-red-700' : ''}>{((orden.estado_documento || orden.estado || '') + '').toUpperCase() || '—'}</Badge></td>
-            <td>{orden.soportes && orden.soportes.length > 0 ? <span className="text-emerald-600 font-medium">{orden.soportes.length} archivo(s)</span> : <span className="text-gray-400">Sin soportes</span>}</td>
             <td>
                 <div className="flex space-x-1">
                     {(orden.tipo_documento === 'cuenta_cobro' || orden.tipo_documento === 'remision') &&
@@ -170,7 +167,7 @@ export default function VentaProductos() {
                         </Button>
                     }
                     <Button variant="ghost" size="icon" onClick={() => handleShowDetails(orden)} title="Ver detalle"><Eye className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleShowSoportes(orden)} title="Ver Soportes" disabled={!orden.soportes || orden.soportes.length === 0}><Paperclip className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleShowSoportes(orden)} title="Documentos y Soportes"><Paperclip className="w-4 h-4" /></Button>
                     {!(orden.anulado || orden.estado_documento === 'anulado') && <Button variant="outline" size="sm" onClick={() => handleOpenModal(orden)} title="Editar"><Edit className="w-4 h-4"/></Button>}
                     {!(orden.anulado || orden.estado_documento === 'anulado') && <Button variant="destructive" size="sm" onClick={() => handleAnular(orden)} title="Anular"><Ban className="w-4 h-4"/></Button>}
                 </div>
@@ -253,14 +250,12 @@ export default function VentaProductos() {
                     documentoTitulo="Documento de Venta de Productos"
                 />
             )}
-             {showSoporteViewer && (
-                <SoporteViewer 
-                    open={showSoporteViewer}
-                    onOpenChange={setShowSoporteViewer}
-                    soportes={soportesToShow}
-                    orden={selectedOrder}
-                />
-            )}
+            <DocumentosSoportesModal
+                open={showDocumentosSoportes}
+                onClose={() => setShowDocumentosSoportes(false)}
+                modulo="OrdenVenta"
+                documento={selectedOrder}
+            />
             <Dialog open={!!viewMode} onOpenChange={() => setViewMode(null)}>
                 <DialogContent className="max-w-4xl p-0">
                     {renderPrintView()}

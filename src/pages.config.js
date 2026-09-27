@@ -139,6 +139,34 @@ import ReportesAreaCuentasPagar from './pages/ReportesAreaCuentasPagar';
 import ReportesAreaInventarios from './pages/ReportesAreaInventarios';
 import ReportesAreaProduccion from './pages/ReportesAreaProduccion';
 import ReportesAreaComercial from './pages/ReportesAreaComercial';
+import ReportesAreaGenerales from './pages/ReportesAreaGenerales';
+import ReportesAreaCompras from './pages/ReportesAreaCompras';
+import ReportesAreaVentas from './pages/ReportesAreaVentas';
+import ReportesAreaPintura from './pages/ReportesAreaPintura';
+import ReportesAreaContabilidad from './pages/ReportesAreaContabilidad';
+import ReportesAreaClientesProveedores from './pages/ReportesAreaClientesProveedores';
+import ReportesAreaIndicadores from './pages/ReportesAreaIndicadores';
+import ReporteMovimientoCuentas from './pages/ReporteMovimientoCuentas';
+import ReporteCartera from './pages/ReporteCartera';
+import ReporteVentasPeriodo from './pages/ReporteVentasPeriodo';
+import ReporteComprasPeriodo from './pages/ReporteComprasPeriodo';
+import ReporteResumenDiario from './pages/ReporteResumenDiario';
+import ContabilidadConfiguracion from './pages/ContabilidadConfiguracion';
+import ContabilidadCierres from './pages/ContabilidadCierres';
+import ContabilidadSaldosBalances from './pages/ContabilidadSaldosBalances';
+import ContabilidadImpuestosRetenciones from './pages/ContabilidadImpuestosRetenciones';
+import ReporteDocumentosPorTipo from './pages/ReporteDocumentosPorTipo';
+import ReporteEstadoCuentaTercero from './pages/ReporteEstadoCuentaTercero';
+import ReporteMovimientosSinConciliar from './pages/ReporteMovimientosSinConciliar';
+import ReporteVentasPorProducto from './pages/ReporteVentasPorProducto';
+import ReporteComprasPorInsumo from './pages/ReporteComprasPorInsumo';
+import ReporteInventarioValorizado from './pages/ReporteInventarioValorizado';
+import ReporteExistenciasEnProceso from './pages/ReporteExistenciasEnProceso';
+import ReporteEstadoLotes from './pages/ReporteEstadoLotes';
+import ReportePedidosPintura from './pages/ReportePedidosPintura';
+import ReporteCostoLotes from './pages/ReporteCostoLotes';
+import PanelGerencial from './pages/PanelGerencial';
+import ReporteRentabilidadClientes from './pages/ReporteRentabilidadClientes';
 import ProcesosExternos from './pages/ProcesosExternos';
 import CatalogoTiposProceso from './pages/CatalogoTiposProceso';
 import InventarioProcesosExternos from './pages/InventarioProcesosExternos';
@@ -238,6 +266,34 @@ export const PAGES = {
     "ReportesAreaInventarios": ReportesAreaInventarios,
     "ReportesAreaProduccion": ReportesAreaProduccion,
     "ReportesAreaComercial": ReportesAreaComercial,
+    "ReportesAreaGenerales": ReportesAreaGenerales,
+    "ReportesAreaCompras": ReportesAreaCompras,
+    "ReportesAreaVentas": ReportesAreaVentas,
+    "ReportesAreaPintura": ReportesAreaPintura,
+    "ReportesAreaContabilidad": ReportesAreaContabilidad,
+    "ReportesAreaClientesProveedores": ReportesAreaClientesProveedores,
+    "ReportesAreaIndicadores": ReportesAreaIndicadores,
+    "ReporteMovimientoCuentas": ReporteMovimientoCuentas,
+    "ReporteCartera": ReporteCartera,
+    "ReporteVentasPeriodo": ReporteVentasPeriodo,
+    "ReporteComprasPeriodo": ReporteComprasPeriodo,
+    "ReporteResumenDiario": ReporteResumenDiario,
+    "ContabilidadConfiguracion": ContabilidadConfiguracion,
+    "ContabilidadCierres": ContabilidadCierres,
+    "ContabilidadSaldosBalances": ContabilidadSaldosBalances,
+    "ContabilidadImpuestosRetenciones": ContabilidadImpuestosRetenciones,
+    "ReporteDocumentosPorTipo": ReporteDocumentosPorTipo,
+    "ReporteEstadoCuentaTercero": ReporteEstadoCuentaTercero,
+    "ReporteMovimientosSinConciliar": ReporteMovimientosSinConciliar,
+    "ReporteVentasPorProducto": ReporteVentasPorProducto,
+    "ReporteComprasPorInsumo": ReporteComprasPorInsumo,
+    "ReporteInventarioValorizado": ReporteInventarioValorizado,
+    "ReporteExistenciasEnProceso": ReporteExistenciasEnProceso,
+    "ReporteEstadoLotes": ReporteEstadoLotes,
+    "ReportePedidosPintura": ReportePedidosPintura,
+    "ReporteCostoLotes": ReporteCostoLotes,
+    "PanelGerencial": PanelGerencial,
+    "ReporteRentabilidadClientes": ReporteRentabilidadClientes,
     "ProcesosExternos": ProcesosExternos,
     "CatalogoTiposProceso": CatalogoTiposProceso,
     "InventarioProcesosExternos": InventarioProcesosExternos,
