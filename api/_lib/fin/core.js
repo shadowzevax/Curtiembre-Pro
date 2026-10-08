@@ -131,31 +131,23 @@ export async function saldoCuenta(tx, cuenta_id) {
   return row ? r2(row.saldo) : null;
 }
 
-async function parametro(tx, clave, porDefecto) {
-  const row = await one(tx, `SELECT valor FROM fin_parametros WHERE clave = $1`, [clave]);
-  return row ? row.valor : porDefecto;
-}
-
 const naturalezaInversa = (n) => (n === 'entrada' ? 'salida' : 'entrada');
 
 // Registra un movimiento bloqueando la cuenta (SELECT … FOR UPDATE): dos salidas simultáneas
 // sobre la misma cuenta se procesan una después de la otra, y la segunda ve el saldo real.
-// En bancos con GMF, agrega el 4x1000 como movimiento propio con su registro contable.
+// El GMF (4x1000) NUNCA se calcula aquí: el ERP no lo inventa. Si el banco lo cobra, se registra
+// desde Conciliación Bancaria con el valor real del extracto (operación `banco`, tipo `gmf`).
 export async function registrarMovimiento(tx, ctx, op, { cuenta_id, fecha: f, naturaleza, clase, valor, concepto, tercero_id,
-  tercero_nombre, documento_id, origen_clave, estado = 'confirmado', reversa_de, sin_gmf = false, contable }) {
+  tercero_nombre, documento_id, origen_clave, estado = 'confirmado', reversa_de, contable }) {
   const cuenta = await one(tx, `SELECT * FROM fin_cuentas_dinero WHERE id = $1 FOR UPDATE`, [cuenta_id]);
   if (!cuenta) throw new HttpError(404, 'La cuenta de dinero no existe');
   if (cuenta.estado !== 'activa' && !reversa_de) throw new HttpError(409, `La cuenta "${cuenta.nombre}" está inactiva`);
   await verificarPeriodoAbierto(tx, f);
 
-  let gmf = 0;
-  if (naturaleza === 'salida' && cuenta.tipo === 'banco' && cuenta.aplica_gmf && clase !== 'gmf' && !sin_gmf) {
-    gmf = r2(valor * Number(await parametro(tx, 'gmf_tasa', 0.004)));
-  }
   if (naturaleza === 'salida' && !cuenta.permite_saldo_negativo) {
     const saldo = await saldoCuenta(tx, cuenta_id);
-    if (saldo < r2(valor + gmf)) {
-      throw new HttpError(409, `Saldo insuficiente en "${cuenta.nombre}": disponible ${saldo.toLocaleString('es-CO')}, se requieren ${r2(valor + gmf).toLocaleString('es-CO')}`);
+    if (saldo < valor) {
+      throw new HttpError(409, `Saldo insuficiente en "${cuenta.nombre}": disponible ${saldo.toLocaleString('es-CO')}, se requieren ${valor.toLocaleString('es-CO')}`);
     }
   }
 
@@ -169,20 +161,7 @@ export async function registrarMovimiento(tx, ctx, op, { cuenta_id, fecha: f, na
   );
   if (!mov) throw new HttpError(409, `Este movimiento ya fue registrado antes (${origen_clave}); no se duplica`);
 
-  let movGmf = null;
-  if (gmf > 0) {
-    movGmf = await one(tx,
-      `INSERT INTO fin_movimientos_dinero (id, cuenta_id, fecha, naturaleza, clase, valor, concepto, documento_id, operacion_id,
-         origen_clave, usuario)
-       VALUES ($1,$2,$3,'salida','gmf',$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [newId(), cuenta_id, f, gmf, `GMF 4x1000 · ${concepto || ''}`.trim(), documento_id || null, op.id, `${origen_clave}:gmf`, ctx.usuario]
-    );
-    await asiento(tx, ctx, op, [
-      { naturaleza: 'debito', cuenta_rol: 'gasto_gmf', valor: gmf },
-      { naturaleza: 'credito', cuenta_rol: 'disponible', cuenta_dinero_id: cuenta_id, valor: gmf },
-    ], { clave: `${origen_clave}:gmf`, fecha: f, concepto: 'GMF 4x1000', ...(contable || {}) });
-  }
-  return { movimiento: mov, gmf: movGmf, cuenta };
+  return { movimiento: mov, gmf: null, cuenta };
 }
 
 // ── Cuentas por cobrar / por pagar / anticipos ───────────────────────────────
@@ -328,7 +307,7 @@ export async function anularOperacion(tx, ctx, { operacion_id, motivo, idempoten
     await registrarMovimiento(tx, ctx, op, {
       cuenta_id: m.cuenta_id, fecha: hoy, naturaleza: naturalezaInversa(m.naturaleza), clase: m.clase, valor: r2(m.valor),
       concepto: `Anulación · ${m.concepto || ''}`, tercero_id: m.tercero_id, tercero_nombre: m.tercero_nombre,
-      documento_id: m.documento_id, origen_clave: `rev:${m.id}`, estado: 'reversa', reversa_de: m.id, sin_gmf: true, contable,
+      documento_id: m.documento_id, origen_clave: `rev:${m.id}`, estado: 'reversa', reversa_de: m.id, contable,
     });
     await tx.query(`UPDATE fin_movimientos_dinero SET estado = 'anulado' WHERE id = $1`, [m.id]);
   }

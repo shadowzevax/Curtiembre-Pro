@@ -12,15 +12,8 @@ import { fin, nuevaLlave, anularOperacionFinanciera } from '@/api/finanzas';
 import { Tercero } from '@/entities/all';
 import { useAuth } from '@/lib/AuthContext';
 import DocumentoFinancieroDialog, { FORMA_PAGO_LABEL } from './DocumentoFinancieroDialog';
-import { formatCOP, formatFecha, mensajeError, hoy, CATEGORIAS_INGRESO, CATEGORIAS_EGRESO } from './utils';
+import { formatCOP, formatFecha, mensajeError, hoy, CATEGORIAS_INGRESO, CATEGORIAS_EGRESO, FORMAS_PAGO } from './utils';
 
-const FORMAS_PAGO = [
-  { value: 'efectivo', label: 'Efectivo', tipoCuenta: 'caja' },
-  { value: 'transferencia', label: 'Transferencia bancaria', tipoCuenta: 'banco' },
-  { value: 'consignacion', label: 'Consignación', tipoCuenta: 'banco' },
-  { value: 'nequi', label: 'Nequi', tipoCuenta: 'otro_medio' },
-  { value: 'otro_medio', label: 'Otro medio de dinero', tipoCuenta: 'otro_medio' },
-];
 const ETIQUETA_CUENTA = { caja: 'Caja', banco: 'Cuenta bancaria', otro_medio: 'Medio de dinero' };
 
 const CONFIG = {

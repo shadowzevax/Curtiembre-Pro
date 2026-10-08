@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { fin } from '@/api/finanzas';
 import { formatCOP, formatFecha, mensajeError } from '../components/finanzas/utils';
 import { IngresoEgresoDialog, TransferenciaDialog } from '../components/finanzas/MovimientoDialogs';
+import BarraExportar from '../components/finanzas/BarraExportar';
 import IntegracionesPanel from '../components/finanzas/IntegracionesPanel';
 
 // Tesorería: centro de control de la posición financiera. No duplica movimientos: solo
@@ -39,6 +40,14 @@ export default function FinanzasTesoreria() {
     .filter((o) => o.fecha_vencimiento && o.fecha_vencimiento <= en7dias.toISOString().slice(0, 10))
     .sort((a, b) => (a.fecha_vencimiento || '').localeCompare(b.fecha_vencimiento || ''));
 
+  const TIPO = { caja: 'Caja', banco: 'Banco', otro_medio: 'Otro medio' };
+  const filasPosicion = [
+    ...cuentas.map((c) => ({ id: c.id, grupo: 'Disponible', detalle: `${TIPO[c.tipo] || c.tipo} · ${c.nombre}`, valor: c.saldo })),
+    { id: 'cxc', grupo: 'Por cobrar', detalle: `${pendientesCxc.length} documento(s) pendiente(s)`, valor: totalCxc },
+    { id: 'cxp', grupo: 'Por pagar', detalle: `${pendientesCxp.length} documento(s) pendiente(s)`, valor: -totalCxp },
+  ];
+  const hoyTxt = formatFecha(new Date().toISOString().slice(0, 10));
+
   return (
     <div className="p-6">
       <PageHeader title="Tesorería" description="Dinero disponible, por cobrar, por pagar y próximos movimientos" />
@@ -56,6 +65,12 @@ export default function FinanzasTesoreria() {
               <p className="text-xs text-slate-500 mt-1">Disponible + por cobrar − por pagar</p></div>
           </div>
 
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <span className="text-xs text-slate-500">Posición de tesorería (cuentas, por cobrar y por pagar):</span>
+            <BarraExportar titulo="Posición de Tesorería" filtrosTexto={`Corte al ${hoyTxt}`} filas={filasPosicion}
+              columnas={[{ key: 'grupo', label: 'Concepto' }, { key: 'detalle', label: 'Detalle', ancho: 3 }, { key: 'valor', label: 'Valor', align: 'right', render: formatCOP }]}
+              totales={{ detalle: 'POSICIÓN NETA (disponible + por cobrar − por pagar)', valor: disponibleTotal + totalCxc - totalCxp }} />
+          </div>
           <div className="flex gap-2 mb-4">
             <Button size="sm" onClick={() => setDialogo('ingreso')}>+ Ingreso</Button>
             <Button size="sm" variant="outline" onClick={() => setDialogo('egreso')}>− Egreso</Button>
@@ -75,7 +90,10 @@ export default function FinanzasTesoreria() {
               </table>
             </div>
             <div className="border rounded-lg overflow-hidden">
-              <div className="bg-slate-50 p-2 font-semibold text-sm">Próximos 7 días (cobros y pagos)</div>
+              <div className="bg-slate-50 p-2 font-semibold text-sm flex flex-wrap items-center justify-between gap-2">Próximos 7 días (cobros y pagos)
+                <BarraExportar titulo="Cobros y pagos de los próximos 7 días" filtrosTexto={`Vencimientos hasta el ${formatFecha(en7dias.toISOString().slice(0, 10))}`} filas={proximos}
+                  columnas={[{ key: 'fecha_vencimiento', label: 'Vence', render: formatFecha }, { key: 'tipo', label: 'Tipo' }, { key: 'documento_numero', label: 'Documento' },
+                    { key: 'tercero_nombre', label: 'Tercero', ancho: 2 }, { key: 'saldo', label: 'Saldo', align: 'right', render: formatCOP }]} /></div>
               <table className="w-full text-xs">
                 <tbody>
                   {proximos.map((o) => (

@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, ArrowRightLeft, Scale, Edit } from 'lucide-react';
 import { fin } from '@/api/finanzas';
-import { formatCOP, mensajeError, TIPO_CUENTA_LABEL_PLURAL } from './utils';
+import { formatCOP, formatFecha, hoy, mensajeError, TIPO_CUENTA_LABEL_PLURAL } from './utils';
 import CuentaFormDialog from './CuentaFormDialog';
+import BarraExportar from './BarraExportar';
 import LibroCuenta from './LibroCuenta';
 import { IngresoEgresoDialog, TransferenciaDialog, AjusteArqueoDialog } from './MovimientoDialogs';
 import { useAuth } from '@/lib/AuthContext';
@@ -79,13 +80,21 @@ export default function CuentaDineroModulo({ tipo, titulo, descripcion }) {
                   </div>
                 )}
               </div>
-              <LibroCuenta cuentaId={cuentaId} recargarSenal={recargarSenal} />
+              <LibroCuenta cuentaId={cuentaId} recargarSenal={recargarSenal} cuentaNombre={cuentaActual?.nombre} tituloModulo={`Relación de movimientos · ${titulo}`} />
             </>
           )}
         </TabsContent>
 
         <TabsContent value="config" className="pt-4">
-          <div className="flex justify-end mb-3">
+          <div className="flex flex-wrap justify-end gap-2 mb-3">
+            <BarraExportar titulo={`Relación de saldos · ${titulo}`} filtrosTexto={`Todas las cuentas · saldos al ${formatFecha(hoy())}`}
+              columnas={[{ key: 'nombre', label: 'Nombre', ancho: 2 },
+                { key: 'detalle', label: 'Detalle', ancho: 2 },
+                { key: 'saldo_inicial', label: 'Saldo inicial', align: 'right', render: formatCOP },
+                { key: 'saldo', label: 'Saldo actual', align: 'right', render: formatCOP },
+                { key: 'estado', label: 'Estado' }]}
+              filas={cuentas.map((c) => ({ ...c, detalle: [c.entidad, c.tipo_cuenta, c.numero].filter(Boolean).join(' · ') }))}
+              totales={{ saldo: cuentas.reduce((x, c) => x + (c.saldo || 0), 0) }} />
             {esAdmin && <Button size="sm" onClick={() => { setEditando(null); setDialogo('cuenta'); }}><Plus className="w-4 h-4 mr-1" /> Nueva</Button>}
           </div>
           <div className="border rounded-lg overflow-x-auto">

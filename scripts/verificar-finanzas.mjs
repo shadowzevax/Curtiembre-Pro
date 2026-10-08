@@ -85,7 +85,7 @@ async function pruebasBase() {
     const op = await nuevaOperacion(t, admin);
     await core.registrarMovimiento(t, admin, op, { cuenta_id: banco.id, fecha: core.hoyColombia(), naturaleza: 'salida', clase: 'egreso', valor: 10000, origen_clave: `p:${op.id}:b`, concepto: 'pago' });
   });
-  ok((await tx((t) => core.saldoCuenta(t, banco.id))) === 89960, 'Salida bancaria de 10.000 descuenta además el GMF de 40 (100.000 → 89.960)');
+  ok((await tx((t) => core.saldoCuenta(t, banco.id))) === 90000, 'Salida bancaria de 10.000 NO genera GMF automático (100.000 → 90.000): el GMF sale del extracto');
 
   // Operación a medias: si falla un paso, no queda nada.
   const antes = await tx((t) => core.saldoCuenta(t, caja.id));
@@ -136,7 +136,7 @@ async function pruebasBase() {
   await falla(() => tx((t) => core.anularOperacion(t, admin, { operacion_id: opId, motivo: '', idempotency_key: key('an') })), /motivo/, 'La anulación exige un motivo');
   await tx((t) => core.anularOperacion(t, admin, { operacion_id: opId, motivo: 'error de digitación', idempotency_key: key('an') }));
   const saldoTrasAnular = await tx((t) => core.saldoCuenta(t, banco.id));
-  ok(saldoTrasAnular === saldoAntesAnular + 1004, 'Anular devuelve el saldo, incluido el GMF (+1.004), sin borrar el movimiento original');
+  ok(saldoTrasAnular === saldoAntesAnular + 1000, 'Anular devuelve el saldo (+1.000), sin borrar el movimiento original');
   const cont = await tx((t) => t.query(`SELECT naturaleza, sum(valor)::numeric v FROM fin_mov_contables GROUP BY naturaleza`));
   ok(cont.rows.length === 2 && cont.rows[0].v === cont.rows[1].v, 'Tras anular, los registros contables siguen cuadrados (débitos = créditos)');
   await falla(() => tx((t) => core.anularOperacion(t, admin, { operacion_id: opId, motivo: 'otra vez', idempotency_key: key('an') })), /ya está anulada/, 'Una operación anulada no se puede anular dos veces');
@@ -225,8 +225,8 @@ async function pruebasOperaciones() {
       origen_clave: `c:${op.id}` });
   });
   const p1 = await tx((t) => OP.pago(t, contador, { obligacion_id: cxp.id, cuenta_id: banco.id, valor: 2000000, idempotency_key: key('p') }));
-  ok(p1.saldo_pendiente === 3000000 && (await saldo(banco.id)) === 7992000 && /^CE-/.test(p1.documento.numero),
-    `Compra 5M, pago 2M por banco → CxP 3M, banco −2.008.000 (incluye GMF) y ${p1.documento.numero}`);
+  ok(p1.saldo_pendiente === 3000000 && (await saldo(banco.id)) === 8000000 && /^CE-/.test(p1.documento.numero),
+    `Compra 5M, pago 2M por banco → CxP 3M, banco −2.000.000 (sin GMF automático) y ${p1.documento.numero}`);
 
   // Transferencia: no crea ingresos ni gastos.
   const totalAntes = (await saldo(caja.id)) + (await saldo(banco.id));
@@ -623,8 +623,27 @@ async function pruebasDocumentosFinancieros() {
   });
   const p1 = await tx((t) => OP.pago(t, contador, { obligacion_id: cxp.id, cuenta_id: banco.id, valor: 850000, medio_pago: 'transferencia', idempotency_key: key('ce') }));
   const dCe = await tx((t) => DF.documentoImprimible(t, p1.documento.numero));
-  ok(/^CE-/.test(dCe.numero) && dCe.factura_relacionada === 'CI-CE-0001' && dCe.saldo.saldo_posterior === 0 && dCe.gmf === 3400,
-    `Comprobante ${dCe.numero}: factura del proveedor, saldo posterior 0 y GMF de 3.400 informado`);
+  ok(/^CE-/.test(dCe.numero) && dCe.factura_relacionada === 'CI-CE-0001' && dCe.saldo.saldo_posterior === 0 && dCe.valor === 850000 && !dCe.gmf,
+    `Comprobante ${dCe.numero}: factura del proveedor, solo 850.000 pagados, saldo posterior 0 y sin GMF`);
+  ok((await tx((t) => core.saldoCuenta(t, banco.id))) === 2000000 + 60000 - 850000, 'El banco baja solo lo pagado al proveedor (no se inventa GMF)');
+
+  // El GMF entra desde Conciliación Bancaria, por el valor real del extracto.
+  const CN = await import('../api/_lib/fin/conciliacion.js');
+  const conc = await tx((t) => CN.crearConciliacion(t, contador, { cuenta_id: banco.id, periodo_anio: 2026, periodo_mes: 11, fecha_corte: hoyF, saldo_extracto: 1206600 }));
+  await tx((t) => CN.importarLineas(t, contador, conc.id, [
+    { fecha: hoyF, descripcion: 'Pago proveedor', valor: 850000, naturaleza: 'salida' },
+    { fecha: hoyF, descripcion: 'GMF 4X1000', valor: 3400, naturaleza: 'salida' }]));
+  const lineasConc = (await tx((t) => CN.detalleConciliacion(t, conc.id))).lineas;
+  const lGmf = lineasConc.find((l) => l.descripcion === 'GMF 4X1000');
+  await falla(() => tx((t) => CN.registrarDesdeLinea(t, contador, lGmf.id, { tipo: 'interes' })), /débito/, 'Un débito del extracto no se puede registrar como interés');
+  const rGmf = await tx((t) => CN.registrarDesdeLinea(t, contador, lGmf.id, { tipo: 'gmf' }));
+  const lGmfDespues = (await tx((t) => CN.detalleConciliacion(t, conc.id))).lineas.find((l) => l.id === lGmf.id);
+  ok(/^ND-/.test(rGmf.documento.numero) && lGmfDespues.estado === 'conciliada' && lGmfDespues.movimiento_id === rGmf.movimiento_id,
+    `El GMF del extracto (3.400) se registra como ${rGmf.documento.numero} (origen Conciliación) y la línea queda conciliada`);
+  ok((await tx((t) => core.saldoCuenta(t, banco.id))) === 2000000 + 60000 - 850000 - 3400, 'Tras registrar el GMF, el banco baja 853.400 en total (850.000 + 3.400)');
+  const dCe2 = await tx((t) => DF.documentoImprimible(t, p1.documento.numero));
+  ok(dCe2.valor === 850000 && dCe2.saldo.saldo_posterior === 0, 'El Comprobante de Egreso y la CxP no cambian por el GMF');
+  await falla(() => tx((t) => CN.registrarDesdeLinea(t, contador, lGmf.id, { tipo: 'gmf' })), /ya fue conciliada/, 'No se registra dos veces el mismo GMF del extracto');
 
   const OPcore = await import('../api/_lib/fin/core.js');
   await tx((t) => OPcore.anularOperacion(t, admin, { operacion_id: c2.operacion_id, motivo: 'Transferencia devuelta por el banco', idempotency_key: key('an') }));

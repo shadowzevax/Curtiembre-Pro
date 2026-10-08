@@ -188,3 +188,25 @@ export async function reabrirConciliacion(tx, ctx, id, motivo) {
   await auditar(tx, ctx, { accion: 'conciliacion:reabrir', entidad: 'fin_conciliaciones', entidad_id: id, motivo });
   return concilPublica(rows[0]);
 }
+
+// Una línea del extracto que no existe en el sistema (GMF, comisión, cuota de manejo, intereses):
+// se registra como movimiento bancario nuevo por el valor EXACTO del extracto y queda conciliada
+// con esa línea. No toca ningún Comprobante de Egreso ni pago a proveedor.
+export async function registrarDesdeLinea(tx, ctx, linea_id, { tipo, concepto } = {}) {
+  const { rows: lr } = await tx.query(`SELECT * FROM fin_conciliacion_lineas WHERE id = $1 FOR UPDATE`, [linea_id]);
+  const linea = lr[0];
+  if (!linea) throw new HttpError(404, 'La línea del extracto no existe');
+  if (linea.estado !== 'pendiente') throw new HttpError(409, 'Esa línea del extracto ya fue conciliada o ignorada');
+  const concil = await requerirEnProceso(tx, linea.conciliacion_id);
+  const salida = ['gmf', 'comision', 'cuota_manejo'].includes(tipo);
+  if (!salida && tipo !== 'interes') throw new HttpError(400, 'Tipo inválido (gmf, comision, cuota_manejo o interes)');
+  if ((linea.naturaleza === 'salida') !== salida) {
+    throw new HttpError(400, salida ? 'Esa línea es un abono del banco; no puede registrarse como gasto' : 'Esa línea es un débito; no puede registrarse como interés');
+  }
+  const { movimientoBancario } = await import('./operaciones.js');
+  const r = await movimientoBancario(tx, ctx, { tipo, cuenta_id: concil.cuenta_id, fecha: fecha(linea.fecha), valor: r2(linea.valor),
+    concepto: concepto || (tipo === 'gmf' ? `GMF (4x1000) según extracto${linea.descripcion ? ` · ${linea.descripcion}` : ''}` : undefined),
+    origen: 'conciliacion_bancaria', extracto_linea_id: linea.id, idempotency_key: `concil-linea:${linea.id}` });
+  await confirmarLinea(tx, ctx, linea.id, r.movimiento_id);
+  return r;
+}

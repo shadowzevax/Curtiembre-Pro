@@ -88,7 +88,6 @@ function Documento({ d }) {
           <span style={{ fontSize: 20, fontWeight: 800 }}>{formatCOP(d.valor)}</span>
         </div>
         <div style={{ marginTop: 4, fontStyle: 'italic' }}>Son: {numeroALetras(d.valor)}</div>
-        {d.gmf > 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#6b7280' }}>Además se descontó GMF (4x1000) por {formatCOP(d.gmf)}.</div>}
         {d.retencion?.valor > 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#6b7280' }}>Retención {d.retencion.tipo}: {formatCOP(d.retencion.valor)}.</div>}
       </div>
 

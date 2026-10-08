@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Upload, Sparkles, Check, X, Search, Undo2 } from 'lucide-react';
 import { fin } from '@/api/finanzas';
+import BarraExportar, { textoFiltros } from '../components/finanzas/BarraExportar';
 import { formatCOP, formatFecha, mensajeError, hoy } from '../components/finanzas/utils';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -43,7 +44,14 @@ export default function ConciliacionBancaria() {
       {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">{error}</p>}
 
       <Card>
-        <CardHeader><CardTitle>Historial de Conciliaciones</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2"><CardTitle>Historial de Conciliaciones</CardTitle>
+          <BarraExportar titulo="Historial de Conciliaciones Bancarias" filtrosTexto="Todas las cuentas bancarias" filas={conciliaciones.map((c) => ({ ...c,
+            periodo: `${MESES[c.periodo_mes - 1]} ${c.periodo_anio}`, estado_txt: ESTADO_LABEL[c.estado] }))}
+            columnas={[{ key: 'cuenta_nombre', label: 'Cuenta', ancho: 2 }, { key: 'periodo', label: 'Período' }, { key: 'fecha_corte', label: 'Corte', render: formatFecha },
+              { key: 'saldo_extracto', label: 'Saldo extracto', align: 'right', render: formatCOP },
+              { key: 'saldo_sistema', label: 'Saldo sistema', align: 'right', render: (v) => (v != null ? formatCOP(v) : '—') },
+              { key: 'diferencia', label: 'Diferencia', align: 'right', render: (v) => (v != null ? formatCOP(v) : '—') }, { key: 'estado_txt', label: 'Estado' }]} />
+        </CardHeader>
         <CardContent>
           {cargando ? <p className="text-sm text-slate-400">Cargando…</p> : conciliaciones.length === 0 ? (
             <p className="text-gray-500 text-center py-8">No hay conciliaciones registradas.</p>
@@ -327,6 +335,14 @@ function DetalleConciliacionDialog({ id, onClose, esAdmin }) {
     try { await fin.post(`/conciliacion/${id}/lineas/${linea.id}/ignorar`, { motivo }); cargar(); }
     catch (e) { setError(mensajeError(e)); }
   };
+  // Débitos/abonos que el banco hizo y no existen en el sistema (GMF, comisiones, intereses): se
+  // registran por el valor exacto del extracto y la línea queda conciliada. El ERP no calcula el GMF.
+  const registrar = async (linea, tipo) => {
+    const nombres = { gmf: 'GMF / Gasto bancario', comision: 'Comisión bancaria', cuota_manejo: 'Cuota de manejo', interes: 'Intereses' };
+    if (!window.confirm(`¿Registrar ${formatCOP(linea.valor)} del ${formatFecha(linea.fecha)} como "${nombres[tipo]}" (origen: Conciliación bancaria)?`)) return;
+    try { await fin.post(`/conciliacion/${id}/lineas/${linea.id}/registrar`, { tipo }); cargar(); }
+    catch (e) { setError(mensajeError(e)); }
+  };
   const cerrar = async () => {
     try { await fin.post(`/conciliacion/${id}/cerrar`, {}); cargar(); }
     catch (e) { setError(mensajeError(e)); }
@@ -356,6 +372,13 @@ function DetalleConciliacionDialog({ id, onClose, esAdmin }) {
               <div className="border rounded-lg p-3"><p className="text-xs text-slate-500">Estado</p><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ESTADO_BADGE[detalle.estado]}`}>{ESTADO_LABEL[detalle.estado]}</span></div>
             </div>
 
+            <BarraExportar className="justify-end" titulo={`Conciliación Bancaria · ${detalle.cuenta_nombre} · ${MESES[detalle.periodo_mes - 1]} ${detalle.periodo_anio}`}
+              filtrosTexto={textoFiltros([['Corte', formatFecha(detalle.fecha_corte)], ['Saldo extracto', formatCOP(detalle.saldo_extracto)],
+                ['Saldo sistema', formatCOP(detalle.saldo_sistema_actual)], ['Diferencia', formatCOP(detalle.saldo_extracto - detalle.saldo_sistema_actual)], ['Estado', ESTADO_LABEL[detalle.estado]]])}
+              filas={(detalle.lineas || []).map((l) => ({ ...l, desc: `${l.descripcion || ''}${l.referencia ? ` · ${l.referencia}` : ''}`,
+                valor_firmado: l.naturaleza === 'salida' ? -l.valor : l.valor, mov: l.movimiento_id ? l.movimiento_concepto : 'Sin emparejar', estado_txt: l.estado.toUpperCase() }))}
+              columnas={[{ key: 'fecha', label: 'Fecha', render: formatFecha }, { key: 'desc', label: 'Descripción del extracto', ancho: 3 },
+                { key: 'valor_firmado', label: 'Valor', align: 'right', render: formatCOP }, { key: 'mov', label: 'Movimiento del sistema', ancho: 3 }, { key: 'estado_txt', label: 'Estado' }]} />
             {enProceso && (
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => setShowImportar(true)}><Upload className="w-4 h-4 mr-1" />Cargar extracto</Button>
@@ -380,6 +403,15 @@ function DetalleConciliacionDialog({ id, onClose, esAdmin }) {
                           <div className="flex gap-1">
                             {l.estado === 'pendiente' && l.movimiento_id && <Button size="sm" variant="ghost" title="Confirmar" onClick={() => confirmar(l)}><Check className="w-3.5 h-3.5 text-emerald-600" /></Button>}
                             {l.estado === 'pendiente' && <Button size="sm" variant="ghost" title="Buscar manualmente" onClick={() => setBuscando(l)}><Search className="w-3.5 h-3.5" /></Button>}
+                            {l.estado === 'pendiente' && !l.movimiento_id && (
+                              <select className="h-7 border rounded text-xs px-1 bg-white" value="" title="Registrar en el sistema el valor que muestra el extracto"
+                                onChange={(e) => { if (e.target.value) registrar(l, e.target.value); }}>
+                                <option value="">Registrar como…</option>
+                                {l.naturaleza === 'salida'
+                                  ? <><option value="gmf">GMF / Gasto bancario (4x1000)</option><option value="comision">Comisión bancaria</option><option value="cuota_manejo">Cuota de manejo</option></>
+                                  : <option value="interes">Intereses / rendimientos</option>}
+                              </select>
+                            )}
                             {l.estado === 'pendiente' && <Button size="sm" variant="ghost" title="Ignorar" onClick={() => ignorar(l)}><X className="w-3.5 h-3.5 text-slate-400" /></Button>}
                             {l.estado !== 'pendiente' && <Button size="sm" variant="ghost" title="Deshacer" onClick={() => desconciliar(l)}><Undo2 className="w-3.5 h-3.5" /></Button>}
                           </div>

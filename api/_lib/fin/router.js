@@ -128,6 +128,9 @@ export async function handleFin(req, segs, auth) {
     if (id && sub === 'lineas' && lineaId && accionLinea === 'desconciliar' && method === 'POST') {
       return withTx((tx) => CN.desconciliarLinea(tx, ctx, lineaId));
     }
+    if (id && sub === 'lineas' && lineaId && accionLinea === 'registrar' && method === 'POST') {
+      return withTx((tx) => CN.registrarDesdeLinea(tx, ctx, lineaId, body));
+    }
     if (id && sub === 'lineas' && lineaId && accionLinea === 'ignorar' && method === 'POST') {
       return withTx((tx) => CN.ignorarLinea(tx, ctx, lineaId, body.motivo));
     }

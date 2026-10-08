@@ -233,7 +233,7 @@ export async function ajuste(tx, ctx, body) {
     motivo: body.motivo, datos: { arqueo_id: body.arqueo_id || null } }, async (op) => {
     const doc = await crearDocumento(tx, ctx, { tipo: 'AJ', fecha: f, operacion_id: op.id, concepto, valor });
     await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza: body.naturaleza, clase: 'ajuste', valor,
-      concepto: `${doc.numero} · ${concepto}`, documento_id: doc.id, origen_clave: `aj:${op.id}`, sin_gmf: true });
+      concepto: `${doc.numero} · ${concepto}`, documento_id: doc.id, origen_clave: `aj:${op.id}` });
     await asiento(tx, ctx, op, body.naturaleza === 'entrada'
       ? [{ naturaleza: 'debito', cuenta_rol: 'disponible', cuenta_dinero_id: body.cuenta_id, valor }, { naturaleza: 'credito', cuenta_rol: 'sobrantes_caja', valor }]
       : [{ naturaleza: 'debito', cuenta_rol: 'faltantes_caja', valor }, { naturaleza: 'credito', cuenta_rol: 'disponible', cuenta_dinero_id: body.cuenta_id, valor }],
@@ -244,27 +244,31 @@ export async function ajuste(tx, ctx, body) {
   });
 }
 
-// ── Movimientos propios del banco: comisiones, cuota de manejo, intereses ────
+// ── Movimientos propios del banco: comisiones, cuota de manejo, intereses, GMF ─
+// El GMF solo entra por aquí, con el valor real del extracto (normalmente desde Conciliación
+// Bancaria): queda como Nota Débito bancaria independiente, nunca dentro de un Comprobante de Egreso.
 export async function movimientoBancario(tx, ctx, body) {
   requerirRol(ctx, OPERAN, 'registrar movimientos bancarios');
   const f = validarFecha(body.fecha);
   const valor = dinero(body.valor);
   const tipos = { comision: ['salida', 'comision', 'gasto_bancario'], cuota_manejo: ['salida', 'comision', 'gasto_bancario'],
-    interes: ['entrada', 'interes', 'ingreso_financiero'] };
+    interes: ['entrada', 'interes', 'ingreso_financiero'], gmf: ['salida', 'gmf', 'gasto_gmf'] };
   const t = tipos[body.tipo];
-  if (!t) throw new HttpError(400, 'Tipo inválido (comision, cuota_manejo o interes)');
+  if (!t) throw new HttpError(400, 'Tipo inválido (comision, cuota_manejo, gmf o interes)');
   const [naturaleza, clase, rol] = t;
-  const concepto = body.concepto || { comision: 'Comisión bancaria', cuota_manejo: 'Cuota de manejo', interes: 'Intereses' }[body.tipo];
+  const concepto = body.concepto || { comision: 'Comisión bancaria', cuota_manejo: 'Cuota de manejo', interes: 'Intereses', gmf: 'GMF (4x1000) según extracto' }[body.tipo];
   return ejecutar(tx, ctx, { tipo_operacion: `banco_${body.tipo}`, fecha: f, idempotency_key: body.idempotency_key, valor, concepto,
-    datos: { extracto_linea_id: body.extracto_linea_id || null } }, async (op) => {
-    const doc = await crearDocumento(tx, ctx, { tipo: naturaleza === 'salida' ? 'CE' : 'CIN', fecha: f, operacion_id: op.id, concepto, valor });
-    await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza, clase, valor,
-      concepto: `${doc.numero} · ${concepto}`, documento_id: doc.id, origen_clave: `banco:${op.id}`, sin_gmf: true });
+    datos: { extracto_linea_id: body.extracto_linea_id || null, origen: body.origen || null } }, async (op) => {
+    const tipoDoc = body.tipo === 'gmf' ? 'ND' : (naturaleza === 'salida' ? 'CE' : 'CIN');
+    const doc = await crearDocumento(tx, ctx, { tipo: tipoDoc, fecha: f, operacion_id: op.id, concepto, valor,
+      datos: body.origen ? { origen: body.origen, extracto_linea_id: body.extracto_linea_id || null } : undefined });
+    const m = await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza, clase, valor,
+      concepto: `${doc.numero} · ${concepto}`, documento_id: doc.id, origen_clave: `banco:${op.id}` });
     await asiento(tx, ctx, op, naturaleza === 'salida'
       ? [{ naturaleza: 'debito', cuenta_rol: rol, valor }, { naturaleza: 'credito', cuenta_rol: 'disponible', cuenta_dinero_id: body.cuenta_id, valor }]
       : [{ naturaleza: 'debito', cuenta_rol: 'disponible', cuenta_dinero_id: body.cuenta_id, valor }, { naturaleza: 'credito', cuenta_rol: rol, valor }],
     { clave: `banco:${op.id}`, fecha: f, documento_numero: doc.numero });
-    return { documento: { id: doc.id, numero: doc.numero } };
+    return { documento: { id: doc.id, numero: doc.numero }, movimiento_id: m.movimiento.id };
   });
 }
 

@@ -11,6 +11,7 @@ import { anularOperacionFinanciera } from '@/api/finanzas';
 import { formatCOP, formatFecha, mensajeError, ESTADO_OBLIGACION } from './utils';
 import { CobroPagoDialog, NotaDialog, AnticipoDialog, CruceAnticipoDialog } from './CarteraDialogs';
 import { useAuth } from '@/lib/AuthContext';
+import BarraExportar, { textoFiltros } from './BarraExportar';
 import DocumentoFinancieroDialog from './DocumentoFinancieroDialog';
 
 // Módulo genérico de Cuentas por Cobrar / Cuentas por Pagar: cartera, cobro/pago, notas,
@@ -24,6 +25,8 @@ export default function CarteraModulo({ naturaleza, titulo, descripcion, etiquet
   const [cuentas, setCuentas] = useState([]);
   const [filtroEstado, setFiltroEstado] = useState('__todas__');
   const [busqueda, setBusqueda] = useState('');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [seleccionada, setSeleccionada] = useState(null);
@@ -52,12 +55,36 @@ export default function CarteraModulo({ naturaleza, titulo, descripcion, etiquet
   };
 
   const filtradas = obligaciones.filter((o) =>
-    (filtroEstado === '__todas__' || o.estado === filtroEstado) &&
+    (filtroEstado === '__todas__' || o.estado === filtroEstado) && (!desde || o.fecha >= desde) && (!hasta || o.fecha <= hasta) &&
     (!busqueda || `${o.tercero_nombre} ${o.documento_numero}`.toLowerCase().includes(busqueda.toLowerCase())));
   const totalPendiente = filtradas.filter((o) => o.estado !== 'anulada' && o.estado !== 'pagada').reduce((s, o) => s + o.saldo, 0);
   const totalVencido = filtradas.filter((o) => o.estado === 'vencida').reduce((s, o) => s + o.saldo, 0);
 
-  const anticiposFiltrados = anticipos.filter((a) => !busqueda || a.tercero_nombre?.toLowerCase().includes(busqueda.toLowerCase()));
+  const anticiposFiltrados = anticipos.filter((a) => (!busqueda || a.tercero_nombre?.toLowerCase().includes(busqueda.toLowerCase()))
+    && (!desde || a.fecha >= desde) && (!hasta || a.fecha <= hasta));
+
+  // Exportar / imprimir exactamente la vista y los filtros actuales.
+  const filtrosTexto = textoFiltros([['Búsqueda', busqueda], ['Desde', desde && formatFecha(desde)], ['Hasta', hasta && formatFecha(hasta)],
+    ['Estado', !vistaAnticipos && filtroEstado !== '__todas__' && ESTADO_OBLIGACION[filtroEstado]?.label]]);
+  const exportacion = vistaAnticipos ? {
+    titulo: `Anticipos ${esCxc ? 'de clientes' : 'a proveedores'}`,
+    columnas: [{ key: 'documento_numero', label: 'Documento' }, { key: 'tercero_nombre', label: etiquetaTercero, ancho: 2 },
+      { key: 'fecha', label: 'Fecha', render: formatFecha }, { key: 'valor_original', label: 'Valor', align: 'right', render: formatCOP },
+      { key: 'saldo', label: 'Disponible', align: 'right', render: formatCOP }],
+    filas: anticiposFiltrados,
+    totales: { valor_original: anticiposFiltrados.reduce((x, a) => x + a.valor_original, 0), saldo: anticiposFiltrados.reduce((x, a) => x + a.saldo, 0) },
+  } : {
+    titulo: `Relación de ${titulo}`,
+    columnas: [{ key: 'documento_numero', label: 'Documento' }, { key: 'tercero_nombre', label: etiquetaTercero, ancho: 2 },
+      { key: 'fecha', label: 'Fecha', render: formatFecha }, { key: 'fecha_vencimiento', label: 'Vence', render: formatFecha },
+      { key: 'valor_original', label: 'Total', align: 'right', render: formatCOP }, { key: 'aplicado', label: esCxc ? 'Abonado' : 'Pagado', align: 'right', render: formatCOP },
+      { key: 'saldo', label: 'Saldo', align: 'right', render: formatCOP }, { key: 'estado', label: 'Estado', render: (v) => ESTADO_OBLIGACION[v]?.label || v },
+      { key: 'dias_vencida', label: 'Días venc.', align: 'right', render: (v) => (v ? String(v) : '') }],
+    filas: filtradas,
+    totales: { valor_original: filtradas.filter((o) => o.estado !== 'anulada').reduce((x, o) => x + o.valor_original, 0),
+      aplicado: filtradas.filter((o) => o.estado !== 'anulada').reduce((x, o) => x + o.aplicado, 0),
+      saldo: filtradas.filter((o) => o.estado !== 'anulada').reduce((x, o) => x + o.saldo, 0) },
+  };
 
   return (
     <div className="p-6">
@@ -85,9 +112,12 @@ export default function CarteraModulo({ naturaleza, titulo, descripcion, etiquet
               </SelectContent>
             </Select>
           )}
+          <Input type="date" title="Desde" value={desde} onChange={(e) => setDesde(e.target.value)} className="w-36" />
+          <Input type="date" title="Hasta" value={hasta} onChange={(e) => setHasta(e.target.value)} className="w-36" />
           {vistaAnticipos && <Button size="sm" onClick={() => setDialogo('anticipo')}><Plus className="w-4 h-4 mr-1" />Nuevo anticipo</Button>}
         </div>
       </div>
+      <BarraExportar className="mb-3 justify-end" filtrosTexto={filtrosTexto} {...exportacion} />
 
       {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3 mb-3">{error}</p>}
 

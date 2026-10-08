@@ -85,7 +85,6 @@ export default function CuentaFormDialog({ open, onClose, tipo, cuenta, onGuarda
           )}
           <div className="flex items-center gap-6">
             <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!form.permite_saldo_negativo} onChange={(e) => set('permite_saldo_negativo', e.target.checked)} /> Permite saldo negativo (sobregiro)</label>
-            {tipo === 'banco' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!form.aplica_gmf} onChange={(e) => set('aplica_gmf', e.target.checked)} /> Aplica GMF (4x1000)</label>}
           </div>
           {cuenta && (
             <div>
