@@ -81,6 +81,8 @@ const menuItems = [
             { title: "Cuentas por Cobrar", url: createPageUrl("FinanzasCuentasPorCobrar"), icon: Calculator },
             { title: "Cuentas por Pagar", url: createPageUrl("FinanzasCuentasPorPagar"), icon: Calculator },
             { title: "Tesorería", url: createPageUrl("FinanzasTesoreria"), icon: Calculator },
+            { title: "Recibos de Caja", url: createPageUrl("FinanzasRecibosCaja"), icon: Calculator },
+            { title: "Comprobantes de Egreso", url: createPageUrl("FinanzasComprobantesEgreso"), icon: Calculator },
             { title: "Conciliación Bancaria", url: createPageUrl("ConciliacionBancaria"), icon: Calculator },
         ]
     },
@@ -413,6 +415,8 @@ export default function Layout({ children, currentPageName }) {
             'FinanzasCuentasPorCobrar': 'Cuentas por Cobrar',
             'FinanzasCuentasPorPagar': 'Cuentas por Pagar',
             'FinanzasTesoreria': 'Tesorería',
+            'FinanzasRecibosCaja': 'Recibos de Caja',
+            'FinanzasComprobantesEgreso': 'Comprobantes de Egreso',
             'BilleterasDigitales': 'Nequi/Billeteras Digitales',
             'IngresosBancarios': 'Ingresos por Transferencias',
             'EgresosBancarios': 'Egresos Bancarios',
@@ -510,7 +514,7 @@ export default function Layout({ children, currentPageName }) {
                 <div className="h-20 flex-shrink-0 bg-gradient-to-r from-stone-100 to-stone-200 border-b border-stone-300 flex items-center justify-between px-3">
                     <div className="flex items-center space-x-3 whitespace-nowrap overflow-hidden">
                         <img
-                            src="https://i.ibb.co/q36LpTDQ/artecueros-logo.png"
+                            src="/artecueros-logo.png"
                             alt="ArteCueros Logo"
                             className="h-10 w-10 object-contain flex-shrink-0"
                             onError={(e) => {

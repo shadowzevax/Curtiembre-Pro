@@ -166,6 +166,9 @@ import ReporteEstadoLotes from './pages/ReporteEstadoLotes';
 import ReportePedidosPintura from './pages/ReportePedidosPintura';
 import ReporteCostoLotes from './pages/ReporteCostoLotes';
 import PanelGerencial from './pages/PanelGerencial';
+import FinanzasRecibosCaja from './pages/FinanzasRecibosCaja';
+import FinanzasComprobantesEgreso from './pages/FinanzasComprobantesEgreso';
+import ReporteFormaPago from './pages/ReporteFormaPago';
 import ReporteRentabilidadClientes from './pages/ReporteRentabilidadClientes';
 import ProcesosExternos from './pages/ProcesosExternos';
 import CatalogoTiposProceso from './pages/CatalogoTiposProceso';
@@ -293,6 +296,9 @@ export const PAGES = {
     "ReportePedidosPintura": ReportePedidosPintura,
     "ReporteCostoLotes": ReporteCostoLotes,
     "PanelGerencial": PanelGerencial,
+    "FinanzasRecibosCaja": FinanzasRecibosCaja,
+    "FinanzasComprobantesEgreso": FinanzasComprobantesEgreso,
+    "ReporteFormaPago": ReporteFormaPago,
     "ReporteRentabilidadClientes": ReporteRentabilidadClientes,
     "ProcesosExternos": ProcesosExternos,
     "CatalogoTiposProceso": CatalogoTiposProceso,

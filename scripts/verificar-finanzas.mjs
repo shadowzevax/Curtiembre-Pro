@@ -573,6 +573,66 @@ async function pruebasGerencial() {
   await falla(() => tx((t) => G.notificarTelegram(t, operario, 'prueba')), /no tiene permiso/, 'Un operario no puede enviar notificaciones por Telegram (no llega a intentar el envío real)');
 }
 
+async function pruebasDocumentosFinancieros() {
+  console.log('\n[RC/CE] Recibos de Caja y Comprobantes de Egreso formales');
+  const OP = await import('../api/_lib/fin/operaciones.js');
+  const DF = await import('../api/_lib/fin/documentosFinancieros.js');
+  const hoyF = core.hoyColombia();
+  const caja = await tx((t) => C.crearCuenta(t, admin, { tipo: 'caja', nombre: 'Caja RC', saldo_inicial: 0 }));
+  const banco = await tx((t) => C.crearCuenta(t, admin, { tipo: 'banco', nombre: 'Banco CE', saldo_inicial: 2000000 }));
+
+  const cxc = await tx(async (t) => {
+    const op = await nuevaOperacion(t, admin, 'venta');
+    return core.crearObligacion(t, admin, op, { naturaleza: 'por_cobrar', tercero_id: 'rc-cli', tercero_nombre: 'Cliente RC',
+      documento_modulo: 'OrdenVenta', documento_id: 'rc-venta', documento_numero: 'FV-RC-0006', fecha: hoyF, valor_original: 100000, origen_clave: `rc:${op.id}` });
+  });
+
+  await falla(() => tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: caja.id, valor: 10000, medio_pago: 'transferencia', idempotency_key: key('rc') })),
+    /debe ir a una cuenta bancaria/, 'Una transferencia no se puede registrar contra una caja (forma de pago y cuenta deben coincidir)');
+
+  const c1 = await tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: caja.id, valor: 40000, medio_pago: 'efectivo',
+    observaciones: 'Abono en efectivo', idempotency_key: key('rc') }));
+  const d1 = await tx((t) => DF.documentoImprimible(t, c1.documento.numero));
+  ok(/^RC-/.test(d1.numero) && d1.factura_relacionada === 'FV-RC-0006' && d1.forma_pago === 'efectivo' && d1.cuenta?.nombre === 'Caja RC',
+    `El recibo ${d1.numero} queda ligado a la factura FV-RC-0006, con forma de pago y caja afectada`);
+  ok(d1.saldo && d1.saldo.saldo_anterior === 100000 && d1.saldo.valor_aplicado === 40000 && d1.saldo.saldo_posterior === 60000,
+    'Abono parcial: saldo anterior 100.000, abono 40.000, saldo posterior 60.000 (no cancela toda la factura)');
+  ok(d1.observaciones === 'Abono en efectivo', 'El recibo conserva las observaciones');
+
+  const c2 = await tx((t) => OP.cobro(t, contador, { obligacion_id: cxc.id, cuenta_id: banco.id, valor: 60000, medio_pago: 'transferencia', idempotency_key: key('rc') }));
+  const d2 = await tx((t) => DF.documentoImprimible(t, c2.documento.numero));
+  ok(d2.saldo.saldo_anterior === 60000 && d2.saldo.saldo_posterior === 0, 'Segundo recibo: saldo anterior 60.000 y saldo posterior 0');
+  const d1Otra = await tx((t) => DF.documentoImprimible(t, c1.documento.numero));
+  ok(d1Otra.saldo.saldo_posterior === 60000, 'El primer recibo sigue mostrando el saldo que quedó en ese momento, aunque después se haya pagado el resto');
+
+  const ing = await tx((t) => OP.ingreso(t, contador, { cuenta_id: caja.id, valor: 25000, concepto: 'Reintegro de transporte', categoria: 'reintegro',
+    medio_pago: 'efectivo', tipo_documento: 'RC', idempotency_key: key('rc') }));
+  ok(/^RC-/.test(ing.documento.numero), `Otro ingreso desde Recibos de Caja sale como Recibo de Caja (${ing.documento.numero}), no como CIN`);
+  const dIng = await tx((t) => DF.documentoImprimible(t, ing.documento.numero));
+  ok(!dIng.saldo && !dIng.factura_relacionada, 'Un otro ingreso no toca ninguna cuenta por cobrar ni muestra factura');
+  const ingCaja = await tx((t) => OP.ingreso(t, contador, { cuenta_id: caja.id, valor: 1000, concepto: 'Ingreso desde caja', idempotency_key: key('rc') }));
+  ok(/^CIN-/.test(ingCaja.documento.numero), 'El ingreso desde Caja/Tesorería sigue saliendo como CIN (no se cambió su comportamiento)');
+
+  const lista = await tx((t) => DF.listarDocumentosFinancieros(t, { tipos: 'RC' }));
+  ok([c1, c2, ing].every((r) => lista.some((d) => d.numero === r.documento.numero)), 'El listado de Recibos de Caja incluye los cobros y el otro ingreso');
+
+  const cxp = await tx(async (t) => {
+    const op = await nuevaOperacion(t, admin, 'compra');
+    return core.crearObligacion(t, admin, op, { naturaleza: 'por_pagar', tercero_id: 'ce-prov', tercero_nombre: 'Proveedor CE',
+      documento_modulo: 'OrdenCompra', documento_id: 'ce-compra', documento_numero: 'CI-CE-0001', fecha: hoyF, valor_original: 850000, origen_clave: `ce:${op.id}` });
+  });
+  const p1 = await tx((t) => OP.pago(t, contador, { obligacion_id: cxp.id, cuenta_id: banco.id, valor: 850000, medio_pago: 'transferencia', idempotency_key: key('ce') }));
+  const dCe = await tx((t) => DF.documentoImprimible(t, p1.documento.numero));
+  ok(/^CE-/.test(dCe.numero) && dCe.factura_relacionada === 'CI-CE-0001' && dCe.saldo.saldo_posterior === 0 && dCe.gmf === 3400,
+    `Comprobante ${dCe.numero}: factura del proveedor, saldo posterior 0 y GMF de 3.400 informado`);
+
+  const OPcore = await import('../api/_lib/fin/core.js');
+  await tx((t) => OPcore.anularOperacion(t, admin, { operacion_id: c2.operacion_id, motivo: 'Transferencia devuelta por el banco', idempotency_key: key('an') }));
+  const dAnulado = await tx((t) => DF.documentoImprimible(t, c2.documento.numero));
+  ok(dAnulado.estado === 'anulado' && dAnulado.anulacion?.motivo === 'Transferencia devuelta por el banco',
+    'Un recibo anulado se sigue pudiendo abrir, marcado como anulado, con fecha, usuario y motivo de la anulación');
+}
+
 async function main() {
   console.log(`Esquema temporal: ${ESQUEMA} (se elimina al terminar)`);
   try {
@@ -585,6 +645,7 @@ async function main() {
     await pruebasConciliacion();
     await pruebasReportes();
     await pruebasGerencial();
+    await pruebasDocumentosFinancieros();
     const extra = process.env.VERIF_EXTRA ? await import(process.env.VERIF_EXTRA) : null;
     if (extra?.default) await extra.default(util);
   } catch (e) {

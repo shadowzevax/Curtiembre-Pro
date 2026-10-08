@@ -2,9 +2,10 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Eye, Download, Trash2, Upload, FileText, Link2 } from 'lucide-react';
+import { Eye, Download, Trash2, Upload, FileText, Link2, Printer } from 'lucide-react';
 import { fin } from '@/api/finanzas';
 import { formatCOP, formatFecha, mensajeError } from './utils';
+import DocumentoFinancieroDialog from './DocumentoFinancieroDialog';
 
 const TIPOS_SOPORTE = [
   { value: 'factura_proveedor', label: 'Factura del proveedor' },
@@ -29,6 +30,7 @@ export default function DocumentosSoportesModal({ open, onClose, modulo, documen
   const [error, setError] = useState('');
   const [tipoNuevo, setTipoNuevo] = useState(TIPOS_SOPORTE[0].value);
   const [subiendo, setSubiendo] = useState(false);
+  const [documentoAbierto, setDocumentoAbierto] = useState(null);
   const fileRef = useRef(null);
 
   const cargar = useCallback(async () => {
@@ -93,6 +95,11 @@ export default function DocumentosSoportesModal({ open, onClose, modulo, documen
                         <td className="p-1.5">{d.concepto}</td>
                         <td className="p-1.5 text-right">{formatCOP(d.valor)}</td>
                         <td className="p-1.5 text-center">{d.estado === 'anulado' ? 'Anulado' : ''}</td>
+                        <td className="p-1.5 text-right no-underline">
+                          <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setDocumentoAbierto(d.numero)}>
+                            <Printer className="w-3.5 h-3.5 mr-1" />Ver / Imprimir / PDF
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -153,6 +160,7 @@ export default function DocumentosSoportesModal({ open, onClose, modulo, documen
           </div>
         )}
         <div className="flex justify-end pt-3 border-t"><Button variant="outline" onClick={onClose}>Cerrar</Button></div>
+        <DocumentoFinancieroDialog numero={documentoAbierto} onClose={() => setDocumentoAbierto(null)} />
       </DialogContent>
     </Dialog>
   );

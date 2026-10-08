@@ -31,6 +31,21 @@ async function vincularConOrigen(tx, obl, documento) {
   }
 }
 
+// Forma de pago → tipo de cuenta que la puede recibir. Si llega una forma de pago conocida y la
+// cuenta elegida es de otro tipo (p. ej. "efectivo" contra un banco), se rechaza la operación.
+const TIPO_CUENTA_POR_MEDIO = { efectivo: 'caja', banco: 'banco', transferencia: 'banco', consignacion: 'banco',
+  nequi: 'otro_medio', otro_medio: 'otro_medio' };
+const ETIQUETA_TIPO_CUENTA = { caja: 'una caja', banco: 'una cuenta bancaria', otro_medio: 'otro medio de dinero (Nequi u otro)' };
+
+async function validarMedioPago(tx, cuentaId, medio) {
+  const tipoEsperado = TIPO_CUENTA_POR_MEDIO[medio];
+  if (!tipoEsperado || !cuentaId) return;
+  const { rows } = await tx.query(`SELECT tipo, nombre FROM fin_cuentas_dinero WHERE id = $1`, [cuentaId]);
+  if (rows[0] && rows[0].tipo !== tipoEsperado) {
+    throw new HttpError(400, `La forma de pago elegida debe ir a ${ETIQUETA_TIPO_CUENTA[tipoEsperado]}, pero "${rows[0].nombre}" no lo es`);
+  }
+}
+
 function retencionDe(body) {
   const r = body.retencion;
   if (!r || !(Number(r.valor) > 0)) return null;
@@ -55,12 +70,13 @@ export async function cobro(tx, ctx, body) {
   const f = validarFecha(body.fecha);
   const valor = dinero(body.valor);
   const ret = retencionDe(body);
+  await validarMedioPago(tx, body.cuenta_id, body.medio_pago);
   return ejecutar(tx, ctx, { tipo_operacion: 'cobro', fecha: f, idempotency_key: body.idempotency_key, tercero_id: obl.tercero_id,
     tercero_nombre: obl.tercero_nombre, valor, concepto: body.concepto || `Cobro ${obl.documento_numero || ''}`.trim(),
     origen_modulo: 'fin_obligaciones', origen_id: obl.id }, async (op) => {
     const doc = await crearDocumento(tx, ctx, { tipo: 'RC', fecha: f, operacion_id: op.id, tercero_id: obl.tercero_id,
       tercero_nombre: obl.tercero_nombre, concepto: op.concepto, valor, medio_pago: body.medio_pago,
-      datos: { obligacion_id: obl.id, documento_origen: obl.documento_numero, retencion: ret } });
+      datos: { obligacion_id: obl.id, documento_origen: obl.documento_numero, retencion: ret, observaciones: body.observaciones || null } });
     const { movimiento } = await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza: 'entrada',
       clase: 'ingreso', valor, concepto: `${doc.numero} · ${op.concepto}`, tercero_id: obl.tercero_id, tercero_nombre: obl.tercero_nombre,
       documento_id: doc.id, origen_clave: `cobro:${op.id}`, contable: { documento_numero: doc.numero } });
@@ -89,12 +105,13 @@ export async function pago(tx, ctx, body) {
   const f = validarFecha(body.fecha);
   const valor = dinero(body.valor);
   const ret = retencionDe(body);
+  await validarMedioPago(tx, body.cuenta_id, body.medio_pago);
   return ejecutar(tx, ctx, { tipo_operacion: 'pago', fecha: f, idempotency_key: body.idempotency_key, tercero_id: obl.tercero_id,
     tercero_nombre: obl.tercero_nombre, valor, concepto: body.concepto || `Pago ${obl.documento_numero || ''}`.trim(),
     origen_modulo: 'fin_obligaciones', origen_id: obl.id }, async (op) => {
     const doc = await crearDocumento(tx, ctx, { tipo: 'CE', fecha: f, operacion_id: op.id, tercero_id: obl.tercero_id,
       tercero_nombre: obl.tercero_nombre, concepto: op.concepto, valor, medio_pago: body.medio_pago,
-      datos: { obligacion_id: obl.id, documento_origen: obl.documento_numero, retencion: ret } });
+      datos: { obligacion_id: obl.id, documento_origen: obl.documento_numero, retencion: ret, observaciones: body.observaciones || null } });
     const { movimiento } = await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza: 'salida',
       clase: 'egreso', valor, concepto: `${doc.numero} · ${op.concepto}`, tercero_id: obl.tercero_id, tercero_nombre: obl.tercero_nombre,
       documento_id: doc.id, origen_clave: `pago:${op.id}`, contable: { documento_numero: doc.numero } });
@@ -128,11 +145,16 @@ export async function ingreso(tx, ctx, body) {
   if (!body.concepto) throw new HttpError(400, 'El concepto del ingreso es obligatorio');
   const rol = ROLES_INGRESO[body.categoria || 'otros_ingresos'];
   if (!rol) throw new HttpError(400, 'Categoría de ingreso inválida');
+  await validarMedioPago(tx, body.cuenta_id, body.medio_pago);
+  // El submódulo "Recibos de Caja" emite los otros ingresos como RC (consecutivo de recibos);
+  // Caja y Tesorería siguen emitiendo CIN como hasta ahora.
+  const tipoDoc = body.tipo_documento === 'RC' ? 'RC' : 'CIN';
   return ejecutar(tx, ctx, { tipo_operacion: 'ingreso', fecha: f, idempotency_key: body.idempotency_key, tercero_id: body.tercero_id,
     tercero_nombre: body.tercero_nombre, valor, concepto: body.concepto, origen_modulo: body.origen_modulo, origen_id: body.origen_id,
     datos: { categoria: body.categoria } }, async (op) => {
-    const doc = await crearDocumento(tx, ctx, { tipo: 'CIN', fecha: f, operacion_id: op.id, tercero_id: body.tercero_id,
-      tercero_nombre: body.tercero_nombre, concepto: body.concepto, valor, medio_pago: body.medio_pago });
+    const doc = await crearDocumento(tx, ctx, { tipo: tipoDoc, fecha: f, operacion_id: op.id, tercero_id: body.tercero_id,
+      tercero_nombre: body.tercero_nombre, concepto: body.concepto, valor, medio_pago: body.medio_pago,
+      datos: { observaciones: body.observaciones || null } });
     await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza: 'entrada', clase: 'ingreso', valor,
       concepto: `${doc.numero} · ${body.concepto}`, tercero_id: body.tercero_id, tercero_nombre: body.tercero_nombre, documento_id: doc.id,
       origen_clave: `ingreso:${op.id}` });
@@ -153,11 +175,13 @@ export async function egreso(tx, ctx, body) {
   const rol = ROLES_EGRESO[body.categoria || 'gasto_general'];
   if (!rol) throw new HttpError(400, 'Categoría de egreso inválida');
   const ret = retencionDe(body);
+  await validarMedioPago(tx, body.cuenta_id, body.medio_pago);
   return ejecutar(tx, ctx, { tipo_operacion: 'egreso', fecha: f, idempotency_key: body.idempotency_key, tercero_id: body.tercero_id,
     tercero_nombre: body.tercero_nombre, valor, concepto: body.concepto, origen_modulo: body.origen_modulo, origen_id: body.origen_id,
     datos: { categoria: body.categoria, retencion: ret } }, async (op) => {
     const doc = await crearDocumento(tx, ctx, { tipo: 'CE', fecha: f, operacion_id: op.id, tercero_id: body.tercero_id,
-      tercero_nombre: body.tercero_nombre, concepto: body.concepto, valor, medio_pago: body.medio_pago, datos: { retencion: ret } });
+      tercero_nombre: body.tercero_nombre, concepto: body.concepto, valor, medio_pago: body.medio_pago,
+      datos: { retencion: ret, observaciones: body.observaciones || null } });
     await registrarMovimiento(tx, ctx, op, { cuenta_id: body.cuenta_id, fecha: f, naturaleza: 'salida', clase: 'egreso', valor,
       concepto: `${doc.numero} · ${body.concepto}`, tercero_id: body.tercero_id, tercero_nombre: body.tercero_nombre, documento_id: doc.id,
       origen_clave: `egreso:${op.id}`, contable: { documento_numero: doc.numero } });

@@ -8,8 +8,8 @@ import { fin } from '@/api/finanzas';
 import { formatCOP, formatFecha, mensajeError, hoy } from '../components/finanzas/utils';
 
 const TIPOS = {
-  RC: 'Recibos de Caja (cobros)',
-  CE: 'Comprobantes de Egreso (pagos)',
+  RC: 'Recibos de Caja',
+  CE: 'Comprobantes de Egreso',
   CIN: 'Comprobantes de Ingreso',
   TR: 'Transferencias entre cuentas',
   AJ: 'Ajustes de caja (arqueos y diferencias)',

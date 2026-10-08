@@ -10,6 +10,7 @@ import * as V from './comerciales.js';
 import * as I from './integraciones.js';
 import * as CN from './conciliacion.js';
 import * as G from './gerencial.js';
+import * as DF from './documentosFinancieros.js';
 
 const LECTURA = ['admin', 'contador'];
 
@@ -48,7 +49,11 @@ export async function handleFin(req, segs, auth) {
 
   // ── Documentos, vínculos y trazabilidad ──
   if (a === 'documentos' && !b && method === 'GET') return withTx((tx) => C.listarDocumentos(tx, { tipo: q.tipo, desde: q.desde, hasta: q.hasta }));
+  if (a === 'documentos' && b && c === 'imprimible' && method === 'GET') return withTx((tx) => DF.documentoImprimible(tx, b));
   if (a === 'documentos' && b && method === 'GET') return withTx((tx) => C.obtenerDocumento(tx, b));
+  if (a === 'documentos-financieros' && method === 'GET') {
+    return withTx((tx) => DF.listarDocumentosFinancieros(tx, { tipos: q.tipos, desde: q.desde, hasta: q.hasta, estado: q.estado }));
+  }
   if (a === 'vinculos' && method === 'GET') return withTx((tx) => C.listarVinculos(tx, q.modulo, q.id));
   if (a === 'relacionados' && method === 'GET') {
     if (!q.modulo || !q.id) throw new HttpError(400, 'Faltan modulo e id');

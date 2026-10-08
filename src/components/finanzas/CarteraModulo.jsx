@@ -11,6 +11,7 @@ import { anularOperacionFinanciera } from '@/api/finanzas';
 import { formatCOP, formatFecha, mensajeError, ESTADO_OBLIGACION } from './utils';
 import { CobroPagoDialog, NotaDialog, AnticipoDialog, CruceAnticipoDialog } from './CarteraDialogs';
 import { useAuth } from '@/lib/AuthContext';
+import DocumentoFinancieroDialog from './DocumentoFinancieroDialog';
 
 // Módulo genérico de Cuentas por Cobrar / Cuentas por Pagar: cartera, cobro/pago, notas,
 // anticipos y su cruce. naturaleza: 'por_cobrar' | 'por_pagar'.
@@ -29,6 +30,7 @@ export default function CarteraModulo({ naturaleza, titulo, descripcion, etiquet
   const [detalle, setDetalle] = useState(null);
   const [dialogo, setDialogo] = useState(null);
   const [vistaAnticipos, setVistaAnticipos] = useState(false);
+  const [documentoAbierto, setDocumentoAbierto] = useState(null);
 
   const cargar = useCallback(async () => {
     setCargando(true); setError('');
@@ -159,7 +161,9 @@ export default function CarteraModulo({ naturaleza, titulo, descripcion, etiquet
                   {detalle.aplicaciones.map((a) => (
                     <tr key={a.id} className="border-t">
                       <td className="p-1.5">{formatFecha(a.fecha)}</td><td className="p-1.5 capitalize">{a.tipo.replace(/_/g, ' ')}</td>
-                      <td className="p-1.5 font-mono">{a.documento_numero || '—'}</td><td className="p-1.5 text-right">{formatCOP(a.valor)}</td>
+                      <td className="p-1.5 font-mono">{a.documento_numero
+                        ? <button type="button" className="text-blue-700 underline" title="Ver / Imprimir / PDF" onClick={() => setDocumentoAbierto(a.documento_numero)}>{a.documento_numero}</button>
+                        : '—'}</td><td className="p-1.5 text-right">{formatCOP(a.valor)}</td>
                       <td className="p-1.5 text-right">{esAdmin && a.tipo !== 'reversa' && (
                         <button title="Anular" onClick={async () => { if (await anularOperacionFinanciera(a.operacion_id, `${a.tipo} de ${formatCOP(a.valor)}`)) { cargar(); abrirDetalle(seleccionada); } }}>
                           <Ban className="w-3.5 h-3.5 text-red-500" />
@@ -189,6 +193,7 @@ export default function CarteraModulo({ naturaleza, titulo, descripcion, etiquet
       <CruceAnticipoDialog open={dialogo === 'cruce'} onClose={() => setDialogo(null)} obligacion={seleccionada} anticipos={anticipos}
         onGuardado={() => { cargar(); if (seleccionada) abrirDetalle(seleccionada); }} />
       <AnticipoDialog open={dialogo === 'anticipo'} onClose={() => setDialogo(null)} naturaleza={naturaleza} cuentas={cuentas} onGuardado={cargar} />
+      <DocumentoFinancieroDialog numero={documentoAbierto} onClose={() => setDocumentoAbierto(null)} />
     </div>
   );
 }
