@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import HojaTrabajoPintorModal from "@/components/pintura/HojaTrabajoPintorModal";
+import { construirHojaTrabajo, avisoDiferencia, exportarHojaExcel, exportarHojaPDF } from "@/components/pintura/hojaTrabajoPintor";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -586,50 +588,16 @@ export default function PlanificacionProduccion() {
     URL.revokeObjectURL(url);
   };
 
-  // ── Exportación directa desde la fila de la tabla (sin abrir el modal) ──
-  const handleExportExcelOrden = (ord) => {
-    const m = construirMatrizPintor(ord);
-    const filas = [
-      ["FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR"],
-      ["N. Orden", ord.numero_orden],
-      ["Código Pedido Consolidado", (m.solicitudesNumeros || []).join(", ")],
-      ["Fecha", fmtDate(ord.fecha)],
-      ["Pintor", ord.pintor_nombre || ""],
-      ["Tipo de Acabado", ord.tipo_cuero_nombre || ""],
-      ["Calibre", ord.calibre || ""],
-      ["Total Hojas", m.totalGeneral],
-      ["Fecha de impresión", new Date().toLocaleString("es-CO")],
-      [],
-      ["COLOR", ...m.placas, "TOTAL COLOR"],
-      ...m.colores.map(c => [c, ...m.placas.map(p => m.celdas[c]?.[p] || 0), m.totalesPorColor[c]]),
-      ["TOTAL PLACA", ...m.placas.map(p => m.totalesPorPlaca[p]), m.totalGeneral],
-      [],
-      ["OBSERVACIONES"],
-      ...m.observaciones.map(o => [`${o.numero} — ${o.solicitante}${!o.general ? ` (${o.color}/${o.placa})` : ""}: ${o.obs}`]),
-    ];
-    descargarCSV(filas, `formato_pintor_${ord.numero_orden}.csv`);
+  // ── Exportación directa desde la fila de la tabla: misma hoja de trabajo que la vista previa ──
+  const exportarHoja = async (ord, tipo) => {
+    const hoja = construirHojaTrabajo(ord, solicitudes);
+    const aviso = avisoDiferencia(hoja);
+    if (aviso && !confirm(`${aviso}\n\nEl documento saldrá marcado como NO VALIDADO. ¿Generarlo de todas formas?`)) return;
+    try { await (tipo === "excel" ? exportarHojaExcel(ord, hoja) : exportarHojaPDF(ord, hoja)); }
+    catch (err) { alert("No se pudo generar el documento: " + err.message); }
   };
-
-  const handleExportPdfOrden = (ord) => {
-    const m = construirMatrizPintor(ord);
-    exportarMatrizPDF({
-      titulo: "FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR",
-      campos: [
-        ["N.º Orden", ord.numero_orden],
-        ["Código Pedido Consolidado", (m.solicitudesNumeros || []).join(", ")],
-        ["Fecha", fmtDate(ord.fecha)],
-        ["Pintor", ord.pintor_nombre || ""],
-        ["Tipo de Acabado", ord.tipo_cuero_nombre || ""],
-        ["Calibre", ord.calibre || ""],
-        ["Fecha de Impresión", new Date().toLocaleString("es-CO")],
-      ],
-      colores: m.colores, placas: m.placas, celdas: m.celdas,
-      totalesPorColor: m.totalesPorColor, totalesPorPlaca: m.totalesPorPlaca, totalGeneral: m.totalGeneral,
-      observacionesLineas: m.observaciones.map(o => `${o.numero} — ${o.solicitante}${!o.general ? ` (${o.color}/${o.placa})` : ""}: ${o.obs}`),
-      pie: ["Pintor: ______________________________     Fecha de recibido: ______________", "Observaciones del pintor: ____________________________________________", "Firma: ______________________________"],
-      filename: `formato_pintor_${ord.numero_orden}.pdf`,
-    });
-  };
+  const handleExportExcelOrden = (ord) => exportarHoja(ord, "excel");
+  const handleExportPdfOrden = (ord) => exportarHoja(ord, "pdf");
 
   const handleExportExcelSolicitud = (sol) => {
     const m = construirMatrizSolicitud(sol);
@@ -1043,9 +1011,9 @@ export default function PlanificacionProduccion() {
                           <td className="p-2 text-center">
                             <div className="flex justify-center gap-1">
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-purple-600" disabled={ord.estado === "finalizada"} onClick={() => { setAvanceOrden(ord); setShowAvanceModal(true); }} title="Registrar avance"><TrendingUp className="w-3 h-3" /></Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" onClick={() => setFormatoPintorOrden(ord)} title="Imprimir formato para pintor">🖨</Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-700" title="Exportar Excel" onClick={() => handleExportExcelOrden(ord)}>📊</Button>
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-700" title="Exportar PDF" onClick={() => handleExportPdfOrden(ord)}>📄</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-700" onClick={() => setFormatoPintorOrden(ord)} title="Imprimir hoja de trabajo">🖨</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-700" title="Descargar hoja de trabajo en Excel (.xlsx)" onClick={() => handleExportExcelOrden(ord)}>📊</Button>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-700" title="Descargar hoja de trabajo en PDF" onClick={() => handleExportPdfOrden(ord)}>📄</Button>
                               <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-indigo-600" title="Detalle de Solicitudes" onClick={() => setDetalleSolicitudesOrden(ord)}>📋</Button>
                               {ord.estado === "finalizada" && (
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-teal-700" title="Preparar Entrega" onClick={() => setEntregaOrden(ord)}><PackageCheck className="w-3 h-3" /></Button>
@@ -1356,11 +1324,7 @@ export default function PlanificacionProduccion() {
 
       {/* ══ MODAL FORMATO IMPRESO PARA PINTOR ══ */}
       {formatoPintorOrden && (
-        <FormatoPintorModal
-          orden={formatoPintorOrden}
-          matriz={construirMatrizPintor(formatoPintorOrden)}
-          onClose={() => setFormatoPintorOrden(null)}
-        />
+        <HojaTrabajoPintorModal orden={formatoPintorOrden} solicitudes={solicitudes} onClose={() => setFormatoPintorOrden(null)} />
       )}
 
       {/* ══ MODAL MATRIZ INDIVIDUAL POR SOLICITANTE ══ */}
@@ -1594,121 +1558,6 @@ function HistorialAvancesModal({ orden, avances, onClose }) {
         </div>
         <div className="flex justify-end pt-4 border-t">
           <Button variant="outline" onClick={onClose}>Cerrar</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── FormatoPintorModal ───
-// Formato imprimible para entrega al pintor: matriz Color x Placa construida
-// automáticamente desde las solicitudes ya consolidadas en la orden. No
-// redigita nada — toma los datos ya calculados en construirMatrizPintor().
-function FormatoPintorModal({ orden, matriz, onClose }) {
-  const [obsGeneral, setObsGeneral] = useState("");
-  const { colores, placas, celdas, totalesPorPlaca, totalesPorColor, totalGeneral, observaciones, solicitudesNumeros } = matriz;
-  const fechaImpresion = new Date().toLocaleString("es-CO");
-
-  return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <style>{`@media print {
-          #formato-pintor-imprimible { position: absolute; left: 0; top: 0; width: 100%; }
-          #formato-pintor-numero-orden-fijo { position: fixed; top: 0; left: 0; right: 0; padding: 4px 0; text-align: center; font-size: 11px; font-weight: bold; }
-          .no-print, #page-header { display: none !important; }
-          body * { visibility: hidden; }
-          #formato-pintor-imprimible, #formato-pintor-imprimible *,
-          #formato-pintor-numero-orden-fijo, #formato-pintor-numero-orden-fijo * { visibility: visible; }
-        }`}</style>
-        <DialogHeader className="no-print">
-          <DialogTitle>🖨 Formato para Pintor — {orden.numero_orden}</DialogTitle>
-        </DialogHeader>
-
-        <div id="formato-pintor-numero-orden-fijo">Orden de Producción: {orden.numero_orden}</div>
-
-        <div id="formato-pintor-imprimible" className="space-y-4 text-sm">
-          {/* Encabezado */}
-          <div className="border-b-2 border-slate-800 pb-2">
-            <h2 className="text-lg font-extrabold text-center">FORMATO DE PRODUCCIÓN — ENTREGA AL PINTOR</h2>
-            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
-              <div><span className="font-semibold">N.º Orden:</span> <span className="font-mono font-bold">{orden.numero_orden}</span></div>
-              <div><span className="font-semibold">Fecha:</span> {fmtDate(orden.fecha)}</div>
-              <div><span className="font-semibold">Pintor:</span> {orden.pintor_nombre || "—"}</div>
-              <div><span className="font-semibold">Código Tipo de Acabado:</span> {orden.codigo_tipo_acabado || "—"}</div>
-              <div><span className="font-semibold">Tipo de Acabado:</span> {orden.tipo_cuero_nombre || "—"}</div>
-              <div><span className="font-semibold">Calibre:</span> {orden.calibre || "—"}</div>
-              <div><span className="font-semibold">Código Pedido Consolidado:</span> <span className="font-mono">{(solicitudesNumeros || []).join(", ") || "—"}</span></div>
-              <div><span className="font-semibold">Fecha de Impresión:</span> {fechaImpresion}</div>
-              <div className="col-span-3"><span className="font-semibold">Total de Hojas:</span> <span className="font-bold">{totalGeneral}</span></div>
-            </div>
-          </div>
-
-          {/* Matriz de Producción */}
-          <div>
-            <h3 className="font-bold text-sm mb-1">MATRIZ DE PRODUCCIÓN (Color x Placa — cantidad de hojas)</h3>
-            {colores.length === 0 || placas.length === 0 ? (
-              <p className="text-slate-400 text-xs">No hay datos suficientes para construir la matriz.</p>
-            ) : (
-              <table className="w-full text-xs border-collapse border border-slate-400">
-                <thead>
-                  <tr className="bg-slate-800 text-white">
-                    <th className="border border-slate-400 p-1.5 text-left">COLOR</th>
-                    {placas.map(p => <th key={p} className="border border-slate-400 p-1.5 text-center">{p}</th>)}
-                    <th className="border border-slate-400 p-1.5 text-center">TOTAL COLOR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {colores.map(c => (
-                    <tr key={c}>
-                      <td className="border border-slate-400 p-1.5 font-semibold">{c}</td>
-                      {placas.map(p => <td key={p} className="border border-slate-400 p-1.5 text-center">{celdas[c]?.[p] || 0}</td>)}
-                      <td className="border border-slate-400 p-1.5 text-center font-bold bg-slate-100">{totalesPorColor[c]}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-slate-100 font-bold">
-                    <td className="border border-slate-400 p-1.5">TOTAL PLACA</td>
-                    {placas.map(p => <td key={p} className="border border-slate-400 p-1.5 text-center">{totalesPorPlaca[p]}</td>)}
-                    <td className="border border-slate-400 p-1.5 text-center">{totalGeneral}</td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Observaciones */}
-          <div>
-            <h3 className="font-bold text-sm mb-1 border-t pt-2">OBSERVACIONES DE PRODUCCIÓN</h3>
-            {observaciones.length === 0 ? (
-              <p className="text-slate-400 text-xs">Sin observaciones registradas en las solicitudes de esta orden.</p>
-            ) : (
-              <ul className="text-xs list-disc pl-4 space-y-0.5">
-                {observaciones.map((o, i) => (
-                  <li key={i}>
-                    <span className="font-semibold">{o.numero}</span> — {o.solicitante}
-                    {!o.general && <> ({o.color} / {o.placa})</>}: {o.obs}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-2 no-print">
-              <Label className="text-xs">Observación general de producción (opcional, se incluye al imprimir)</Label>
-              <Textarea value={obsGeneral} onChange={e => setObsGeneral(e.target.value)} rows={4} className="text-xs" placeholder="Instrucciones importantes para producción..." />
-            </div>
-            {obsGeneral && <p className="text-xs mt-1"><span className="font-semibold">Observación general:</span> {obsGeneral}</p>}
-          </div>
-
-          {/* Pie del formato */}
-          <div className="border-t-2 border-slate-800 pt-3 mt-6 text-xs grid grid-cols-2 gap-4">
-            <div>Pintor: ______________________________</div>
-            <div>Fecha de recibido: ______________</div>
-            <div className="col-span-2">Observaciones del pintor: ______________________________________________________</div>
-            <div className="col-span-2 mt-4">Firma: ______________________________</div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-4 no-print">
-          <Button type="button" variant="outline" onClick={onClose}>Cerrar</Button>
-          <Button type="button" onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900">🖨 Imprimir</Button>
         </div>
       </DialogContent>
     </Dialog>
