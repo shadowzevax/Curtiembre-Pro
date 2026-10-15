@@ -41,6 +41,9 @@ export async function handleFin(req, segs, auth) {
   }
 
   // ── Cuentas por cobrar / por pagar ──
+  if (a === 'anticipos' && b === 'movimientos' && method === 'GET') {
+    return withTx((tx) => C.movimientosAnticipos(tx, { naturaleza: q.naturaleza, desde: q.desde, hasta: q.hasta }));
+  }
   if (a === 'obligaciones' && method === 'GET') {
     if (!b) return withTx((tx) => C.listarObligaciones(tx, { naturaleza: q.naturaleza, tercero_id: q.tercero_id, estado: q.estado,
       incluir_anuladas: q.incluir_anuladas === '1' }));

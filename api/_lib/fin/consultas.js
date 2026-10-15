@@ -1,5 +1,6 @@
 import { newId, HttpError } from '../util.js';
 import { r2, hoyColombia, fecha, dinero, auditar, requerirRol } from './core.js';
+import { numeroVisibleVenta } from './comerciales.js';
 
 const SALDO_SQL = `c.saldo_inicial + COALESCE(SUM(CASE WHEN m.naturaleza = 'entrada' THEN m.valor ELSE -m.valor END), 0)`;
 
@@ -110,12 +111,20 @@ export async function listarObligaciones(tx, { naturaleza, tercero_id, estado, i
   const hoy = hoyColombia();
   const { rows } = await tx.query(
     `SELECT o.*, o.valor_original - COALESCE(SUM(a.valor), 0) AS saldo,
-            COALESCE(SUM(a.valor) FILTER (WHERE a.valor > 0), 0) AS aplicado
+            COALESCE(SUM(a.valor) FILTER (WHERE a.valor > 0), 0) AS aplicado,
+            r.data->>'numero_id' AS numero_interno, r.data->>'numero_documento' AS v_numero_documento,
+            r.data->>'prefijo_documento' AS v_prefijo_documento, r.data->>'tipo_venta' AS origen_venta
      FROM fin_obligaciones o LEFT JOIN fin_aplicaciones a ON a.obligacion_id = o.id
+     LEFT JOIN records r ON o.documento_modulo = 'OrdenVenta' AND r.entity = 'OrdenVenta' AND r.id = o.documento_id
      WHERE ($1::text IS NULL OR o.naturaleza = $1) AND ($2::text IS NULL OR o.tercero_id = $2) AND ($3::boolean OR NOT o.anulada)
-     GROUP BY o.id ORDER BY o.fecha_vencimiento NULLS LAST, o.fecha`,
+     GROUP BY o.id, r.id ORDER BY o.fecha_vencimiento NULLS LAST, o.fecha`,
     [naturaleza || null, tercero_id || null, !!incluir_anuladas]);
-  const lista = rows.map((o) => {
+  const lista = rows.map(({ v_numero_documento, v_prefijo_documento, ...o }) => {
+    // Ventas: se muestra el No. de Documento que el usuario digitó (FV530), no el consecutivo interno.
+    if (o.numero_interno) {
+      o.documento_numero = numeroVisibleVenta({ numero_documento: v_numero_documento, prefijo_documento: v_prefijo_documento,
+        numero_id: o.numero_interno }) || o.documento_numero;
+    }
     const saldo = r2(o.saldo);
     let est = 'pendiente';
     if (o.anulada) est = 'anulada';
@@ -132,9 +141,39 @@ export async function detalleObligacion(tx, id) {
   const [o] = await listarObligaciones(tx, { incluir_anuladas: true }).then((l) => l.filter((x) => x.id === id));
   if (!o) throw new HttpError(404, 'La cuenta por cobrar/pagar no existe');
   const { rows: aplicaciones } = await tx.query(
-    `SELECT a.*, d.numero AS documento_numero FROM fin_aplicaciones a LEFT JOIN fin_documentos d ON d.id = a.documento_id
+    `SELECT a.*, d.numero AS documento_numero, cp.obligacion_id AS contraparte_id
+     FROM fin_aplicaciones a LEFT JOIN fin_documentos d ON d.id = a.documento_id
+     LEFT JOIN LATERAL (SELECT b.obligacion_id FROM fin_aplicaciones b
+       WHERE b.operacion_id = a.operacion_id AND b.obligacion_id <> a.obligacion_id LIMIT 1) cp ON a.tipo IN ('cruce_anticipo', 'reversa')
      WHERE a.obligacion_id = $1 ORDER BY a.fecha, a.created_date`, [id]);
-  return { ...o, aplicaciones: aplicaciones.map((a) => ({ ...a, valor: r2(a.valor) })) };
+  // En un cruce de anticipo, "contraparte" es la otra cara: la factura (visto desde el anticipo)
+  // o el recibo del anticipo (visto desde la factura). Trazabilidad en ambos sentidos.
+  const ids = [...new Set(aplicaciones.map((a) => a.contraparte_id).filter(Boolean))];
+  const contrapartes = ids.length ? await listarObligaciones(tx, { incluir_anuladas: true }).then((l) => new Map(l.filter((x) => ids.includes(x.id)).map((x) => [x.id, x]))) : new Map();
+  let saldo = r2(o.valor_original);
+  return { ...o, aplicaciones: aplicaciones.map((a) => {
+    saldo = r2(saldo - Number(a.valor));
+    const cp = contrapartes.get(a.contraparte_id);
+    return { ...a, valor: r2(a.valor), saldo_despues: saldo, contraparte_numero: cp?.documento_numero || null, contraparte_naturaleza: cp?.naturaleza || null };
+  }) };
+}
+
+// Historial de anticipos (CxC → Anticipos): cada cruce por separado, con el recibo original, la
+// factura a la que se aplicó y el saldo del anticipo después de cada aplicación. Solo consulta.
+export async function movimientosAnticipos(tx, { naturaleza = 'anticipo_cliente', desde, hasta } = {}) {
+  if (!['anticipo_cliente', 'anticipo_proveedor'].includes(naturaleza)) throw new HttpError(400, 'Naturaleza inválida');
+  const anticipos = await listarObligaciones(tx, { naturaleza, incluir_anuladas: true });
+  const filas = [];
+  for (const ant of anticipos) {
+    const det = await detalleObligacion(tx, ant.id);
+    for (const a of det.aplicaciones) {
+      if ((desde && a.fecha < desde) || (hasta && a.fecha > hasta)) continue;
+      filas.push({ id: a.id, anticipo_id: ant.id, fecha: a.fecha, recibo: ant.documento_numero, tercero_nombre: ant.tercero_nombre,
+        tipo: a.tipo, documento_cruce: a.documento_numero, factura: a.contraparte_numero, factura_id: a.contraparte_id,
+        valor: a.valor, saldo_despues: a.saldo_despues });
+    }
+  }
+  return filas.sort((x, y) => (x.fecha < y.fecha ? -1 : x.fecha > y.fecha ? 1 : 0));
 }
 
 // ── Documentos, vínculos y operaciones ──────────────────────────────────────

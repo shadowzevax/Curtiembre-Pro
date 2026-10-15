@@ -195,7 +195,7 @@ export function CruceAnticipoDialog({ open, onClose, obligacion, anticipos, onGu
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const llave = React.useRef(nuevaLlave());
-  const disponibles = (anticipos || []).filter((a) => !a.tercero_id || !obligacion?.tercero_id || a.tercero_id === obligacion.tercero_id);
+  const disponibles = (anticipos || []).filter((a) => a.saldo > 0.004 && (!a.tercero_id || !obligacion?.tercero_id || a.tercero_id === obligacion.tercero_id));
 
   useEffect(() => { if (open) { llave.current = nuevaLlave(); setForm({ anticipo_id: '', valor: '', fecha: hoy() }); setError(''); } }, [open]);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));

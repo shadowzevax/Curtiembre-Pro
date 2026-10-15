@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { numeroVisibleVenta } from '@/lib/numeroVenta';
 import { OrdenVenta, Tercero, Servicio } from "@/entities/all";
 import PageHeader from "../components/common/PageHeader";
 import DataTable from "../components/common/DataTable";
@@ -97,7 +98,7 @@ export default function VentaServicios() {
         if (searchTerm) {
             filtered = filtered.filter(orden =>
                 getClienteNombre(orden.cliente_id).toLowerCase().includes(searchTerm.toLowerCase()) ||
-                orden.numero_documento?.toLowerCase().includes(searchTerm.toLowerCase())
+                `${numeroVisibleVenta(orden)} ${orden.numero_id || ''}`.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
         setFilteredVentas(filtered);
@@ -153,7 +154,7 @@ export default function VentaServicios() {
     const headers = ["Documento #", "Fecha", "Cliente", "Valor", "Estado", "Acciones"];
     const renderRow = (item) => (
         <tr key={item.id}>
-            <td>{item.prefijo_documento}-{item.numero_documento}</td>
+            <td><div className="font-medium">{numeroVisibleVenta(item)}</div>{item.numero_id && <div className="text-[11px] text-slate-400">Interno: {item.numero_id}</div>}</td>
             <td>{formatDate(item.fecha_orden)}</td>
             <td>{getClienteNombre(item.cliente_id)}</td>
             <td>{formatCurrency(item.total)}</td>
@@ -262,7 +263,7 @@ export default function VentaServicios() {
                     </DialogHeader>
                     {selectedOrder && (
                         <div className="space-y-3">
-                            <p><span className="font-semibold">No. Documento:</span> {selectedOrder.prefijo_documento}-{selectedOrder.numero_documento}</p>
+                            <p><span className="font-semibold">No. Documento:</span> {numeroVisibleVenta(selectedOrder)}{selectedOrder.numero_id ? ` · Consecutivo interno: ${selectedOrder.numero_id}` : ''}</p>
                             <p><span className="font-semibold">Cliente:</span> {getClienteNombre(selectedOrder.cliente_id)}</p>
                             <p><span className="font-semibold">Fecha:</span> {formatDate(selectedOrder.fecha_orden)}</p>
                             <p><span className="font-semibold">Total:</span> {formatCurrency(selectedOrder.total)}</p>

@@ -530,7 +530,7 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
       onOpenChange(false);
       if (onSuccess) onSuccess({
         message: "Documento guardado",
-        description: `${res.numero_id || ''} registrado correctamente${docs ? ` · ${docs}` : ''}.`,
+        description: `${res.numero_visible && res.numero_visible !== res.numero_id ? `${res.numero_visible} (${res.numero_id})` : (res.numero_id || '')} registrado correctamente${docs ? ` · ${docs}` : ''}.`,
       });
       if (res.advertencias?.length) alert('Guardado con advertencias:\n\n• ' + res.advertencias.join('\n• '));
     } catch (error) {
@@ -576,12 +576,12 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
             {/* Encabezado */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
-                  <Label>No. ID {tipoDocumento === 'venta' ? '(Autogenerado)' : ''}</Label>
-                  <Input 
-                    value={formData.numero_id || 'Auto-generado'} 
-                    readOnly 
+                  <Label>{tipoDocumento === 'venta' ? 'Consecutivo interno (automático)' : 'No. ID'}</Label>
+                  <Input
+                    value={formData.numero_id || (tipoDocumento === 'venta' ? `Al guardar: ${tipoItem === 'servicios' ? 'VS' : 'VP'}-${new Date().getFullYear()}-…` : 'Auto-generado')}
+                    readOnly
                     className="bg-gray-100 font-semibold text-emerald-700"
-                    title="ID único autogenerado basado en PREFIJO"
+                    title={tipoDocumento === 'venta' ? 'Lo asigna el sistema al guardar, sin duplicados. VP = venta de productos, VS = venta de servicios. No es la numeración oficial de factura electrónica.' : 'ID único autogenerado'}
                   />
                 </div>
                 
@@ -774,8 +774,9 @@ export default function DocumentoComercialForm({ open, onOpenChange, onSubmit, o
                 )}
                 {tipoDocumento === 'venta' && (
                   <div>
-                    <Label>No. de Documento</Label>
-                    <Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Número de documento" />
+                    <Label>No. de Documento / Factura (opcional)</Label>
+                    <Input value={formData.numero_documento} onChange={e => handleInputChange('numero_documento', e.target.value)} placeholder="Ej: FV530 (factura electrónica)" disabled={!!documento} />
+                    <p className="text-[11px] text-slate-500 mt-1">Es el número que verás en la cartera y en los recibos. Si lo dejas vacío se usa el consecutivo interno. No se permiten números repetidos.</p>
                   </div>
                 )}
                 {tipoDocumento === 'compra' && tipoItem === 'pieles' && (

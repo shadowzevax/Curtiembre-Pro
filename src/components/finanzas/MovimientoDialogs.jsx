@@ -122,7 +122,7 @@ export function IngresoEgresoDialog({ open, onClose, tipo, cuentas, cuentaFija, 
             <div><Label>Factura pendiente *</Label>
               <Select value={form.obligacion_id ?? ''} onValueChange={elegirFactura} disabled={!form.cliente}>
                 <SelectTrigger><SelectValue placeholder="Seleccionar factura" /></SelectTrigger>
-                <SelectContent>{facturas.map((o) => <SelectItem key={o.id} value={o.id}>{o.documento_numero} · saldo {formatCOP(o.saldo)}</SelectItem>)}</SelectContent>
+                <SelectContent>{facturas.map((o) => <SelectItem key={o.id} value={o.id}>{o.documento_numero}{o.numero_interno && o.numero_interno !== o.documento_numero ? ` (${o.numero_interno})` : ''} · saldo {formatCOP(o.saldo)}</SelectItem>)}</SelectContent>
               </Select></div>
             {factura && <div className="grid grid-cols-2 gap-2 bg-slate-50 border rounded p-2 text-xs">
               <div>Valor factura<br /><strong>{formatCOP(factura.valor_original)}</strong></div>

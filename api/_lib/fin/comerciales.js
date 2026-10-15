@@ -53,6 +53,17 @@ async function nombreTercero(tx, doc, c) {
   return t?.nombre || (doc.tercero_personalizado || String(id));
 }
 
+// Número que ve el usuario en una venta: el No. de Documento que digitó (p. ej. la factura
+// electrónica "FV530") o, si no digitó ninguno, el consecutivo interno VP/VS-AAAA-NNNN.
+export function numeroVisibleVenta(d) {
+  const nd = String(d?.numero_documento || '').trim();
+  const pd = String(d?.prefijo_documento || '').trim();
+  if (!nd) return d?.numero_id || '';
+  if (!pd || nd.toUpperCase().startsWith(pd.toUpperCase())) return nd;
+  return `${pd}-${nd}`;
+}
+const normalizarNumero = (v) => String(v || '').toUpperCase().replace(/[\s-]/g, '');
+
 const etiquetaEstado = (saldo, total, pagado) => (saldo <= 0.004 ? 'pagado' : pagado > 0 ? 'parcial' : 'pendiente');
 
 // ── Registrar venta / compra ─────────────────────────────────────────────────
@@ -92,8 +103,10 @@ export async function registrarDocumento(tx, ctx, tipo, body) {
     if (duplicada) return { ...(op.resultado || {}), duplicada: true };
 
     // Consecutivo único del documento (antes lo calculaba el navegador y se repetía).
+    // Ventas: serie interna propia VP (productos) / VS (servicios); NO es la numeración oficial
+    // de facturación electrónica (esa va en "No. de Documento").
     const anio = Number(hoyColombia().slice(0, 4));
-    const prefijo = entrada.prefijo || (tipo === 'venta' ? 'FV' : 'CH');
+    const prefijo = tipo === 'venta' ? (entrada.tipo_venta === 'servicios' ? 'VS' : 'VP') : (entrada.prefijo || 'CH');
     const n = await siguienteConsecutivo(tx, `num:${prefijo}`, anio, async () => {
       const { rows } = await tx.query(
         `SELECT COALESCE(MAX((substring(data->>'numero_id' from '-\\d{4}-(\\d+)$'))::int), 0) AS m
@@ -101,9 +114,18 @@ export async function registrarDocumento(tx, ctx, tipo, body) {
       return rows[0].m;
     });
     const numero_id = `${prefijo}-${anio}-${String(n).padStart(4, '0')}`;
+    const visible = tipo === 'venta' ? numeroVisibleVenta({ ...entrada, numero_id }) : numero_id;
+    if (tipo === 'venta' && String(entrada.numero_documento || '').trim()) {
+      const { rows: previas } = await tx.query(
+        `SELECT data->>'numero_id' AS nid, data->>'prefijo_documento' AS prefijo_documento, data->>'numero_documento' AS numero_documento
+         FROM records WHERE entity = 'OrdenVenta' AND COALESCE(data->>'anulado', 'false') <> 'true'
+           AND COALESCE(data->>'numero_documento', '') <> ''`);
+      const repetida = previas.find((v) => normalizarNumero(numeroVisibleVenta(v)) === normalizarNumero(visible));
+      if (repetida) throw new HttpError(409, `El No. de Documento ${visible} ya está registrado en otra venta${repetida.nid ? ` (${repetida.nid})` : ''}`);
+    }
 
     const datos = {
-      ...entrada, items, numero_id, prefijo,
+      ...entrada, items, numero_id, ...(tipo === 'venta' ? { prefijo: entrada.prefijo || 'FV', numero_visible: visible } : { prefijo }),
       fecha_orden: fechaDoc, fecha_emision_documento: fechaDoc,
       subtotal: bruto, iva_total: iva, retefuente_total: rete, total: neto,
       [c.totalCampo]: neto, valor_pagado: pagado, saldo_pendiente: saldo,
@@ -116,27 +138,28 @@ export async function registrarDocumento(tx, ctx, tipo, body) {
     const orden = await recCreate(tx, ctx, c.entidad, datos, { id: ordenId });
 
     // Inventario con el mecanismo existente (mismas fórmulas), dentro de la misma transacción.
+    // Una venta de servicios no mueve inventario (los consumos van por producción/inventario).
     const inv = tipo === 'compra'
       ? await registrarEntradasCompra(tx, ctx, { doc: datos, docId: orden.id })
-      : await registrarSalidasVenta(tx, ctx, { doc: datos, docId: orden.id });
+      : datos.tipo_venta === 'servicios' ? { advertencias: [] } : await registrarSalidasVenta(tx, ctx, { doc: datos, docId: orden.id });
 
     const documentos = [];
-    const contable = { documento_numero: numero_id, modulo_origen: c.entidad };
+    const contable = { documento_numero: visible, modulo_origen: c.entidad };
     let obl = null;
     if (saldo > 0) {
       // La CxC/CxP nace por el TOTAL; lo pagado de una vez queda como abono (se conserva el valor original).
       obl = await crearObligacion(tx, ctx, op, { naturaleza: c.naturaleza, tercero_id: terceroId, tercero_nombre: terceroNombre,
-        tercero_nit: entrada[c.nitCampo] || null, documento_modulo: c.entidad, documento_id: orden.id, documento_numero: numero_id,
+        tercero_nit: entrada[c.nitCampo] || null, documento_modulo: c.entidad, documento_id: orden.id, documento_numero: visible,
         fecha: fechaDoc, fecha_vencimiento: validarFecha(entrada.fecha_vencimiento, 'fecha de vencimiento'), valor_original: neto,
         concepto: op.concepto, origen_clave: `${c.entidad}:${orden.id}:obligacion` });
     }
     if (pagado > 0) {
       const doc = await crearDocumento(tx, ctx, { tipo: c.docPago, fecha: fechaDoc, operacion_id: op.id, tercero_id: terceroId,
-        tercero_nombre: terceroNombre, concepto: `${tipo === 'venta' ? 'Pago de la venta' : 'Pago de la compra'} ${numero_id}`, valor: pagado,
-        medio_pago: entrada.forma_pago, datos: { documento_origen: numero_id } });
+        tercero_nombre: terceroNombre, concepto: `${tipo === 'venta' ? 'Pago de la venta' : 'Pago de la compra'} ${visible}`, valor: pagado,
+        medio_pago: entrada.forma_pago, datos: { documento_origen: visible, numero_interno: numero_id } });
       documentos.push({ id: doc.id, numero: doc.numero, tipo: doc.tipo });
       const { movimiento } = await registrarMovimiento(tx, ctx, op, { cuenta_id: cuentaId, fecha: fechaDoc, naturaleza: c.movimiento,
-        clase: c.clase, valor: pagado, concepto: `${doc.numero} · ${numero_id} · ${terceroNombre}`, tercero_id: terceroId,
+        clase: c.clase, valor: pagado, concepto: `${doc.numero} · ${visible} · ${terceroNombre}`, tercero_id: terceroId,
         tercero_nombre: terceroNombre, documento_id: doc.id, origen_clave: `${c.entidad}:${orden.id}:pago_inicial`, contable });
       if (obl) {
         await aplicarAObligacion(tx, ctx, op, { obligacion_id: obl.id, tipo: 'abono', valor: pagado, fecha: fechaDoc, concepto: doc.numero,
@@ -170,7 +193,7 @@ export async function registrarDocumento(tx, ctx, tipo, body) {
     await asiento(tx, ctx, op, lineas, { clave: `${c.entidad}:${orden.id}`, fecha: fechaDoc, ...contable });
     await vincular(tx, c.entidad, orden.id, 'fin_operaciones', op.id, 'operacion');
 
-    const resultado = { operacion_id: op.id, orden_id: orden.id, numero_id, total: neto, pagado, saldo, estado,
+    const resultado = { operacion_id: op.id, orden_id: orden.id, numero_id, numero_visible: visible, total: neto, pagado, saldo, estado,
       obligacion_id: obl?.id || null, documentos, advertencias: inv.advertencias };
     return finalizarOperacion(tx, op.id, resultado);
   }

@@ -3,6 +3,7 @@
 // reúnen lo necesario para mostrarlo, imprimirlo y relacionarlo con su factura y su movimiento.
 import { HttpError } from '../util.js';
 import { r2 } from './core.js';
+import { numeroVisibleVenta } from './comerciales.js';
 
 const TIPO_CUENTA_A_FORMA = { caja: 'efectivo', banco: 'banco', otro_medio: 'otro_medio' };
 
@@ -11,7 +12,9 @@ const SQL_LISTADO = `
   SELECT d.*,
     mov.cuenta_id, mov.cuenta_nombre, mov.cuenta_tipo,
     COALESCE(obl.documento_numero, d.datos->>'documento_origen') AS factura_relacionada,
-    obl.id AS obligacion_id
+    obl.id AS obligacion_id,
+    rv.data->>'numero_id' AS v_numero_id, rv.data->>'numero_documento' AS v_numero_documento,
+    rv.data->>'prefijo_documento' AS v_prefijo_documento
   FROM fin_documentos d
   LEFT JOIN LATERAL (
     SELECT m.cuenta_id, c.nombre AS cuenta_nombre, c.tipo AS cuenta_tipo
@@ -20,12 +23,18 @@ const SQL_LISTADO = `
     ORDER BY m.created_date LIMIT 1
   ) mov ON true
   LEFT JOIN LATERAL (
-    SELECT o.id, o.documento_numero FROM fin_aplicaciones a JOIN fin_obligaciones o ON o.id = a.obligacion_id
+    SELECT o.id, o.documento_numero, o.documento_modulo, o.documento_id FROM fin_aplicaciones a JOIN fin_obligaciones o ON o.id = a.obligacion_id
     WHERE a.documento_id = d.id AND a.tipo <> 'reversa' ORDER BY a.created_date LIMIT 1
-  ) obl ON true`;
+  ) obl ON true
+  LEFT JOIN fin_operaciones opv ON opv.id = d.operacion_id
+  LEFT JOIN records rv ON rv.entity = 'OrdenVenta'
+    AND rv.id = CASE WHEN obl.documento_modulo = 'OrdenVenta' THEN obl.documento_id WHEN opv.origen_modulo = 'OrdenVenta' THEN opv.origen_id END`;
 
-function publico(d) {
-  return { ...d, valor: r2(d.valor), forma_pago: d.medio_pago || TIPO_CUENTA_A_FORMA[d.cuenta_tipo] || null };
+// Ventas: la factura relacionada se muestra con el No. de Documento que digitó el usuario.
+function publico({ v_numero_id, v_numero_documento, v_prefijo_documento, ...d }) {
+  const visible = v_numero_id ? numeroVisibleVenta({ numero_id: v_numero_id, numero_documento: v_numero_documento,
+    prefijo_documento: v_prefijo_documento }) : null;
+  return { ...d, factura_relacionada: visible || d.factura_relacionada, numero_interno_venta: v_numero_id || null, valor: r2(d.valor), forma_pago: d.medio_pago || TIPO_CUENTA_A_FORMA[d.cuenta_tipo] || null };
 }
 
 export async function listarDocumentosFinancieros(tx, { tipos, desde, hasta, estado } = {}) {

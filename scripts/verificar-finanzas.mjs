@@ -325,6 +325,29 @@ async function pruebasComerciales() {
     prefijo: 'FV', cliente_id: cli.id, fecha_orden: hoy, fecha_vencimiento: hoy, condicion_pago: 'credito', items: [item('PT-1', 20, 5000)] } })),
   /Stock insuficiente/, 'Vender más de lo que hay en inventario se rechaza');
 
+  // Consecutivos VP/VS, número visible y cartera (ajuste v36).
+  ok(/^VP-\d{4}-\d{4}$/.test(v1.numero_id) && v1.numero_visible === v1.numero_id,
+    `Venta de productos sin No. de Documento: consecutivo interno ${v1.numero_id} y se muestra ese mismo número`);
+  const vFac = await tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: key('v'), documento: {
+    prefijo: 'FV', prefijo_documento: 'FV', numero_documento: 'FV530', tipo_venta: 'productos', cliente_id: cli.id, fecha_orden: hoy,
+    fecha_vencimiento: hoy, condicion_pago: 'credito', items: [item('SIN-INV', 1, 5000)] } }));
+  const oblFac = (await tx((t) => C.listarObligaciones(t, { naturaleza: 'por_cobrar' }))).find((o) => o.id === vFac.obligacion_id);
+  ok(vFac.numero_visible === 'FV530' && oblFac.documento_numero === 'FV530' && oblFac.numero_interno === vFac.numero_id && oblFac.origen_venta === 'productos',
+    `La CxC muestra FV530 (lo digitado), conserva el interno ${vFac.numero_id} y el origen "productos"`);
+  await falla(() => tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: key('v'), documento: {
+    prefijo: 'FV', prefijo_documento: 'FV', numero_documento: 'fv-530', tipo_venta: 'productos', cliente_id: cli.id, fecha_orden: hoy,
+    fecha_vencimiento: hoy, condicion_pago: 'credito', items: [item('SIN-INV', 1, 5000)] } })), /ya está registrado/, 'No se permite repetir el No. de Documento FV530 (aunque se escriba "fv-530")');
+  const stockAntesServ = (await stock('PT-1')).stock_actual;
+  const vServ = await tx((t) => V.registrarDocumento(t, contador, 'venta', { idempotency_key: key('v'), documento: {
+    prefijo: 'FV', prefijo_documento: 'FV', numero_documento: '', tipo_venta: 'servicios', cliente_id: cli.id, fecha_orden: hoy,
+    fecha_vencimiento: hoy, condicion_pago: 'credito', items: [item('PT-1', 2, 8000)] } }));
+  ok(/^VS-\d{4}-0001$/.test(vServ.numero_id) && (await stock('PT-1')).stock_actual === stockAntesServ,
+    `Venta de servicios ${vServ.numero_id}: serie VS propia y NO descuenta inventario (aunque el código coincida con un producto)`);
+  await tx((t) => OP.cobro(t, contador, { obligacion_id: vFac.obligacion_id, cuenta_id: cajaVacia.id, valor: 5000, medio_pago: 'efectivo', idempotency_key: key('rc') }));
+  const rcFac = (await tx(async (t) => (await import('../api/_lib/fin/documentosFinancieros.js')).listarDocumentosFinancieros(t, { tipos: 'RC' })))
+    .find((d) => d.factura_relacionada === 'FV530');
+  ok(!!rcFac, 'El Recibo de Caja del recaudo muestra como factura relacionada FV530');
+
   // Edición limitada.
   await falla(() => tx((t) => V.editarDocumento(t, contador, 'venta', v1.orden_id, { documento: { items: [item('PT-1', 4, 5000)] } })),
     /no se puede cambiar/, 'Editar cantidades de una venta ya registrada se rechaza (se anula o se devuelve)');
@@ -644,6 +667,28 @@ async function pruebasDocumentosFinancieros() {
   const dCe2 = await tx((t) => DF.documentoImprimible(t, p1.documento.numero));
   ok(dCe2.valor === 850000 && dCe2.saldo.saldo_posterior === 0, 'El Comprobante de Egreso y la CxP no cambian por el GMF');
   await falla(() => tx((t) => CN.registrarDesdeLinea(t, contador, lGmf.id, { tipo: 'gmf' })), /ya fue conciliada/, 'No se registra dos veces el mismo GMF del extracto');
+
+  // Historial de anticipos: recibo original, factura aplicada y saldo después de cada cruce.
+  const antRc = await tx((t) => OP.anticipo(t, contador, { tipo: 'cliente', cuenta_id: caja.id, valor: 50000, tercero_id: 'rc-cli', tercero_nombre: 'Cliente RC',
+    medio_pago: 'efectivo', idempotency_key: key('ant') }));
+  const fA = await tx(async (t) => core.crearObligacion(t, admin, await nuevaOperacion(t, admin, 'venta'), { naturaleza: 'por_cobrar', tercero_id: 'rc-cli',
+    tercero_nombre: 'Cliente RC', documento_modulo: 'OrdenVenta', documento_id: 'x-a', documento_numero: 'FV-A1', fecha: hoyF, valor_original: 30000, origen_clave: `fa:${key('o')}` }));
+  const fB = await tx(async (t) => core.crearObligacion(t, admin, await nuevaOperacion(t, admin, 'venta'), { naturaleza: 'por_cobrar', tercero_id: 'rc-cli',
+    tercero_nombre: 'Cliente RC', documento_modulo: 'OrdenVenta', documento_id: 'x-b', documento_numero: 'FV-B1', fecha: hoyF, valor_original: 40000, origen_clave: `fb:${key('o')}` }));
+  const cajaAntesCruce = await tx((t) => core.saldoCuenta(t, caja.id));
+  await tx((t) => OP.cruceAnticipo(t, contador, { anticipo_id: antRc.anticipo_id, obligacion_id: fA.id, valor: 30000, idempotency_key: key('cr') }));
+  await tx((t) => OP.cruceAnticipo(t, contador, { anticipo_id: antRc.anticipo_id, obligacion_id: fB.id, valor: 20000, idempotency_key: key('cr') }));
+  const histAnt = await tx((t) => C.detalleObligacion(t, antRc.anticipo_id));
+  ok(histAnt.saldo === 0 && histAnt.valor_original === 50000 && histAnt.aplicaciones.length === 2
+    && histAnt.aplicaciones[0].contraparte_numero === 'FV-A1' && histAnt.aplicaciones[0].saldo_despues === 20000
+    && histAnt.aplicaciones[1].contraparte_numero === 'FV-B1' && histAnt.aplicaciones[1].saldo_despues === 0,
+    `Anticipo ${antRc.documento.numero} de 50.000 aplicado a 2 facturas: se ven por separado (FV-A1 30.000 → saldo 20.000; FV-B1 20.000 → saldo 0)`);
+  ok((await tx((t) => core.saldoCuenta(t, caja.id))) === cajaAntesCruce, 'Los cruces no generan un segundo ingreso en la caja');
+  const histFac = await tx((t) => C.detalleObligacion(t, fB.id));
+  ok(histFac.aplicaciones[0].contraparte_numero === antRc.documento.numero && histFac.saldo === 20000,
+    'Desde la factura se ve qué anticipo se usó para abonarla');
+  const movsAnt = await tx((t) => C.movimientosAnticipos(t, { naturaleza: 'anticipo_cliente' }));
+  ok(movsAnt.filter((m) => m.recibo === antRc.documento.numero).length === 2, 'El listado de movimientos de anticipos muestra los 2 cruces');
 
   const OPcore = await import('../api/_lib/fin/core.js');
   await tx((t) => OPcore.anularOperacion(t, admin, { operacion_id: c2.operacion_id, motivo: 'Transferencia devuelta por el banco', idempotency_key: key('an') }));
